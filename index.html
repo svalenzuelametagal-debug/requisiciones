@@ -1,0 +1,1899 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Metagal Argentina · Requisiciones de Compra</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<script>
+// ── Implementación OAuth2 PKCE embebida (sin dependencias externas) ──
+const msal = {
+  PublicClientApplication: class {
+    constructor(cfg) {
+      this.cfg = cfg;
+      this._sk = 'mgal_' + cfg.auth.clientId.slice(0,8);
+    }
+    async initialize() {}
+    async handleRedirectPromise() { return null; }
+    getAllAccounts() {
+      try { const d = sessionStorage.getItem(this._sk+'_acc'); return d?[JSON.parse(d)]:[];} catch{return [];}
+    }
+    async acquireTokenSilent({scopes}) {
+      try {
+        const d = sessionStorage.getItem(this._sk+'_tok');
+        if (!d) throw new Error('no token');
+        const t = JSON.parse(d);
+        if (Date.now() < t.exp - 90000) return {accessToken:t.at};
+        if (t.rt) return await this._refresh(t.rt, scopes);
+        throw new Error('expired');
+      } catch(e) { throw e; }
+    }
+    async _refresh(rt, scopes) {
+      const s = [...new Set([...scopes,'offline_access'])];
+      const r = await fetch(`${this.cfg.auth.authority}/oauth2/v2.0/token`,{
+        method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
+        body: new URLSearchParams({client_id:this.cfg.auth.clientId,grant_type:'refresh_token',refresh_token:rt,scope:s.join(' ')})
+      });
+      const d = await r.json();
+      if (d.error) throw new Error(d.error_description||d.error);
+      this._save(d); return {accessToken:d.access_token};
+    }
+    async loginPopup({scopes}) { return this._popup(scopes); }
+    async acquireTokenPopup({scopes}) { return this._popup(scopes); }
+    async logoutPopup() {
+      sessionStorage.removeItem(this._sk+'_acc');
+      sessionStorage.removeItem(this._sk+'_tok');
+      const url = `${this.cfg.auth.authority}/oauth2/v2.0/logout?post_logout_redirect_uri=${encodeURIComponent(this.cfg.auth.redirectUri)}`;
+      const p = window.open(url,'_blank','width=500,height=600');
+      await new Promise(res=>setTimeout(res,2000));
+      if(p&&!p.closed) p.close();
+    }
+    async _popup(scopes) {
+      const ver = this._ver(); const chal = await this._chal(ver);
+      const state = this._rnd(16); const nonce = this._rnd(16);
+      const s = [...new Set([...scopes,'openid','profile','offline_access'])];
+      sessionStorage.setItem(this._sk+'_ver',ver);
+      sessionStorage.setItem(this._sk+'_st',state);
+      const authUrl = `${this.cfg.auth.authority}/oauth2/v2.0/authorize?`+new URLSearchParams({
+        client_id:this.cfg.auth.clientId,response_type:'code',
+        redirect_uri:this.cfg.auth.redirectUri,scope:s.join(' '),
+        state,nonce,code_challenge:chal,code_challenge_method:'S256',prompt:'select_account'
+      });
+      const popup = window.open(authUrl,'_msal_popup','width=520,height=680,scrollbars=yes,resizable=yes');
+      if (!popup) throw new Error('El navegador bloqueó la ventana emergente. Permitilas para este sitio.');
+      return new Promise((res,rej)=>{
+        const tid = setInterval(async()=>{
+          try {
+            if (popup.closed) { clearInterval(tid); rej(new Error('Ventana cerrada por el usuario')); return; }
+            let href;
+            try { href = popup.location.href; } catch{ return; }
+            const redir = this.cfg.auth.redirectUri;
+            if (href && (href.startsWith(redir+'?') || href.startsWith(redir+'#') || href===redir || href.includes('code='))) {
+              clearInterval(tid);
+              const u = new URL(href);
+              const code = u.searchParams.get('code');
+              const st2  = u.searchParams.get('state');
+              const err  = u.searchParams.get('error');
+              try { popup.close(); } catch{}
+              if (err) { rej(new Error(u.searchParams.get('error_description')||err)); return; }
+              const saved = sessionStorage.getItem(this._sk+'_st');
+              if (saved && st2 && saved!==st2) { rej(new Error('State mismatch — intentá de nuevo')); return; }
+              try { const r = await this._exchange(code, scopes); res(r); }
+              catch(e) { rej(e); }
+            }
+          } catch{}
+        }, 300);
+      });
+    }
+    async _exchange(code, scopes) {
+      const ver = sessionStorage.getItem(this._sk+'_ver');
+      const s = [...new Set([...(scopes||[]),'openid','profile','offline_access'])];
+      const r = await fetch(`${this.cfg.auth.authority}/oauth2/v2.0/token`,{
+        method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
+        body: new URLSearchParams({client_id:this.cfg.auth.clientId,grant_type:'authorization_code',
+          code,redirect_uri:this.cfg.auth.redirectUri,code_verifier:ver,scope:s.join(' ')})
+      });
+      const d = await r.json();
+      if (d.error) throw new Error(d.error_description||d.error);
+      const acc = this._parseAcc(d);
+      this._save(d);
+      sessionStorage.setItem(this._sk+'_acc', JSON.stringify(acc));
+      return {accessToken:d.access_token, account:acc};
+    }
+    _save(d) {
+      sessionStorage.setItem(this._sk+'_tok', JSON.stringify({
+        at:d.access_token, rt:d.refresh_token||'',
+        exp: Date.now()+(d.expires_in||3600)*1000
+      }));
+    }
+    _parseAcc(d) {
+      let c={};
+      try { c=JSON.parse(atob(d.id_token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))); } catch{}
+      return {username:c.preferred_username||c.upn||c.email||'', name:c.name||'', idTokenClaims:c};
+    }
+    _ver() {
+      const a=new Uint8Array(32); crypto.getRandomValues(a);
+      return btoa(String.fromCharCode(...a)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+    }
+    async _chal(v) {
+      const h=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(v));
+      return btoa(String.fromCharCode(...new Uint8Array(h))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+    }
+    _rnd(n) {
+      const a=new Uint8Array(n); crypto.getRandomValues(a);
+      return Array.from(a,b=>b.toString(16).padStart(2,'0')).join('');
+    }
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg0: #0d0f11;
+  --bg1: #13171b;
+  --bg2: #1a1f25;
+  --bg3: #222830;
+  --bg4: #2c3340;
+  --border: #2e3542;
+  --border-hi: #404d5e;
+  --text0: #e8ecf0;
+  --text1: #b0bac6;
+  --text2: #6e7e92;
+  --accent: #e8a020;
+  --accent-dim: #a06e10;
+  --accent2: #3a8fd4;
+  --accent2-dim: #1e5a8a;
+  --green: #2ea86b;
+  --red: #d94040;
+  --orange: #e0621a;
+  --yellow: #d4a017;
+  --mono: 'IBM Plex Mono', monospace;
+  --sans: 'IBM Plex Sans', sans-serif;
+  --radius: 4px;
+  --shadow: 0 2px 12px rgba(0,0,0,0.5);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{font-size:14px;background:var(--bg0);color:var(--text0);font-family:var(--sans)}
+body{min-height:100vh;display:flex;flex-direction:column}
+a{color:var(--accent2);text-decoration:none}
+button{cursor:pointer;font-family:var(--sans);font-size:13px;border:none;border-radius:var(--radius);padding:6px 14px;transition:all .15s}
+input,select,textarea{font-family:var(--sans);font-size:13px;background:var(--bg3);color:var(--text0);border:1px solid var(--border);border-radius:var(--radius);padding:7px 10px;width:100%;outline:none;transition:border .15s}
+input:focus,select:focus,textarea:focus{border-color:var(--accent2)}
+input[type=checkbox]{width:auto}
+textarea{resize:vertical;min-height:60px}
+select option{background:var(--bg2)}
+label{font-size:12px;color:var(--text2);display:block;margin-bottom:4px;font-weight:500;letter-spacing:.03em;text-transform:uppercase}
+hr{border:none;border-top:1px solid var(--border);margin:16px 0}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:var(--bg3);color:var(--text2);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.06em;padding:8px 12px;text-align:left;border-bottom:1px solid var(--border)}
+td{padding:9px 12px;border-bottom:1px solid var(--border);color:var(--text1);vertical-align:top}
+tr:hover td{background:var(--bg2)}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:var(--bg1)}
+::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:3px}
+
+/* Layout */
+#app{display:flex;flex-direction:column;min-height:100vh}
+#header{background:var(--bg1);border-bottom:1px solid var(--border);padding:0 24px;height:54px;display:flex;align-items:center;gap:16px;flex-shrink:0;position:sticky;top:0;z-index:100}
+#logo-wrap{display:flex;align-items:center;gap:12px;margin-right:20px}
+#logo-img{height:32px;object-fit:contain}
+#logo-text{font-size:15px;font-weight:600;color:var(--text0);letter-spacing:-.01em}
+#logo-sub{font-size:10px;color:var(--text2);letter-spacing:.08em;text-transform:uppercase}
+#nav{display:flex;gap:2px;flex:1}
+.nav-btn{background:none;color:var(--text2);padding:6px 13px;border-radius:var(--radius);font-size:13px;font-weight:500;border:1px solid transparent}
+.nav-btn:hover{color:var(--text0);background:var(--bg3)}
+.nav-btn.active{color:var(--accent);background:var(--bg2);border-color:var(--border)}
+#header-right{display:flex;align-items:center;gap:12px;margin-left:auto}
+#user-info{text-align:right}
+#user-name{font-size:13px;font-weight:500;color:var(--text0)}
+#user-role{font-size:11px;color:var(--text2)}
+#tc-badge{font-family:var(--mono);font-size:11px;color:var(--text2);background:var(--bg3);border:1px solid var(--border);padding:4px 10px;border-radius:var(--radius);cursor:pointer;white-space:nowrap}
+#btn-logout{background:var(--bg3);color:var(--text2);border:1px solid var(--border);font-size:12px;padding:5px 12px}
+#btn-logout:hover{color:var(--red);border-color:var(--red)}
+
+#main{flex:1;padding:24px;max-width:1400px;width:100%;margin:0 auto}
+#footer{background:var(--bg1);border-top:1px solid var(--border);padding:10px 24px;text-align:center;font-size:11px;color:var(--text2);flex-shrink:0}
+
+/* Login screen */
+#login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--bg0)}
+.login-card{background:var(--bg1);border:1px solid var(--border);border-radius:6px;padding:48px;text-align:center;width:360px;box-shadow:var(--shadow)}
+.login-logo{font-size:22px;font-weight:600;color:var(--text0);margin-bottom:6px}
+.login-sub{font-size:12px;color:var(--text2);letter-spacing:.06em;text-transform:uppercase;margin-bottom:32px}
+.login-title{font-size:15px;color:var(--text1);margin-bottom:24px}
+#btn-login{background:var(--accent);color:#000;font-weight:600;font-size:14px;padding:12px 32px;border-radius:var(--radius);width:100%}
+#btn-login:hover{background:#f0b030}
+.login-err{margin-top:16px;color:var(--red);font-size:12px}
+
+/* Sections */
+.section-header{display:flex;align-items:center;gap:12px;margin-bottom:20px}
+.section-title{font-size:18px;font-weight:600;color:var(--text0)}
+.section-sub{font-size:12px;color:var(--text2);margin-top:2px}
+
+/* Cards / Panels */
+.card{background:var(--bg1);border:1px solid var(--border);border-radius:var(--radius);padding:20px}
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:24px}
+.kpi{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
+.kpi-label{font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
+.kpi-value{font-family:var(--mono);font-size:26px;font-weight:500;color:var(--text0)}
+.kpi-sub{font-size:11px;color:var(--text2);margin-top:2px}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 16px;border-radius:var(--radius);font-size:13px;font-weight:500;border:1px solid transparent;cursor:pointer;transition:all .15s}
+.btn-primary{background:var(--accent);color:#000;border-color:var(--accent)}
+.btn-primary:hover{background:#f0b030}
+.btn-secondary{background:var(--bg3);color:var(--text1);border-color:var(--border)}
+.btn-secondary:hover{border-color:var(--border-hi);color:var(--text0)}
+.btn-danger{background:rgba(217,64,64,.15);color:var(--red);border-color:rgba(217,64,64,.3)}
+.btn-danger:hover{background:rgba(217,64,64,.25)}
+.btn-success{background:rgba(46,168,107,.15);color:var(--green);border-color:rgba(46,168,107,.3)}
+.btn-success:hover{background:rgba(46,168,107,.25)}
+.btn-info{background:rgba(58,143,212,.15);color:var(--accent2);border-color:rgba(58,143,212,.3)}
+.btn-info:hover{background:rgba(58,143,212,.25)}
+.btn-sm{padding:4px 10px;font-size:12px}
+.btn-xs{padding:2px 7px;font-size:11px}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+
+/* Status badges */
+.badge{display:inline-block;font-size:11px;font-weight:500;padding:2px 8px;border-radius:20px;white-space:nowrap}
+.badge-draft{background:rgba(110,126,146,.2);color:var(--text2)}
+.badge-sent{background:rgba(58,143,212,.2);color:var(--accent2)}
+.badge-rej1,.badge-rej2{background:rgba(217,64,64,.2);color:var(--red)}
+.badge-app1{background:rgba(212,160,23,.2);color:var(--yellow)}
+.badge-app2{background:rgba(46,168,107,.2);color:var(--green)}
+.badge-oc{background:rgba(232,160,32,.25);color:var(--accent)}
+.badge-critical{background:rgba(217,64,64,.2);color:var(--red)}
+.badge-high{background:rgba(224,98,26,.2);color:var(--orange)}
+.badge-normal{background:rgba(46,168,107,.15);color:var(--green)}
+
+/* Form */
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.form-grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+.form-group{margin-bottom:0}
+.span2{grid-column:span 2}
+.span3{grid-column:span 3}
+.form-section{background:var(--bg1);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:16px}
+.form-section-title{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text2);margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.form-section-title::after{content:'';flex:1;height:1px;background:var(--border)}
+
+/* Items table */
+.items-table-wrap{overflow-x:auto}
+.items-table{margin-bottom:8px}
+.items-table th{font-size:11px;padding:6px 8px}
+.items-table td{padding:5px 8px}
+.items-table input,.items-table select{padding:4px 6px;font-size:12px}
+.item-del{background:none;border:none;color:var(--text2);padding:2px 6px;font-size:16px;cursor:pointer}
+.item-del:hover{color:var(--red)}
+
+/* Toolbar */
+.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
+.toolbar-sep{width:1px;height:24px;background:var(--border);margin:0 4px}
+
+/* Filters */
+.filter-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+.filter-bar select,.filter-bar input{width:auto;min-width:140px}
+.filter-bar input{max-width:200px}
+
+/* Toast */
+#toast-container{position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;flex-direction:column;gap:8px}
+.toast{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 18px;font-size:13px;color:var(--text0);box-shadow:var(--shadow);max-width:340px;animation:slideIn .2s ease}
+.toast-success{border-left:3px solid var(--green)}
+.toast-error{border-left:3px solid var(--red)}
+.toast-info{border-left:3px solid var(--accent2)}
+@keyframes slideIn{from{transform:translateX(40px);opacity:0}to{transform:none;opacity:1}}
+
+/* Modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:500;display:flex;align-items:center;justify-content:center;padding:16px}
+.modal{background:var(--bg1);border:1px solid var(--border);border-radius:6px;max-width:900px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:var(--shadow)}
+.modal-sm{max-width:480px}
+.modal-lg{max-width:1100px}
+.modal-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border)}
+.modal-title{font-size:15px;font-weight:600}
+.modal-close{background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;padding:0 4px;line-height:1}
+.modal-close:hover{color:var(--text0)}
+.modal-body{padding:20px}
+.modal-footer{padding:14px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end}
+
+/* Charts */
+.chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}
+.chart-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
+.chart-title{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text2);margin-bottom:14px}
+.chart-wrap{position:relative;height:220px}
+.pivot-table{font-size:12px}
+.pivot-table th,.pivot-table td{font-size:12px;padding:6px 10px}
+.pivot-table td[data-clickable]{cursor:pointer}
+.pivot-table td[data-clickable]:hover{background:var(--bg3);color:var(--accent)}
+
+/* Loader */
+.loader{display:inline-block;width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-overlay{display:flex;align-items:center;justify-content:center;padding:48px;color:var(--text2);gap:12px}
+
+/* Misc */
+.empty-state{text-align:center;padding:48px;color:var(--text2)}
+.empty-state-icon{font-size:36px;margin-bottom:12px}
+.num{font-family:var(--mono);font-size:12px;color:var(--accent)}
+.money{font-family:var(--mono);font-size:12px}
+.text-red{color:var(--red)}
+.text-green{color:var(--green)}
+.text-yellow{color:var(--yellow)}
+.text-accent{color:var(--accent)}
+.text-muted{color:var(--text2)}
+.hidden{display:none!important}
+.d-flex{display:flex;align-items:center;gap:8px}
+.ml-auto{margin-left:auto}
+.w-full{width:100%}
+.mb-2{margin-bottom:8px}
+.mb-3{margin-bottom:12px}
+.mb-4{margin-bottom:16px}
+.mt-4{margin-top:16px}
+.req-detail-section{margin-bottom:20px}
+.req-detail-section h4{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--text2);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+.detail-row{display:flex;gap:8px;margin-bottom:6px;font-size:13px}
+.detail-label{color:var(--text2);min-width:160px;flex-shrink:0}
+.detail-value{color:var(--text0)}
+.urgency-banner{padding:8px 14px;border-radius:var(--radius);margin-bottom:16px;font-size:13px;font-weight:500}
+.urgency-Crítica{background:rgba(217,64,64,.15);color:var(--red);border:1px solid rgba(217,64,64,.3)}
+.urgency-Alta{background:rgba(224,98,26,.15);color:var(--orange);border:1px solid rgba(224,98,26,.3)}
+.attach-list{display:flex;flex-direction:column;gap:6px}
+.attach-item{display:flex;align-items:center;gap:8px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:6px 12px;font-size:12px}
+.attach-item a{color:var(--accent2)}
+.oc-box{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px}
+.history-item{display:flex;gap:12px;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px}
+.history-when{color:var(--text2);min-width:130px;font-family:var(--mono);font-size:11px}
+.history-what{color:var(--text1)}
+.init-result{font-size:12px;font-family:var(--mono);background:var(--bg0);border:1px solid var(--border);border-radius:var(--radius);padding:14px;max-height:400px;overflow-y:auto;line-height:1.8}
+.init-ok{color:var(--green)}
+.init-err{color:var(--red)}
+.init-warn{color:var(--yellow)}
+.init-info{color:var(--accent2)}
+@media(max-width:768px){
+  .form-grid,.form-grid-3,.chart-grid{grid-template-columns:1fr}
+  .span2,.span3{grid-column:span 1}
+  #header{flex-wrap:wrap;height:auto;padding:10px 16px;gap:8px}
+  #main{padding:12px}
+}
+</style>
+</head>
+<body>
+
+<!-- ============================================================ -->
+<!-- LOGIN SCREEN                                                   -->
+<!-- ============================================================ -->
+<div id="login-screen" class="hidden">
+  <div class="login-card">
+    <div id="login-logo-wrap">
+      <img id="login-logo-img" src="./metagal_logo.png" alt="Metagal" style="height:48px;margin-bottom:12px" onerror="this.style.display='none';document.getElementById('login-logo-txt').style.display='block'"/>
+      <div id="login-logo-txt" class="login-logo" style="display:none">Metagal Argentina</div>
+    </div>
+    <div class="login-sub">Gestión de Requisiciones</div>
+    <div class="login-title">Ingresá con tu cuenta corporativa</div>
+    <button id="btn-login" class="btn">🔑 Iniciar sesión con Microsoft 365</button>
+    <div id="login-err" class="login-err hidden"></div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- MAIN APP                                                       -->
+<!-- ============================================================ -->
+<div id="app" class="hidden">
+  <header id="header">
+    <div id="logo-wrap">
+      <img id="logo-img" src="./metagal_logo.png" alt="Metagal" onerror="this.style.display='none';document.getElementById('logo-text').style.display='block'"/>
+      <div>
+        <div id="logo-text" style="display:none" class="logo-text">Metagal Argentina</div>
+        <div id="logo-sub">Requisiciones de Compra</div>
+      </div>
+    </div>
+    <nav id="nav"></nav>
+    <div id="header-right">
+      <div id="tc-badge" title="Tipo de cambio BNA (clic para actualizar)">TC: cargando…</div>
+      <div id="user-info">
+        <div id="user-name"></div>
+        <div id="user-role"></div>
+      </div>
+      <button id="btn-logout" class="btn btn-secondary btn-sm">Salir</button>
+    </div>
+  </header>
+
+  <main id="main">
+    <div id="view-list"></div>
+    <div id="view-form" class="hidden"></div>
+    <div id="view-detail" class="hidden"></div>
+    <div id="view-dashboard" class="hidden"></div>
+    <div id="view-init" class="hidden"></div>
+  </main>
+
+  <footer id="footer">Desarrollado por Santiago Valenzuela &nbsp;·&nbsp; Metagal Argentina &copy; <span id="footer-year"></span></footer>
+</div>
+
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<!-- ============================================================ -->
+<!-- SCRIPT PRINCIPAL                                               -->
+<!-- ============================================================ -->
+<script>
+// ================================================================
+// CONFIGURACIÓN — MODIFICAR ANTES DE DESPLEGAR
+// ================================================================
+const CFG = {
+  CLIENT_ID:             '8ba4118c-32a3-4efe-ad21-9a0ce819eebe',
+  TENANT_ID:             '6eeb6421-ca0a-4b89-94d7-57cf33e32c96',
+  SITE_HOSTNAME:         'metagal-my.sharepoint.com',
+  SITE_PATH:             '/personal/svalenzuela_metagal_com_ar',
+  LIST_NAME:             'Requisiciones',
+  DOC_LIB_REL:           '/Documents/Requisiciones-Adjuntos',
+};
+
+// ================================================================
+// CONSTANTES DE NEGOCIO
+// ================================================================
+const ROLES_ADMIN    = ['svalenzuela@metagal.com.ar'];
+const ROLES_APPROVER = ['nconte@metagal.com.ar'];
+
+const DEPARTMENTS = [
+  {name:'Mantenimiento', code:'MANT'},
+  {name:'Manufactura',   code:'MANU'},
+  {name:'Logística',     code:'LOG'},
+  {name:'PCP',           code:'PCP'},
+  {name:'Ingeniería',    code:'ING'},
+  {name:'Compras',       code:'COMP'},
+  {name:'Administración',code:'ADM'},
+  {name:'RRHH',          code:'RRHH'},
+  {name:'Dirección',     code:'DIR'},
+  {name:'Inyección',     code:'INY'},
+  {name:'Finanzas',      code:'FIN'},
+  {name:'Gerencia',      code:'GER'},
+  {name:'Calidad',       code:'CAL'},
+];
+const DEPT_BY_CODE = {};
+const DEPT_BY_NAME = {};
+DEPARTMENTS.forEach(d=>{DEPT_BY_CODE[d.code]=d;DEPT_BY_NAME[d.name]=d;});
+
+const S = {
+  DRAFT:    'Borrador',
+  SENT:     'Enviada (Pendiente Nivel 1)',
+  REJ1:     'Rechazada Nivel 1',
+  APP1:     'Aprobada Nivel 1 (Pendiente Nivel 2)',
+  REJ2:     'Rechazada Nivel 2',
+  APP2:     'Aprobada Nivel 2',
+  OC:       'OC Asignada',
+};
+
+const STATUS_BADGE = {
+  [S.DRAFT]: 'badge-draft',
+  [S.SENT]:  'badge-sent',
+  [S.REJ1]:  'badge-rej1',
+  [S.APP1]:  'badge-app1',
+  [S.REJ2]:  'badge-rej2',
+  [S.APP2]:  'badge-app2',
+  [S.OC]:    'badge-oc',
+};
+
+// ================================================================
+// MSAL
+// ================================================================
+const msalConfig = {
+  auth: {
+    clientId:   CFG.CLIENT_ID,
+    authority:  `https://login.microsoftonline.com/${CFG.TENANT_ID}`,
+    redirectUri: window.location.href.split('?')[0].split('#')[0],
+  },
+  cache: {cacheLocation:'sessionStorage', storeAuthStateInCookie:false},
+};
+const msalInstance = new msal.PublicClientApplication(msalConfig);
+
+const GRAPH_SCOPES = [
+  'User.Read',
+  'Files.ReadWrite',
+];
+
+// State
+let currentUser = null;
+let userRole    = 'user';  // 'admin' | 'approver' | 'user'
+
+
+let allItems    = [];
+let tcData      = {mayorista:'—', minorista:'—'};
+
+// ================================================================
+// AUTH
+// ================================================================
+async function getToken() {
+  const accounts = msalInstance.getAllAccounts();
+  if (!accounts.length) throw new Error('No session');
+  try {
+    const res = await msalInstance.acquireTokenSilent({scopes:GRAPH_SCOPES, account:accounts[0]});
+    return res.accessToken;
+  } catch(e) {
+    const res = await msalInstance.acquireTokenPopup({scopes:GRAPH_SCOPES});
+    return res.accessToken;
+  }
+}
+
+// ================================================================
+// ALMACENAMIENTO EN ONEDRIVE (JSON) — sin SharePoint Lists
+// ================================================================
+// Guarda todo en: Documents/Requisiciones-Adjuntos/data/requisiciones.json
+const DB_PATH = '/Documents/Requisiciones-Adjuntos/data/requisiciones.json';
+
+async function getDriveRoot() {
+  return await graphReq('GET', '/me/drive/root');
+}
+
+async function readDB() {
+  try {
+    const token = await getToken();
+    const res = await fetch('https://graph.microsoft.com/v1.0/me/drive/root:' + DB_PATH + ':/content', {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (res.status === 404) return [];
+    if (!res.ok) throw new Error('Error leyendo base de datos');
+    return await res.json();
+  } catch(e) {
+    if (e.message.includes('404') || e.message.includes('itemNotFound')) return [];
+    throw e;
+  }
+}
+
+async function writeDB(data) {
+  const token = await getToken();
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const res = await fetch('https://graph.microsoft.com/v1.0/me/drive/root:' + DB_PATH + ':/content', {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: blob
+  });
+  if (!res.ok) throw new Error('Error guardando datos');
+  return res.json();
+}
+
+async function ensureDBFolder() {
+  const token = await getToken();
+  const paths = [
+    '/Documents/Requisiciones-Adjuntos',
+    '/Documents/Requisiciones-Adjuntos/data'
+  ];
+  for (const p of paths) {
+    const check = await fetch('https://graph.microsoft.com/v1.0/me/drive/root:' + p, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!check.ok) {
+      const parts = p.split('/');
+      const name = parts.pop();
+      const parent = parts.join('/') || '/';
+      await fetch('https://graph.microsoft.com/v1.0/me/drive/root:' + parent + ':/children', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, folder: {}, '@microsoft.graph.conflictBehavior': 'replace' })
+      });
+    }
+  }
+}
+
+// ── Reemplazos de API anteriores ──────────────────────────────
+async function listItems() {
+  return await readDB();
+}
+
+async function createItem(fields) {
+  const data = await readDB();
+  const newItem = { id: Date.now().toString(), ...fields };
+  data.push(newItem);
+  await writeDB(data);
+  return newItem;
+}
+
+async function updateItem(itemId, fields) {
+  const data = await readDB();
+  const idx = data.findIndex(i => i.id === itemId);
+  if (idx === -1) throw new Error('Requisición no encontrada');
+  data[idx] = { ...data[idx], ...fields };
+  await writeDB(data);
+  return data[idx];
+}
+
+async function ensureFolder(folderPath) {
+  const token = await getToken();
+  const check = await fetch('https://graph.microsoft.com/v1.0/me/drive/root:' + folderPath, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (check.ok) return;
+  const parts = folderPath.split('/');
+  const name = parts.pop();
+  const parent = parts.join('/') || '/';
+  await fetch('https://graph.microsoft.com/v1.0/me/drive/root:' + parent + ':/children', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, folder: {}, '@microsoft.graph.conflictBehavior': 'replace' })
+  });
+}
+
+async function uploadFile(folderPath, file) {
+  const token = await getToken();
+  const url = 'https://graph.microsoft.com/v1.0/me/drive/root:' + folderPath + '/' + encodeURIComponent(file.name) + ':/content';
+  const res = await fetch(url, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': file.type || 'application/octet-stream' },
+    body: file
+  });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e?.error?.message || 'Error subiendo archivo');
+  }
+  return res.json();
+}
+
+async function graphReq(method, url, body = null) {
+  const token = await getToken();
+  const opts = {
+    method,
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json', Authorization: `Bearer ${token}` }
+  };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch('https://graph.microsoft.com/v1.0' + url, opts);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: { message: res.statusText } }));
+    throw new Error(err?.error?.message || res.statusText);
+  }
+  const ct = res.headers.get('content-type') || '';
+  if (ct.includes('json')) return res.json();
+  return null;
+}
+
+async function generateNumber(dept) {
+  const code = DEPT_BY_NAME[dept]?.code || dept;
+  const year  = new Date().getFullYear();
+  const prefix = `${code}-${year}-`;
+  const data = await readDB();
+  let max = 0;
+  data.forEach(i => {
+    const t = i.Title || '';
+    if (t.startsWith(prefix)) {
+      const parts = t.split('-');
+      const n = parseInt(parts[parts.length - 1], 10);
+      if (!isNaN(n) && n > max) max = n;
+    }
+  });
+  return `${code}-${year}-${String(max + 1).padStart(6, '0')}`;
+}
+
+// ================================================================
+// TIPO DE CAMBIO
+// ================================================================
+async function fetchTC() {
+  try {
+    // Series: 148.3_IIIQ_2016_24=A (dolar mayorista) & 148.3_IIIQ_2016_22=A (minorista)
+    // Using datos.gob.ar API for BCB data
+    const url = 'https://apis.datos.gob.ar/series/api/series/?ids=168.1_T_CAMBIOR_D_0_0_26:value,168.1_T_CAMBIOR_D_0_0_27:value&last=1&format=json';
+    const res = await fetch(url);
+    if (!res.ok) throw new Error();
+    const json = await res.json();
+    const data = json?.data?.[0];
+    if (data) {
+      tcData.minorista = data[1] ? '$'+Number(data[1]).toLocaleString('es-AR',{minimumFractionDigits:2}) : '—';
+      tcData.mayorista  = data[2] ? '$'+Number(data[2]).toLocaleString('es-AR',{minimumFractionDigits:2}) : '—';
+    }
+  } catch(e) {
+    // silent — show — already set
+  }
+  document.getElementById('tc-badge').textContent = `TC: M${tcData.mayorista} / B${tcData.minorista}`;
+  document.getElementById('tc-badge').title = `Tipo de cambio BNA — Mayorista: ${tcData.mayorista} | Minorista: ${tcData.minorista} (clic para actualizar)`;
+}
+
+// ================================================================
+// TOAST
+// ================================================================
+function toast(msg, type='info', dur=4000) {
+  const c = document.getElementById('toast-container');
+  const d = document.createElement('div');
+  d.className = `toast toast-${type}`;
+  d.textContent = msg;
+  c.appendChild(d);
+  setTimeout(()=>{d.style.opacity='0';d.style.transition='opacity .3s';setTimeout(()=>d.remove(),400);}, dur);
+}
+
+// ================================================================
+// UTILS
+// ================================================================
+function fmt(date) {
+  if (!date) return '—';
+  try {
+    return new Date(date).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
+  } catch{return '—';}
+}
+function fmtDT(date) {
+  if (!date) return '—';
+  try {
+    return new Date(date).toLocaleString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  } catch{return '—';}
+}
+function isoNow() { return new Date().toISOString(); }
+function escH(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function getBadgeClass(status) {
+  return STATUS_BADGE[status] || 'badge-draft';
+}
+
+function getUrgencyBadge(u) {
+  if (u==='Crítica') return 'badge-critical';
+  if (u==='Alta') return 'badge-high';
+  return 'badge-normal';
+}
+
+function mapItem(raw) {
+  return {
+    _id:          raw.id || raw._id || '',
+    Title:        raw.Title||'',
+    Dept:         raw.Dept||'',
+    RequesterName:raw.RequesterName||'',
+    RequesterMail:raw.RequesterMail||'',
+    GLAccount:    raw.GLAccount||'',
+    CostCenter:   raw.CostCenter||'',
+    Urgency:      raw.Urgency||'Normal',
+    Justification:raw.Justification||'',
+    Vendor:       raw.Vendor||'',
+    NeedBy:       raw.NeedBy||'',
+    Status:       raw.Status||S.DRAFT,
+    LinesJSON:    raw.LinesJSON||'[]',
+    AttachmentsJSON:raw.AttachmentsJSON||'[]',
+    SubmittedAt:  raw.SubmittedAt||'',
+    Lvl1At:       raw.Lvl1At||'',
+    Lvl1By:       raw.Lvl1By||'',
+    Lvl1Note:     raw.Lvl1Note||'',
+    Lvl2At:       raw.Lvl2At||'',
+    Lvl2By:       raw.Lvl2By||'',
+    Lvl2Note:     raw.Lvl2Note||'',
+    OCNumber:     raw.OCNumber||'',
+    OCDate:       raw.OCDate||'',
+    Buyer:        raw.Buyer||'',
+    CreatedAt:    raw.CreatedAt||'',
+    UpdatedAt:    raw.UpdatedAt||'',
+  };
+}
+
+function parseLines(json) {
+  try { return JSON.parse(json)||[]; } catch{ return []; }
+}
+function parseAttachments(json) {
+  try { return JSON.parse(json)||[]; } catch{ return []; }
+}
+
+function canEditDraft(item) {
+  return item.Status === S.DRAFT && item.RequesterMail === currentUser?.username;
+}
+
+function exportCSV(rows, filename) {
+  if (!rows.length) return;
+  const keys = Object.keys(rows[0]);
+  const hdr = keys.map(k=>'"'+k+'"').join(',');
+  const body = rows.map(r=>keys.map(k=>'"'+String(r[k]||'').replace(/"/g,'""')+'"').join(',')).join('\n');
+  const blob = new Blob(['\uFEFF'+hdr+'\n'+body],{type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+}
+
+async function loadItems() {
+  const rawItems = await readDB();
+  const mapped = rawItems.map(mapItem);
+  if (userRole === 'admin') {
+    allItems = mapped;
+  } else if (userRole === 'approver') {
+    allItems = mapped.filter(i =>
+      i.Status === S.SENT || i.Status === S.APP1 ||
+      i.RequesterMail === currentUser.username
+    );
+  } else {
+    allItems = mapped.filter(i => i.RequesterMail === currentUser.username);
+  }
+  return allItems;
+}
+
+// ================================================================
+// NAVIGATION
+// ================================================================
+const VIEWS = ['list','form','detail','dashboard','init'];
+function showView(name) {
+  VIEWS.forEach(v=>document.getElementById('view-'+v).classList.add('hidden'));
+  document.getElementById('view-'+name).classList.remove('hidden');
+  document.querySelectorAll('.nav-btn').forEach(b=>{
+    b.classList.toggle('active', b.dataset.view===name);
+  });
+}
+
+function buildNav() {
+  const nav = document.getElementById('nav');
+  const btns = [];
+  btns.push({view:'list',label:'📋 Mis Requisiciones'});
+  btns.push({view:'form',label:'➕ Nueva'});
+  if (userRole==='admin' || userRole==='approver') {
+    btns.push({view:'list',label:'📥 Aprobaciones',extra:'approvals'});
+  }
+  if (userRole==='admin') {
+    btns.push({view:'dashboard',label:'📊 Análisis'});
+    btns.push({view:'init',label:'⚙ Inicialización'});
+  }
+  nav.innerHTML = btns.map(b=>`
+    <button class="nav-btn" data-view="${b.view}" data-extra="${b.extra||''}">${b.label}</button>
+  `).join('');
+  nav.querySelectorAll('.nav-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      if (btn.dataset.extra==='approvals') {
+        renderList(true);
+      } else if (btn.dataset.view==='form') {
+        renderForm(null);
+      } else if (btn.dataset.view==='dashboard') {
+        renderDashboard();
+      } else if (btn.dataset.view==='init') {
+        renderInit();
+      } else {
+        renderList(false);
+      }
+      showView(btn.dataset.view);
+      document.querySelectorAll('.nav-btn').forEach(x=>x.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
+}
+
+// ================================================================
+// VISTA: LISTA
+// ================================================================
+function renderList(approvalsMode=false) {
+  showView('list');
+  const container = document.getElementById('view-list');
+
+  // Build filter bar
+  const deptOptions = DEPARTMENTS.map(d=>`<option value="${d.name}">${d.name}</option>`).join('');
+  const statusOptions = Object.values(S).map(s=>`<option value="${s}">${s}</option>`).join('');
+
+  container.innerHTML = `
+    <div class="section-header">
+      <div>
+        <div class="section-title">${approvalsMode?'Aprobaciones Pendientes':'Mis Requisiciones'}</div>
+        <div class="section-sub" id="list-count"></div>
+      </div>
+      <div class="ml-auto d-flex">
+        <button class="btn btn-secondary btn-sm" id="btn-refresh-list">↻ Actualizar</button>
+        <button class="btn btn-secondary btn-sm" id="btn-export-csv">⬇ CSV</button>
+      </div>
+    </div>
+    <div class="filter-bar">
+      <input type="text" id="flt-q" placeholder="Buscar..." style="max-width:200px"/>
+      <select id="flt-dept"><option value="">Todos los depto.</option>${deptOptions}</select>
+      <select id="flt-status"><option value="">Todos los estados</option>${statusOptions}</select>
+      <select id="flt-urg"><option value="">Toda urgencia</option><option>Normal</option><option>Alta</option><option>Crítica</option></select>
+    </div>
+    <div id="list-loading" class="loading-overlay"><div class="loader"></div> Cargando…</div>
+    <div id="list-table-wrap" class="hidden"></div>
+  `;
+
+  async function doLoad() {
+    document.getElementById('list-loading').classList.remove('hidden');
+    document.getElementById('list-table-wrap').classList.add('hidden');
+    try {
+      await loadItems();
+      renderTable(approvalsMode);
+    } catch(e) {
+      toast('Error cargando requisiciones: '+e.message,'error');
+    } finally {
+      document.getElementById('list-loading').classList.add('hidden');
+    }
+  }
+
+  function getFiltered(am) {
+    const q = (document.getElementById('flt-q')?.value||'').toLowerCase();
+    const dept = document.getElementById('flt-dept')?.value||'';
+    const status = document.getElementById('flt-status')?.value||'';
+    const urg = document.getElementById('flt-urg')?.value||'';
+    let items = [...allItems];
+    if (am) {
+      if (userRole==='approver') items = items.filter(i=>i.Status===S.SENT);
+      else if (userRole==='admin') items = items.filter(i=>i.Status===S.APP1);
+    }
+    if (q) items = items.filter(i=>(i.Title+i.RequesterName+i.Dept+i.Justification).toLowerCase().includes(q));
+    if (dept) items = items.filter(i=>i.Dept===dept);
+    if (status) items = items.filter(i=>i.Status===status);
+    if (urg) items = items.filter(i=>i.Urgency===urg);
+    return items;
+  }
+
+  function renderTable(am) {
+    const wrap = document.getElementById('list-table-wrap');
+    const items = getFiltered(am);
+    document.getElementById('list-count').textContent = `${items.length} registro(s)`;
+    if (!items.length) {
+      wrap.innerHTML = `<div class="empty-state"><div class="empty-state-icon">📭</div>Sin resultados</div>`;
+      wrap.classList.remove('hidden');
+      return;
+    }
+    const rows = items.map(i=>{
+      const bc = getBadgeClass(i.Status);
+      const ub = getUrgencyBadge(i.Urgency);
+      const lines = parseLines(i.LinesJSON);
+      return `<tr style="cursor:pointer" data-id="${i._id}" class="req-row">
+        <td><span class="num">${escH(i.Title)}</span></td>
+        <td>${escH(i.Dept)}</td>
+        <td>${escH(i.RequesterName)}</td>
+        <td><span class="badge ${ub}">${escH(i.Urgency)}</span></td>
+        <td><span class="badge ${bc}">${escH(i.Status)}</span></td>
+        <td>${lines.length} ítem(s)</td>
+        <td>${fmt(i.NeedBy)}</td>
+        <td>${fmt(i.CreatedAt)}</td>
+        <td class="text-muted" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escH(i.Justification).substring(0,60)}</td>
+      </tr>`;
+    }).join('');
+    wrap.innerHTML = `
+      <div style="overflow-x:auto">
+      <table>
+        <thead><tr>
+          <th>N° Req.</th><th>Departamento</th><th>Solicitante</th><th>Urgencia</th><th>Estado</th><th>Ítems</th><th>Fecha necesaria</th><th>Creada</th><th>Justificación</th>
+        </tr></thead>
+        <tbody id="list-tbody">${rows}</tbody>
+      </table>
+      </div>`;
+    wrap.classList.remove('hidden');
+    wrap.querySelectorAll('.req-row').forEach(r=>{
+      r.addEventListener('dblclick',()=>{
+        const item = allItems.find(i=>i._id===r.dataset.id);
+        if (item) { renderDetail(item); showView('detail'); }
+      });
+      r.addEventListener('click',()=>{
+        wrap.querySelectorAll('.req-row').forEach(x=>x.style.background='');
+        r.style.background='var(--bg3)';
+      });
+    });
+  }
+
+  ['flt-q','flt-dept','flt-status','flt-urg'].forEach(id=>{
+    setTimeout(()=>{
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('input',()=>renderTable(approvalsMode));
+    },100);
+  });
+
+  document.getElementById('btn-refresh-list').addEventListener('click', doLoad);
+  document.getElementById('btn-export-csv').addEventListener('click',()=>{
+    const items = getFiltered(approvalsMode);
+    const rows = items.map(i=>({
+      Numero:i.Title,Departamento:i.Dept,Solicitante:i.RequesterName,Mail:i.RequesterMail,
+      Estado:i.Status,Urgencia:i.Urgency,CuentaGL:i.GLAccount,CentroCosto:i.CostCenter,
+      Justificacion:i.Justification,Proveedor:i.Vendor,FechaNecesaria:fmt(i.NeedBy),
+      Creada:fmtDT(i.CreatedAt),Enviada:fmtDT(i.SubmittedAt),
+      Aprobador1:i.Lvl1By,NotaN1:i.Lvl1Note,
+      Aprobador2:i.Lvl2By,NotaN2:i.Lvl2Note,
+      OC:i.OCNumber,FechaOC:fmt(i.OCDate),Comprador:i.Buyer,
+    }));
+    exportCSV(rows,`Requisiciones_${new Date().toISOString().slice(0,10)}.csv`);
+  });
+
+  doLoad();
+}
+
+// ================================================================
+// VISTA: FORMULARIO (crear/editar)
+// ================================================================
+function renderForm(item) {
+  showView('form');
+  const isEdit = !!item;
+  const container = document.getElementById('view-form');
+  const deptOptions = DEPARTMENTS.map(d=>`<option value="${d.name}" ${item?.Dept===d.name?'selected':''}>${d.name}</option>`).join('');
+
+  const profile = currentUser?.idTokenClaims;
+  const defName = item?.RequesterName || (profile?.name||'');
+  const defMail = item?.RequesterMail || (currentUser?.username||'');
+
+  const existingLines = parseLines(item?.LinesJSON||'[]');
+  if (!existingLines.length) existingLines.push({desc:'',qty:1,unit:'UN',currency:'ARS',price:'',link:'',obs:''});
+
+  container.innerHTML = `
+    <div class="section-header">
+      <div>
+        <div class="section-title">${isEdit?'Editar Requisición':'Nueva Requisición'}</div>
+        ${item?`<div class="section-sub"><span class="num">${escH(item.Title)}</span></div>`:''}
+      </div>
+      <div class="ml-auto d-flex">
+        <button class="btn btn-secondary" id="btn-cancel-form">Cancelar</button>
+        <button class="btn btn-secondary" id="btn-save-draft">💾 Guardar borrador</button>
+        <button class="btn btn-primary" id="btn-send-req">📤 Enviar para aprobación</button>
+      </div>
+    </div>
+
+    <!-- CABECERA -->
+    <div class="form-section">
+      <div class="form-section-title">Cabecera</div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Departamento *</label>
+          <select id="f-dept" required><option value="">Seleccionar…</option>${deptOptions}</select>
+        </div>
+        <div class="form-group">
+          <label>Urgencia *</label>
+          <select id="f-urgency">
+            <option ${item?.Urgency==='Normal'||!item?'selected':''}>Normal</option>
+            <option ${item?.Urgency==='Alta'?'selected':''}>Alta</option>
+            <option ${item?.Urgency==='Crítica'?'selected':''}>Crítica</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Nombre y Apellido del Solicitante *</label>
+          <input type="text" id="f-reqname" value="${escH(defName)}" required/>
+        </div>
+        <div class="form-group">
+          <label>Mail corporativo *</label>
+          <input type="email" id="f-reqmail" value="${escH(defMail)}" required/>
+        </div>
+        <div class="form-group">
+          <label>Cuenta contable (GL)</label>
+          <input type="text" id="f-gl" value="${escH(item?.GLAccount||'')}"/>
+        </div>
+        <div class="form-group">
+          <label>Centro de costo / Orden</label>
+          <input type="text" id="f-cc" value="${escH(item?.CostCenter||'')}"/>
+        </div>
+        <div class="form-group span2">
+          <label>Justificación *</label>
+          <textarea id="f-just" rows="3" required>${escH(item?.Justification||'')}</textarea>
+        </div>
+        <div class="form-group">
+          <label>Proveedor sugerido (opcional)</label>
+          <input type="text" id="f-vendor" value="${escH(item?.Vendor||'')}"/>
+        </div>
+        <div class="form-group">
+          <label>Fecha necesaria (opcional)</label>
+          <input type="date" id="f-needby" value="${item?.NeedBy?item.NeedBy.slice(0,10):''}"/>
+        </div>
+      </div>
+    </div>
+
+    <!-- ÍTEMS -->
+    <div class="form-section">
+      <div class="form-section-title">Ítems de la Requisición</div>
+      <div class="items-table-wrap">
+        <table class="items-table" id="items-tbl">
+          <thead><tr>
+            <th style="width:35%">Descripción *</th>
+            <th style="width:8%">Cant.</th>
+            <th style="width:8%">Unidad</th>
+            <th style="width:8%">Moneda</th>
+            <th style="width:10%">Precio est.</th>
+            <th style="width:16%">Link/Ref.</th>
+            <th style="width:12%">Observaciones</th>
+            <th style="width:3%"></th>
+          </tr></thead>
+          <tbody id="items-body"></tbody>
+        </table>
+      </div>
+      <button class="btn btn-secondary btn-sm" id="btn-add-item" style="margin-top:8px">+ Agregar ítem</button>
+      <div id="items-total" style="text-align:right;font-family:var(--mono);font-size:13px;margin-top:8px;color:var(--text2)"></div>
+    </div>
+
+    <!-- ADJUNTOS -->
+    <div class="form-section">
+      <div class="form-section-title">Adjuntos</div>
+      <div id="attach-existing" class="attach-list mb-3"></div>
+      <div class="form-group">
+        <label>Agregar archivos (PDF, Word, Excel, imágenes)</label>
+        <input type="file" id="f-files" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif" style="padding:6px"/>
+      </div>
+      <div id="attach-upload-status" style="font-size:12px;color:var(--text2)"></div>
+    </div>
+  `;
+
+  // Render items
+  function renderItems() {
+    const tbody = document.getElementById('items-body');
+    const lines = getLines();
+    tbody.innerHTML = lines.map((l,i)=>`
+      <tr>
+        <td><input type="text" class="il-desc" data-i="${i}" value="${escH(l.desc)}" placeholder="Descripción del ítem"/></td>
+        <td><input type="number" class="il-qty" data-i="${i}" value="${escH(String(l.qty))}" min="0.01" step="any" style="width:60px"/></td>
+        <td><input type="text" class="il-unit" data-i="${i}" value="${escH(l.unit)}" style="width:50px"/></td>
+        <td><select class="il-cur" data-i="${i}">
+          <option ${l.currency==='ARS'?'selected':''}>ARS</option>
+          <option ${l.currency==='USD'?'selected':''}>USD</option>
+        </select></td>
+        <td><input type="number" class="il-price" data-i="${i}" value="${escH(String(l.price))}" min="0" step="any" style="width:80px"/></td>
+        <td><input type="text" class="il-link" data-i="${i}" value="${escH(l.link)}" placeholder="URL o referencia"/></td>
+        <td><input type="text" class="il-obs" data-i="${i}" value="${escH(l.obs)}" placeholder="Obs."/></td>
+        <td><button class="item-del" data-i="${i}" title="Eliminar">✕</button></td>
+      </tr>`).join('');
+    tbody.querySelectorAll('.item-del').forEach(b=>{
+      b.addEventListener('click',()=>{
+        const lines = getLines();
+        lines.splice(Number(b.dataset.i),1);
+        setLines(lines);
+        renderItems();
+        calcTotal();
+      });
+    });
+    ['il-desc','il-qty','il-unit','il-cur','il-price','il-link','il-obs'].forEach(cls=>{
+      tbody.querySelectorAll('.'+cls).forEach(el=>{
+        el.addEventListener('input',()=>calcTotal());
+      });
+    });
+    calcTotal();
+  }
+
+  function getLines() {
+    const tbody = document.getElementById('items-body');
+    if (!tbody?.children.length) return existingLines;
+    const rows = tbody.querySelectorAll('tr');
+    return Array.from(rows).map(r=>({
+      desc: r.querySelector('.il-desc')?.value||'',
+      qty:  parseFloat(r.querySelector('.il-qty')?.value)||0,
+      unit: r.querySelector('.il-unit')?.value||'UN',
+      currency: r.querySelector('.il-cur')?.value||'ARS',
+      price: parseFloat(r.querySelector('.il-price')?.value)||0,
+      link: r.querySelector('.il-link')?.value||'',
+      obs:  r.querySelector('.il-obs')?.value||'',
+    }));
+  }
+
+  function setLines(lines) { existingLines.splice(0,existingLines.length,...lines); }
+
+  function calcTotal() {
+    const lines = getLines();
+    const groups = {};
+    lines.forEach(l=>{
+      const c = l.currency||'ARS';
+      groups[c] = (groups[c]||0) + (l.qty||0)*(l.price||0);
+    });
+    const parts = Object.entries(groups).map(([c,v])=>`${c} ${v.toLocaleString('es-AR',{minimumFractionDigits:2})}`);
+    document.getElementById('items-total').textContent = parts.length ? 'Total estimado: '+parts.join(' + ') : '';
+  }
+
+  // Render existing attachments
+  const existAtt = parseAttachments(item?.AttachmentsJSON||'[]');
+  if (existAtt.length) {
+    document.getElementById('attach-existing').innerHTML = existAtt.map(a=>`
+      <div class="attach-item">📎 <a href="${escH(a.webUrl)}" target="_blank">${escH(a.name)}</a></div>
+    `).join('');
+  }
+
+  document.getElementById('btn-add-item').addEventListener('click',()=>{
+    const lines = getLines();
+    lines.push({desc:'',qty:1,unit:'UN',currency:'ARS',price:'',link:'',obs:''});
+    setLines(lines);
+    renderItems();
+  });
+
+  document.getElementById('btn-cancel-form').addEventListener('click',()=>{
+    renderList(false);
+  });
+
+  function validate() {
+    const dept   = document.getElementById('f-dept').value;
+    const name   = document.getElementById('f-reqname').value.trim();
+    const mail   = document.getElementById('f-reqmail').value.trim();
+    const just   = document.getElementById('f-just').value.trim();
+    const lines  = getLines().filter(l=>l.desc.trim());
+    if (!dept) { toast('Seleccioná un departamento','error'); return null; }
+    if (!name) { toast('Ingresá nombre del solicitante','error'); return null; }
+    if (!mail) { toast('Ingresá mail del solicitante','error'); return null; }
+    if (!just) { toast('Ingresá la justificación','error'); return null; }
+    if (!lines.length) { toast('Agregá al menos un ítem con descripción','error'); return null; }
+    return {dept,name,mail,just,lines};
+  }
+
+  async function uploadNewFiles(reqNum) {
+    const fileInput = document.getElementById('f-files');
+    const files = fileInput?.files||[];
+    if (!files.length) return [];
+    const folderPath = CFG.DOC_LIB_REL + '/' + reqNum;
+    await ensureFolder(folderPath);
+    const uploaded = [];
+    const status = document.getElementById('attach-upload-status');
+    for (let i=0;i<files.length;i++) {
+      const f = files[i];
+      status.textContent = `Subiendo ${i+1}/${files.length}: ${f.name}…`;
+      try {
+        const result = await uploadFile(folderPath, f);
+        uploaded.push({name:f.name, webUrl:result.webUrl||result['@content.downloadUrl']||'', id:result.id||''});
+      } catch(e) {
+        toast(`Error subiendo ${f.name}: ${e.message}`,'error');
+      }
+    }
+    status.textContent = '';
+    return uploaded;
+  }
+
+  async function saveReq(send) {
+    const v = validate();
+    if (!v) return;
+    const btn = send ? document.getElementById('btn-send-req') : document.getElementById('btn-save-draft');
+    btn.disabled = true;
+    btn.textContent = '⏳ Guardando…';
+    try {
+      let reqNum = item?.Title;
+      if (!reqNum) {
+        reqNum = await generateNumber(v.dept);
+      }
+      const newFiles = await uploadNewFiles(reqNum);
+      const allAttach = [...existAtt, ...newFiles];
+      const now = isoNow();
+      const fields = {
+        Title:           reqNum,
+        Dept:            v.dept,
+        RequesterName:   v.name,
+        RequesterMail:   v.mail,
+        GLAccount:       document.getElementById('f-gl').value.trim(),
+        CostCenter:      document.getElementById('f-cc').value.trim(),
+        Urgency:         document.getElementById('f-urgency').value,
+        Justification:   v.just,
+        Vendor:          document.getElementById('f-vendor').value.trim(),
+        NeedBy:          document.getElementById('f-needby').value||null,
+        Status:          send ? S.SENT : S.DRAFT,
+        LinesJSON:       JSON.stringify(v.lines),
+        AttachmentsJSON: JSON.stringify(allAttach),
+        UpdatedAt:       now,
+      };
+      if (send && !item?.SubmittedAt) fields.SubmittedAt = now;
+      if (!isEdit) {
+        fields.CreatedAt = now;
+        await createItem(fields);
+        toast(`Requisición ${reqNum} ${send?'enviada':'guardada'} correctamente.`,'success');
+      } else {
+        await updateItem(item._id, fields);
+        toast(`Requisición ${reqNum} actualizada.`,'success');
+      }
+      renderList(false);
+    } catch(e) {
+      toast('Error al guardar: '+e.message,'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = send ? '📤 Enviar para aprobación' : '💾 Guardar borrador';
+    }
+  }
+
+  document.getElementById('btn-save-draft').addEventListener('click',()=>saveReq(false));
+  document.getElementById('btn-send-req').addEventListener('click',()=>saveReq(true));
+
+  renderItems();
+}
+
+// ================================================================
+// VISTA: DETALLE / APROBACIÓN
+// ================================================================
+function renderDetail(item) {
+  showView('detail');
+  const container = document.getElementById('view-detail');
+  const lines = parseLines(item.LinesJSON);
+  const attachments = parseAttachments(item.AttachmentsJSON);
+  const bc = getBadgeClass(item.Status);
+  const ub = getUrgencyBadge(item.Urgency);
+
+  const canEdit = canEditDraft(item);
+  const canApproveN1 = (userRole==='approver'||userRole==='admin') && item.Status===S.SENT;
+  const canApproveN2 = userRole==='admin' && item.Status===S.APP1;
+  const canAssignOC  = userRole==='admin' && item.Status===S.APP2;
+  const canReopen    = userRole==='admin' && (item.Status===S.REJ1||item.Status===S.REJ2);
+
+  // Line items table
+  const linesHtml = lines.map(l=>`
+    <tr>
+      <td>${escH(l.desc)}</td>
+      <td class="money">${Number(l.qty||0).toLocaleString('es-AR')}</td>
+      <td>${escH(l.unit||'UN')}</td>
+      <td>${escH(l.currency||'ARS')}</td>
+      <td class="money">${l.price?Number(l.price).toLocaleString('es-AR',{minimumFractionDigits:2}):'—'}</td>
+      <td>${l.link?`<a href="${escH(l.link)}" target="_blank" style="font-size:11px">🔗 Link</a>`:'—'}</td>
+      <td>${escH(l.obs||'')}</td>
+    </tr>`).join('');
+
+  const attachHtml = attachments.length
+    ? attachments.map(a=>`<div class="attach-item">📎 <a href="${escH(a.webUrl)}" target="_blank">${escH(a.name)}</a></div>`).join('')
+    : '<div class="text-muted" style="font-size:12px">Sin adjuntos</div>';
+
+  // History
+  const history = [];
+  if (item.CreatedAt)   history.push({when:item.CreatedAt,   what:`Creada en estado ${item.Status==='Borrador'?'Borrador':'(borrador)'}`});
+  if (item.SubmittedAt) history.push({when:item.SubmittedAt, what:'Enviada para aprobación N1'});
+  if (item.Lvl1At)      history.push({when:item.Lvl1At,      what:`${item.Status===S.REJ1||item.Status===S.REJ2?'Rechazada':'Aprobada'} N1 por ${item.Lvl1By}${item.Lvl1Note?' — '+item.Lvl1Note:''}`});
+  if (item.Lvl2At)      history.push({when:item.Lvl2At,      what:`${item.Status===S.REJ2?'Rechazada':'Aprobada'} N2 por ${item.Lvl2By}${item.Lvl2Note?' — '+item.Lvl2Note:''}`});
+  if (item.OCNumber)    history.push({when:item.OCDate,       what:`OC asignada: ${item.OCNumber} — Comprador: ${item.Buyer}`});
+  history.sort((a,b)=>a.when>b.when?1:-1);
+  const historyHtml = history.map(h=>`
+    <div class="history-item">
+      <div class="history-when">${fmtDT(h.when)}</div>
+      <div class="history-what">${escH(h.what)}</div>
+    </div>`).join('');
+
+  // Action buttons
+  let actionBtns = '';
+  if (canEdit) actionBtns += `<button class="btn btn-secondary" id="btn-edit-req">✏ Editar</button>`;
+  if (canApproveN1) actionBtns += `<button class="btn btn-success" id="btn-appn1">✔ Aprobar N1</button><button class="btn btn-danger" id="btn-rejn1">✖ Rechazar N1</button>`;
+  if (canApproveN2) actionBtns += `<button class="btn btn-success" id="btn-appn2">✔ Aprobar N2</button><button class="btn btn-danger" id="btn-rejn2">✖ Rechazar N2</button>`;
+  if (canAssignOC)  actionBtns += `<button class="btn btn-info" id="btn-assign-oc">📄 Asignar OC</button>`;
+  if (canReopen)    actionBtns += `<button class="btn btn-secondary" id="btn-reopen">↩ Reabrir a Borrador</button>`;
+
+  // OC section
+  const ocHtml = item.OCNumber ? `
+    <div class="req-detail-section">
+      <h4>Orden de Compra</h4>
+      <div class="oc-box">
+        <div class="detail-row"><span class="detail-label">N° OC:</span><span class="detail-value num">${escH(item.OCNumber)}</span></div>
+        <div class="detail-row"><span class="detail-label">Fecha OC:</span><span class="detail-value">${fmt(item.OCDate)}</span></div>
+        <div class="detail-row"><span class="detail-label">Comprador:</span><span class="detail-value">${escH(item.Buyer)}</span></div>
+      </div>
+    </div>` : '';
+
+  container.innerHTML = `
+    <div class="section-header">
+      <div>
+        <div class="section-title"><span class="num">${escH(item.Title)}</span> &nbsp;<span class="badge ${bc}">${escH(item.Status)}</span></div>
+        <div class="section-sub">Departamento: ${escH(item.Dept)} &nbsp;·&nbsp; Urgencia: <span class="badge ${ub}">${escH(item.Urgency)}</span></div>
+      </div>
+      <div class="ml-auto d-flex">
+        <button class="btn btn-secondary" id="btn-back-detail">← Volver</button>
+        ${actionBtns}
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <!-- LEFT -->
+      <div>
+        <div class="form-section">
+          <div class="req-detail-section">
+            <h4>Solicitante</h4>
+            <div class="detail-row"><span class="detail-label">Nombre:</span><span class="detail-value">${escH(item.RequesterName)}</span></div>
+            <div class="detail-row"><span class="detail-label">Mail:</span><span class="detail-value">${escH(item.RequesterMail)}</span></div>
+            <div class="detail-row"><span class="detail-label">Cuenta GL:</span><span class="detail-value">${escH(item.GLAccount)||'—'}</span></div>
+            <div class="detail-row"><span class="detail-label">Centro de Costo:</span><span class="detail-value">${escH(item.CostCenter)||'—'}</span></div>
+            <div class="detail-row"><span class="detail-label">Proveedor sugerido:</span><span class="detail-value">${escH(item.Vendor)||'—'}</span></div>
+            <div class="detail-row"><span class="detail-label">Fecha necesaria:</span><span class="detail-value">${fmt(item.NeedBy)}</span></div>
+            <div class="detail-row"><span class="detail-label">Creada:</span><span class="detail-value">${fmtDT(item.CreatedAt)}</span></div>
+            <div class="detail-row"><span class="detail-label">Enviada:</span><span class="detail-value">${fmtDT(item.SubmittedAt)}</span></div>
+          </div>
+          <div class="req-detail-section">
+            <h4>Justificación</h4>
+            <div style="font-size:13px;color:var(--text1);line-height:1.6">${escH(item.Justification)}</div>
+          </div>
+        </div>
+        <!-- Aprobaciones -->
+        ${item.Lvl1At||item.Lvl2At ? `
+        <div class="form-section">
+          <div class="req-detail-section">
+            <h4>Aprobaciones</h4>
+            ${item.Lvl1At?`<div class="detail-row"><span class="detail-label">Nivel 1 por:</span><span class="detail-value">${escH(item.Lvl1By)} — ${fmtDT(item.Lvl1At)}</span></div>
+            ${item.Lvl1Note?`<div class="detail-row"><span class="detail-label">Nota N1:</span><span class="detail-value">${escH(item.Lvl1Note)}</span></div>`:''}`:'' }
+            ${item.Lvl2At?`<div class="detail-row"><span class="detail-label">Nivel 2 por:</span><span class="detail-value">${escH(item.Lvl2By)} — ${fmtDT(item.Lvl2At)}</span></div>
+            ${item.Lvl2Note?`<div class="detail-row"><span class="detail-label">Nota N2:</span><span class="detail-value">${escH(item.Lvl2Note)}</span></div>`:''}`:'' }
+          </div>
+        </div>`:'' }
+        ${ocHtml?`<div class="form-section">${ocHtml}</div>`:''}
+      </div>
+      <!-- RIGHT -->
+      <div>
+        <div class="form-section">
+          <div class="req-detail-section">
+            <h4>Ítems (${lines.length})</h4>
+            <div style="overflow-x:auto">
+            <table class="items-table">
+              <thead><tr><th>Descripción</th><th>Cant.</th><th>Unidad</th><th>Moneda</th><th>Precio est.</th><th>Ref.</th><th>Obs.</th></tr></thead>
+              <tbody>${linesHtml}</tbody>
+            </table>
+            </div>
+          </div>
+        </div>
+        <div class="form-section">
+          <div class="req-detail-section">
+            <h4>Adjuntos</h4>
+            <div class="attach-list">${attachHtml}</div>
+          </div>
+        </div>
+        <div class="form-section">
+          <div class="req-detail-section">
+            <h4>Historial</h4>
+            <div>${historyHtml||'<div class="text-muted" style="font-size:12px">Sin historial</div>'}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('btn-back-detail').addEventListener('click',()=>renderList(false));
+  if (canEdit) document.getElementById('btn-edit-req')?.addEventListener('click',()=>renderForm(item));
+
+  // Approval modals
+  function approvalModal(title, onConfirm) {
+    showModal(`<div class="form-group"><label>Nota (opcional)</label><textarea id="approval-note" rows="4" placeholder="Motivo, observaciones…"></textarea></div>`,
+      title, [{label:'Confirmar', cls:'btn-primary', cb:()=>{
+        const note = document.getElementById('approval-note').value.trim();
+        onConfirm(note);
+      }},{label:'Cancelar',cls:'btn-secondary'}]);
+  }
+
+  if (canApproveN1) {
+    document.getElementById('btn-appn1').addEventListener('click',()=>{
+      approvalModal('Aprobar — Nivel 1', async(note)=>{
+        await doAction(item, {Status:S.APP1, Lvl1At:isoNow(), Lvl1By:currentUser.username, Lvl1Note:note});
+        toast('Aprobado Nivel 1','success');
+        renderList(false);
+      });
+    });
+    document.getElementById('btn-rejn1').addEventListener('click',()=>{
+      approvalModal('Rechazar — Nivel 1', async(note)=>{
+        await doAction(item, {Status:S.REJ1, Lvl1At:isoNow(), Lvl1By:currentUser.username, Lvl1Note:note});
+        toast('Rechazado Nivel 1','error');
+        renderList(false);
+      });
+    });
+  }
+  if (canApproveN2) {
+    document.getElementById('btn-appn2').addEventListener('click',()=>{
+      approvalModal('Aprobar — Nivel 2', async(note)=>{
+        await doAction(item, {Status:S.APP2, Lvl2At:isoNow(), Lvl2By:currentUser.username, Lvl2Note:note});
+        toast('Aprobado Nivel 2','success');
+        renderList(false);
+      });
+    });
+    document.getElementById('btn-rejn2').addEventListener('click',()=>{
+      approvalModal('Rechazar — Nivel 2', async(note)=>{
+        await doAction(item, {Status:S.REJ2, Lvl2At:isoNow(), Lvl2By:currentUser.username, Lvl2Note:note});
+        toast('Rechazado Nivel 2','error');
+        renderList(false);
+      });
+    });
+  }
+  if (canAssignOC) {
+    document.getElementById('btn-assign-oc').addEventListener('click',()=>{
+      const now = new Date().toISOString().slice(0,10);
+      showModal(`
+        <div class="form-group mb-3"><label>N° Orden de Compra *</label><input type="text" id="oc-num" placeholder="OC-2025-0001"/></div>
+        <div class="form-group mb-3"><label>Fecha OC</label><input type="date" id="oc-date" value="${now}"/></div>
+        <div class="form-group"><label>Comprador *</label><input type="text" id="oc-buyer" value="${currentUser.name||currentUser.username}"/></div>
+      `, 'Asignar Orden de Compra', [{label:'Asignar', cls:'btn-primary', cb:async()=>{
+        const num = document.getElementById('oc-num').value.trim();
+        const date = document.getElementById('oc-date').value;
+        const buyer = document.getElementById('oc-buyer').value.trim();
+        if (!num||!buyer) { toast('Completá N° OC y Comprador','error'); return; }
+        await doAction(item, {Status:S.OC, OCNumber:num, OCDate:date, OCBuyer:buyer, Lvl2At:isoNow(), Lvl2By:currentUser.username});
+        toast('OC asignada correctamente','success');
+        renderList(false);
+      }},{label:'Cancelar',cls:'btn-secondary'}]);
+    });
+  }
+  if (canReopen) {
+    document.getElementById('btn-reopen').addEventListener('click',async()=>{
+      if (!confirm('¿Reabrir esta requisición como Borrador?')) return;
+      await doAction(item, {Status:S.DRAFT});
+      toast('Requisición reabierta como Borrador','info');
+      renderList(false);
+    });
+  }
+}
+
+async function doAction(item, fields) {
+  await updateItem(item._id, { ...fields, UpdatedAt: isoNow() });
+}
+
+// ================================================================
+// MODAL HELPER
+// ================================================================
+function showModal(bodyHtml, title, buttons=[]) {
+  const existing = document.getElementById('_modal');
+  if (existing) existing.remove();
+  const overlay = document.createElement('div');
+  overlay.id = '_modal';
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <span class="modal-title">${escH(title)}</span>
+        <button class="modal-close" id="modal-x">✕</button>
+      </div>
+      <div class="modal-body">${bodyHtml}</div>
+      <div class="modal-footer">
+        ${buttons.map((b,i)=>`<button class="btn ${b.cls}" data-bi="${i}">${escH(b.label)}</button>`).join('')}
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#modal-x').addEventListener('click',()=>overlay.remove());
+  buttons.forEach((b,i)=>{
+    overlay.querySelector(`[data-bi="${i}"]`).addEventListener('click',()=>{
+      if (b.cb) b.cb();
+      overlay.remove();
+    });
+  });
+}
+
+// ================================================================
+// VISTA: DASHBOARD (ADMIN)
+// ================================================================
+function renderDashboard() {
+  showView('dashboard');
+  const container = document.getElementById('view-dashboard');
+  container.innerHTML = `
+    <div class="section-header">
+      <div><div class="section-title">Panel de Análisis</div><div class="section-sub">Solo visible para administradores</div></div>
+      <div class="ml-auto d-flex">
+        <button class="btn btn-secondary btn-sm" id="dash-refresh">↻ Actualizar</button>
+        <button class="btn btn-secondary btn-sm" id="dash-export">⬇ CSV completo</button>
+      </div>
+    </div>
+    <div id="dash-loading" class="loading-overlay"><div class="loader"></div> Cargando datos…</div>
+    <div id="dash-content" class="hidden"></div>
+  `;
+
+  async function load() {
+    document.getElementById('dash-loading').classList.remove('hidden');
+    document.getElementById('dash-content').classList.add('hidden');
+    try {
+      await loadItems();
+      renderDashContent();
+    } catch(e) {
+      toast('Error cargando análisis: '+e.message,'error');
+    } finally {
+      document.getElementById('dash-loading').classList.add('hidden');
+    }
+  }
+
+  function renderDashContent() {
+    const items = allItems;
+    const total = items.length;
+    const pendN1 = items.filter(i=>i.Status===S.SENT).length;
+    const pendN2 = items.filter(i=>i.Status===S.APP1).length;
+    const withOC = items.filter(i=>i.Status===S.OC).length;
+    const mine   = items.filter(i=>i.RequesterMail===currentUser.username).length;
+
+    // By status
+    const byStatus = {};
+    Object.values(S).forEach(s=>byStatus[s]=0);
+    items.forEach(i=>byStatus[i.Status]=(byStatus[i.Status]||0)+1);
+
+    // By dept
+    const byDept = {};
+    DEPARTMENTS.forEach(d=>byDept[d.name]=0);
+    items.forEach(i=>byDept[i.Dept]=(byDept[i.Dept]||0)+1);
+
+    // By month
+    const byMonth = {};
+    items.forEach(i=>{
+      const d = i.CreatedAt||i.SubmittedAt||'';
+      if (!d) return;
+      const m = d.slice(0,7);
+      byMonth[m]=(byMonth[m]||0)+1;
+    });
+    const months = Object.keys(byMonth).sort();
+
+    // Pivot
+    const statusKeys = Object.values(S);
+    const depts = DEPARTMENTS.map(d=>d.name);
+    const pivot = {};
+    depts.forEach(d=>{pivot[d]={};statusKeys.forEach(s=>pivot[d][s]=0);});
+    items.forEach(i=>{if(pivot[i.Dept]) pivot[i.Dept][i.Status]=(pivot[i.Dept][i.Status]||0)+1;});
+
+    const dc = document.getElementById('dash-content');
+    dc.innerHTML = `
+      <!-- KPIs -->
+      <div class="kpi-grid">
+        <div class="kpi"><div class="kpi-label">Total Requisiciones</div><div class="kpi-value">${total}</div></div>
+        <div class="kpi"><div class="kpi-label">Pendientes N1</div><div class="kpi-value text-accent">${pendN1}</div></div>
+        <div class="kpi"><div class="kpi-label">Pendientes N2</div><div class="kpi-value text-yellow">${pendN2}</div></div>
+        <div class="kpi"><div class="kpi-label">Con OC Asignada</div><div class="kpi-value text-green">${withOC}</div></div>
+        <div class="kpi"><div class="kpi-label">Mis Requisiciones</div><div class="kpi-value">${mine}</div></div>
+      </div>
+      <!-- Charts -->
+      <div class="chart-grid">
+        <div class="chart-card">
+          <div class="chart-title">Por Estado</div>
+          <div class="chart-wrap"><canvas id="ch-status"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Por Departamento</div>
+          <div class="chart-wrap"><canvas id="ch-dept"></canvas></div>
+        </div>
+        <div class="chart-card" style="grid-column:1/-1">
+          <div class="chart-title">Evolución Mensual</div>
+          <div class="chart-wrap"><canvas id="ch-month"></canvas></div>
+        </div>
+      </div>
+      <!-- Pivot -->
+      <div class="card mb-4">
+        <div class="section-title" style="font-size:14px;margin-bottom:14px">Tabla Pivot — Departamento × Estado <span style="font-size:11px;color:var(--text2)">(doble clic en celda para detalle)</span></div>
+        <div style="overflow-x:auto">
+        <table class="pivot-table">
+          <thead><tr>
+            <th>Departamento</th>
+            ${statusKeys.map(s=>`<th>${escH(s.split(' ')[0])}</th>`).join('')}
+            <th>Total</th>
+          </tr></thead>
+          <tbody>
+            ${depts.map(d=>`<tr>
+              <td style="font-weight:500">${escH(d)}</td>
+              ${statusKeys.map(s=>{
+                const v = pivot[d][s];
+                return `<td data-clickable="${v>0}" data-dept="${escH(d)}" data-status="${escH(s)}" style="${v>0?'cursor:pointer':''}">
+                  ${v>0?`<span style="color:var(--accent2)">${v}</span>`:'—'}
+                </td>`;
+              }).join('')}
+              <td style="font-weight:600">${Object.values(pivot[d]).reduce((a,b)=>a+b,0)||'—'}</td>
+            </tr>`).join('')}
+          </tbody>
+          <tfoot><tr style="font-weight:600">
+            <td>TOTAL</td>
+            ${statusKeys.map(s=>`<td>${items.filter(i=>i.Status===s).length||'—'}</td>`).join('')}
+            <td>${total}</td>
+          </tr></tfoot>
+        </table>
+        </div>
+      </div>
+    `;
+    dc.classList.remove('hidden');
+
+    // Pivot drill-down
+    dc.querySelectorAll('[data-clickable="true"]').forEach(cell=>{
+      cell.addEventListener('dblclick',()=>{
+        const dept = cell.dataset.dept;
+        const status = cell.dataset.status;
+        const rows = items.filter(i=>i.Dept===dept && i.Status===status);
+        showDrillModal(`${dept} — ${status}`, rows);
+      });
+    });
+
+    // Chart colors
+    const CHART_COLORS = ['#3a8fd4','#e8a020','#2ea86b','#d94040','#e0621a','#a060d4','#40b0c8'];
+    const chartDefaults = {
+      plugins:{legend:{labels:{color:'#b0bac6',font:{family:'IBM Plex Sans',size:11}}}},
+      scales:{x:{ticks:{color:'#6e7e92',font:{size:11}},grid:{color:'#2e3542'}},y:{ticks:{color:'#6e7e92',font:{size:11}},grid:{color:'#2e3542'}}},
+    };
+
+    // By status chart (doughnut)
+    new Chart(document.getElementById('ch-status'), {
+      type:'doughnut',
+      data:{
+        labels:Object.keys(byStatus).filter(k=>byStatus[k]>0),
+        datasets:[{
+          data:Object.entries(byStatus).filter(([,v])=>v>0).map(([,v])=>v),
+          backgroundColor:CHART_COLORS,
+          borderColor:'#13171b',
+          borderWidth:2,
+        }]
+      },
+      options:{
+        plugins:{legend:{labels:{color:'#b0bac6',font:{family:'IBM Plex Sans',size:11}}}},
+        onClick:(e,els,chart)=>{
+          if (!els.length) return;
+          const label = chart.data.labels[els[0].index];
+          showDrillModal('Estado: '+label, items.filter(i=>i.Status===label));
+        }
+      }
+    });
+
+    // By dept chart (bar)
+    const deptData = depts.map(d=>byDept[d]||0);
+    new Chart(document.getElementById('ch-dept'), {
+      type:'bar',
+      data:{
+        labels:depts.map(d=>d.substring(0,10)),
+        datasets:[{
+          label:'Requisiciones',
+          data:deptData,
+          backgroundColor:'rgba(58,143,212,.7)',
+          borderColor:'rgba(58,143,212,1)',
+          borderWidth:1,
+          borderRadius:3,
+        }]
+      },
+      options:{
+        ...chartDefaults,
+        onClick:(e,els,chart)=>{
+          if (!els.length) return;
+          const dept = depts[els[0].index];
+          showDrillModal('Departamento: '+dept, items.filter(i=>i.Dept===dept));
+        }
+      }
+    });
+
+    // Monthly trend
+    new Chart(document.getElementById('ch-month'), {
+      type:'line',
+      data:{
+        labels:months,
+        datasets:[{
+          label:'Requisiciones creadas',
+          data:months.map(m=>byMonth[m]),
+          borderColor:'#e8a020',
+          backgroundColor:'rgba(232,160,32,.1)',
+          tension:.3,
+          fill:true,
+          pointBackgroundColor:'#e8a020',
+        }]
+      },
+      options:{
+        ...chartDefaults,
+        onClick:(e,els,chart)=>{
+          if (!els.length) return;
+          const m = months[els[0].index];
+          showDrillModal('Mes: '+m, items.filter(i=>(i.CreatedAt||'').startsWith(m)));
+        }
+      }
+    });
+  }
+
+  function showDrillModal(title, rows) {
+    if (!rows.length) return;
+    const csvBtn = `<button class="btn btn-secondary btn-sm" id="drill-csv">⬇ CSV</button>`;
+    const tbl = `
+      <div style="overflow-x:auto">
+      <table>
+        <thead><tr><th>N° Req.</th><th>Dept.</th><th>Solicitante</th><th>Estado</th><th>Urgencia</th><th>Creada</th></tr></thead>
+        <tbody>${rows.map(r=>`<tr>
+          <td class="num">${escH(r.Title)}</td>
+          <td>${escH(r.Dept)}</td>
+          <td>${escH(r.RequesterName)}</td>
+          <td><span class="badge ${getBadgeClass(r.Status)}">${escH(r.Status)}</span></td>
+          <td><span class="badge ${getUrgencyBadge(r.Urgency)}">${escH(r.Urgency)}</span></td>
+          <td>${fmt(r.CreatedAt)}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+      </div>`;
+    const existing = document.getElementById('_drillmodal');
+    if (existing) existing.remove();
+    const overlay = document.createElement('div');
+    overlay.id = '_drillmodal';
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal modal-lg">
+        <div class="modal-header">
+          <span class="modal-title">${escH(title)} (${rows.length})</span>
+          <div class="d-flex">
+            ${csvBtn}
+            <button class="modal-close" id="drill-x">✕</button>
+          </div>
+        </div>
+        <div class="modal-body">${tbl}</div>
+      </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#drill-x').addEventListener('click',()=>overlay.remove());
+    overlay.querySelector('#drill-csv').addEventListener('click',()=>{
+      exportCSV(rows.map(r=>({Numero:r.Title,Dept:r.Dept,Solicitante:r.RequesterName,Estado:r.Status,Urgencia:r.Urgency,Creada:fmt(r.CreatedAt)})),
+        `drill_${title.replace(/[^a-zA-Z0-9]/g,'_')}.csv`);
+    });
+  }
+
+  document.getElementById('dash-refresh').addEventListener('click', load);
+  document.getElementById('dash-export').addEventListener('click',()=>{
+    exportCSV(allItems.map(i=>({Numero:i.Title,Dept:i.Dept,Solicitante:i.RequesterName,Mail:i.RequesterMail,Estado:i.Status,Urgencia:i.Urgency,Creada:fmt(i.CreatedAt),OC:i.OCNumber})),
+      `RequisicionesCompleto_${new Date().toISOString().slice(0,10)}.csv`);
+  });
+
+  load();
+}
+
+function renderInit() {
+  showView('init');
+  const container = document.getElementById('view-init');
+  container.innerHTML = `
+    <div class="section-header">
+      <div><div class="section-title">Inicialización del Sistema</div>
+      <div class="section-sub">Crea las carpetas necesarias en tu OneDrive</div></div>
+    </div>
+    <div class="card" style="max-width:700px">
+      <p style="font-size:13px;color:var(--text1);margin-bottom:16px">
+        Este proceso crea la carpeta <strong>Documents/Requisiciones-Adjuntos</strong> y la subcarpeta <strong>data</strong> en tu OneDrive donde se guardan todas las requisiciones. Podés ejecutarlo más de una vez sin riesgo.
+      </p>
+      <button class="btn btn-primary" id="btn-run-init">▶ Ejecutar inicialización</button>
+      <div id="init-log" class="init-result mt-4 hidden"></div>
+    </div>
+  `;
+
+  document.getElementById('btn-run-init').addEventListener('click', runInit);
+
+  async function log(msg, cls = 'init-info') {
+    const el = document.getElementById('init-log');
+    el.classList.remove('hidden');
+    el.innerHTML += `<div class="${cls}">${escH(msg)}</div>`;
+    el.scrollTop = el.scrollHeight;
+  }
+
+  async function runInit() {
+    const btn = document.getElementById('btn-run-init');
+    btn.disabled = true;
+    document.getElementById('init-log').innerHTML = '';
+    await log('[' + new Date().toLocaleTimeString('es-AR') + '] Iniciando…', 'init-info');
+    try {
+      await log('Verificando acceso a OneDrive…', 'init-info');
+      const me = await graphReq('GET', '/me');
+      await log('✔ Conectado como: ' + (me.displayName || me.userPrincipalName), 'init-ok');
+
+      await log('Creando carpetas necesarias…', 'init-info');
+      await ensureDBFolder();
+      await log('✔ Carpeta Documents/Requisiciones-Adjuntos/data creada o ya existente', 'init-ok');
+
+      await log('Verificando base de datos…', 'init-info');
+      const data = await readDB();
+      await log('✔ Base de datos OK — ' + data.length + ' requisición(es) existentes', 'init-ok');
+
+      await log('─'.repeat(50), 'init-info');
+      await log('✔ Inicialización completada. Ya podés crear requisiciones.', 'init-ok');
+    } catch (e) {
+      await log('✖ Error: ' + e.message, 'init-err');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+}
+
+// ================================================================
+// BOOTSTRAP
+// ================================================================
+async function bootstrap() {
+  document.getElementById('footer-year').textContent = new Date().getFullYear();
+
+  // Detectar si se abre desde archivo local (no funciona, necesita HTTPS)
+  if (window.location.protocol === 'file:') {
+    document.getElementById('login-screen').classList.remove('hidden');
+    document.getElementById('login-err').textContent =
+      '⚠ El archivo está abierto desde tu computadora. Debés subirlo a OneDrive y abrirlo desde ahí con el link de SharePoint (https://...).';
+    document.getElementById('login-err').classList.remove('hidden');
+    document.getElementById('btn-login').disabled = true;
+    document.getElementById('btn-login').textContent = 'Abrí el archivo desde OneDrive';
+    return;
+  }
+
+  await msalInstance.initialize();
+  // Handle redirect
+  await msalInstance.handleRedirectPromise().catch(()=>{});
+
+  const accounts = msalInstance.getAllAccounts();
+  if (accounts.length) {
+    await initApp(accounts[0]);
+  } else {
+    showLoginScreen();
+  }
+}
+
+function showLoginScreen() {
+  document.getElementById('login-screen').classList.remove('hidden');
+  document.getElementById('app').classList.add('hidden');
+  document.getElementById('btn-login').addEventListener('click', async()=>{
+    const btn = document.getElementById('btn-login');
+    btn.disabled=true; btn.textContent='Conectando…';
+    const errEl = document.getElementById('login-err');
+    errEl.classList.add('hidden');
+    try {
+      const res = await msalInstance.loginPopup({scopes:GRAPH_SCOPES});
+      await initApp(res.account);
+    } catch(e) {
+      errEl.textContent = 'Error al iniciar sesión. Verificá tu cuenta corporativa.';
+      errEl.classList.remove('hidden');
+      btn.disabled=false; btn.textContent='🔑 Iniciar sesión con Microsoft 365';
+    }
+  });
+}
+
+async function initApp(account) {
+  currentUser = account;
+  const email = (account.username||'').toLowerCase();
+  if (ROLES_ADMIN.map(r=>r.toLowerCase()).includes(email))    userRole='admin';
+  else if (ROLES_APPROVER.map(r=>r.toLowerCase()).includes(email)) userRole='approver';
+  else userRole='user';
+
+  document.getElementById('user-name').textContent = account.name || account.username;
+  document.getElementById('user-role').textContent = {admin:'Administrador',approver:'Aprobador N1',user:'Usuario'}[userRole];
+  document.getElementById('login-screen').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+
+  document.getElementById('btn-logout').addEventListener('click',()=>{
+    msalInstance.logoutPopup({account:currentUser}).then(()=>{
+      currentUser=null; allItems=[];
+      showLoginScreen();
+    });
+  });
+
+  document.getElementById('tc-badge').addEventListener('click', fetchTC);
+
+  buildNav();
+  fetchTC();
+  renderList(false);
+}
+
+bootstrap().catch(e=>console.error('Bootstrap error:',e.message));
+</script>
+</body>
+</html>
