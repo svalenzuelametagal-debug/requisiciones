@@ -487,6 +487,7 @@ const msalInstance = new msal.PublicClientApplication(msalConfig);
 const GRAPH_SCOPES = [
   'User.Read',
   'Files.ReadWrite',
+  'Mail.Send',
 ];
 
 // State
@@ -640,6 +641,95 @@ async function graphReq(method, url, body = null) {
   const ct = res.headers.get('content-type') || '';
   if (ct.includes('json')) return res.json();
   return null;
+}
+
+async function deleteItem(itemId) {
+  const data = await readDB();
+  await writeDB(data.filter(i => i.id !== itemId));
+}
+
+// ================================================================
+// EMAIL VIA GRAPH — Mail.Send delegado (sin admin consent)
+// ================================================================
+async function sendMail(toArr, subject, htmlBody) {
+  try {
+    const recipients = (Array.isArray(toArr) ? toArr : [toArr])
+      .filter(Boolean).map(a => ({ emailAddress: { address: a } }));
+    if (!recipients.length) return;
+    await graphReq('POST', '/me/sendMail', {
+      message: { subject, body: { contentType: 'HTML', content: htmlBody }, toRecipients: recipients },
+      saveToSentItems: false,
+    });
+  } catch(e) { console.warn('Mail no enviado:', e.message); }
+}
+
+function buildMailHTML(item, accion, nota) {
+  const lines = parseLines(item.LinesJSON);
+  const attachments = parseAttachments(item.AttachmentsJSON);
+  const APP_URL = 'https://svalenzuelametagal-debug.github.io/requisiciones/';
+  const colorEstado = {'Borrador':'#6e7e92','Enviada (Pendiente Nivel 1)':'#3a8fd4','Rechazada Nivel 1':'#d94040','Aprobada Nivel 1 (Pendiente Nivel 2)':'#d4a017','Rechazada Nivel 2':'#d94040','Aprobada Nivel 2':'#2ea86b','OC Asignada':'#e8a020'}[item.Status]||'#444';
+  const filas = lines.map(l=>`<tr>
+    <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:13px">${l.desc||''}</td>
+    <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:13px;text-align:center">${l.qty||''} ${l.unit||''}</td>
+    <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:13px;text-align:right">${l.currency||'ARS'} ${l.price?Number(l.price).toLocaleString('es-AR',{minimumFractionDigits:2}):'—'}</td>
+    <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:12px;color:#888">${l.obs||'—'}</td>
+  </tr>`).join('');
+  const adjHtml = attachments.length ? attachments.map(a=>`<a href="${a.webUrl||'#'}" style="color:#3a8fd4;font-size:12px;display:block;margin-bottom:4px">📎 ${a.name}</a>`).join('') : '<span style="color:#aaa;font-size:12px">Sin adjuntos</span>';
+  return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,sans-serif">
+  <div style="max-width:660px;margin:24px auto;background:#fff;border-radius:6px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.1)">
+    <div style="background:#1a1f25;padding:20px 28px"><div style="color:#e8a020;font-size:20px;font-weight:700">Metagal Argentina</div><div style="color:#6e7e92;font-size:11px;text-transform:uppercase;letter-spacing:.1em;margin-top:3px">Requisiciones de Compra</div></div>
+    <div style="padding:24px 28px">
+      <div style="font-size:18px;font-weight:700;color:#1a1f25;margin-bottom:6px">${accion}</div>
+      ${nota?`<div style="background:#fff3cd;border:1px solid #ffc107;border-radius:4px;padding:10px 14px;font-size:13px;margin-bottom:16px;color:#856404"><strong>Nota:</strong> ${nota}</div>`:''}
+      <div style="background:#f9f9f9;border-radius:4px;padding:16px;margin-bottom:20px">
+        <table style="width:100%;border-collapse:collapse">
+          <tr><td style="padding:5px 0;color:#888;font-size:12px;width:140px">N° Requisición</td><td style="padding:5px 0;font-weight:700;font-family:monospace">${item.Title}</td></tr>
+          <tr><td style="padding:5px 0;color:#888;font-size:12px">Estado</td><td style="padding:5px 0"><span style="background:${colorEstado}22;color:${colorEstado};padding:2px 8px;border-radius:12px;font-size:12px;font-weight:600">${item.Status}</span></td></tr>
+          <tr><td style="padding:5px 0;color:#888;font-size:12px">Departamento</td><td style="padding:5px 0;font-size:13px">${item.Dept}</td></tr>
+          <tr><td style="padding:5px 0;color:#888;font-size:12px">Solicitante</td><td style="padding:5px 0;font-size:13px">${item.RequesterName} &lt;${item.RequesterMail}&gt;</td></tr>
+          <tr><td style="padding:5px 0;color:#888;font-size:12px">Urgencia</td><td style="padding:5px 0;font-size:13px">${item.Urgency}</td></tr>
+          ${item.GLAccount?`<tr><td style="padding:5px 0;color:#888;font-size:12px">Cuenta GL</td><td style="padding:5px 0;font-size:13px">${item.GLAccount}</td></tr>`:''}
+          ${item.CostCenter?`<tr><td style="padding:5px 0;color:#888;font-size:12px">Centro Costo</td><td style="padding:5px 0;font-size:13px">${item.CostCenter}</td></tr>`:''}
+          ${item.Vendor?`<tr><td style="padding:5px 0;color:#888;font-size:12px">Proveedor</td><td style="padding:5px 0;font-size:13px">${item.Vendor}</td></tr>`:''}
+          ${item.NeedBy?`<tr><td style="padding:5px 0;color:#888;font-size:12px">Fecha necesaria</td><td style="padding:5px 0;font-size:13px">${fmt(item.NeedBy)}</td></tr>`:''}
+          ${item.OCNumber?`<tr><td style="padding:5px 0;color:#888;font-size:12px">N° OC</td><td style="padding:5px 0;font-weight:700;font-family:monospace;color:#e8a020">${item.OCNumber}</td></tr>`:''}
+          ${item.Buyer?`<tr><td style="padding:5px 0;color:#888;font-size:12px">Comprador</td><td style="padding:5px 0;font-size:13px">${item.Buyer}</td></tr>`:''}
+        </table>
+      </div>
+      <div style="font-size:13px;font-weight:700;color:#444;margin-bottom:8px">Justificación</div>
+      <div style="font-size:13px;color:#555;margin-bottom:20px;line-height:1.6">${item.Justification}</div>
+      <div style="font-size:13px;font-weight:700;color:#444;margin-bottom:8px">Ítems (${lines.length})</div>
+      <table style="width:100%;border-collapse:collapse;margin-bottom:20px;border:1px solid #eee">
+        <thead><tr style="background:#f5f5f5">
+          <th style="padding:8px 12px;text-align:left;font-size:12px;color:#666">Descripción</th>
+          <th style="padding:8px 12px;text-align:center;font-size:12px;color:#666">Cant./Unidad</th>
+          <th style="padding:8px 12px;text-align:right;font-size:12px;color:#666">Precio est.</th>
+          <th style="padding:8px 12px;text-align:left;font-size:12px;color:#666">Obs.</th>
+        </tr></thead>
+        <tbody>${filas}</tbody>
+      </table>
+      ${attachments.length?`<div style="font-size:13px;font-weight:700;color:#444;margin-bottom:8px">Adjuntos (${attachments.length})</div><div style="margin-bottom:20px">${adjHtml}</div>`:''}
+      <div style="text-align:center;margin-top:16px"><a href="${APP_URL}" style="display:inline-block;background:#e8a020;color:#000;font-weight:700;padding:12px 28px;border-radius:4px;text-decoration:none;font-size:13px">Ver en el sistema →</a></div>
+    </div>
+    <div style="background:#f5f5f5;padding:12px 28px;font-size:11px;color:#aaa;text-align:center">Metagal Argentina · Sistema de Requisiciones · Desarrollado por Santiago Valenzuela</div>
+  </div></body></html>`;
+}
+
+async function notificar(item, accion, nota, destinatarios) {
+  const subj = `[Req. ${item.Title}] ${accion}`;
+  await sendMail(destinatarios, subj, buildMailHTML(item, accion, nota));
+}
+
+function imprimirRequisicion(item) {
+  const html = buildMailHTML(item, `Requisición ${item.Title}`, '');
+  const win = window.open('', '_blank', 'width=820,height=900');
+  if (!win) { toast('Habilitá las ventanas emergentes para imprimir','error'); return; }
+  win.document.write(`<!DOCTYPE html><html><head><title>${item.Title}</title>
+    <style>@media print{body{margin:0}button{display:none}}</style></head><body>
+    <div style="text-align:center;padding:12px;background:#f0f0f0">
+      <button onclick="window.print()" style="background:#1a1f25;color:#e8a020;border:none;padding:10px 24px;border-radius:4px;cursor:pointer;font-size:14px;font-weight:700">🖨 Imprimir / Guardar como PDF</button>
+    </div>${html}</body></html>`);
+  win.document.close();
 }
 
 async function generateNumber(dept) {
@@ -914,8 +1004,10 @@ function renderList(approvalsMode=false) {
       const bc = getBadgeClass(i.Status);
       const ub = getUrgencyBadge(i.Urgency);
       const lines = parseLines(i.LinesJSON);
-      return `<tr style="cursor:pointer" data-id="${i._id}" class="req-row">
-        <td><span class="num">${escH(i.Title)}</span></td>
+      const canDel = userRole==='admin' || (i.Status===S.DRAFT && i.RequesterMail===currentUser.username);
+      const canEdit = i.Status===S.DRAFT && (userRole==='admin'||i.RequesterMail===currentUser.username);
+      return `<tr data-id="${i._id}" class="req-row">
+        <td style="cursor:pointer"><span class="num">${escH(i.Title)}</span></td>
         <td>${escH(i.Dept)}</td>
         <td>${escH(i.RequesterName)}</td>
         <td><span class="badge ${ub}">${escH(i.Urgency)}</span></td>
@@ -924,13 +1016,17 @@ function renderList(approvalsMode=false) {
         <td>${fmt(i.NeedBy)}</td>
         <td>${fmt(i.CreatedAt)}</td>
         <td class="text-muted" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escH(i.Justification).substring(0,60)}</td>
+        <td style="white-space:nowrap">
+          ${canEdit?`<button class="btn btn-secondary btn-xs btn-edit-row" data-id="${i._id}" title="Editar">✏</button>`:''}
+          ${canDel?`<button class="btn btn-danger btn-xs btn-del-row" data-id="${i._id}" title="Eliminar">🗑</button>`:''}
+        </td>
       </tr>`;
     }).join('');
     wrap.innerHTML = `
       <div style="overflow-x:auto">
       <table>
         <thead><tr>
-          <th>N° Req.</th><th>Departamento</th><th>Solicitante</th><th>Urgencia</th><th>Estado</th><th>Ítems</th><th>Fecha necesaria</th><th>Creada</th><th>Justificación</th>
+          <th>N° Req.</th><th>Departamento</th><th>Solicitante</th><th>Urgencia</th><th>Estado</th><th>Ítems</th><th>Fecha necesaria</th><th>Creada</th><th>Justificación</th><th></th>
         </tr></thead>
         <tbody id="list-tbody">${rows}</tbody>
       </table>
@@ -941,9 +1037,34 @@ function renderList(approvalsMode=false) {
         const item = allItems.find(i=>i._id===r.dataset.id);
         if (item) { renderDetail(item); showView('detail'); }
       });
-      r.addEventListener('click',()=>{
+      r.addEventListener('click',e=>{
+        if (e.target.closest('button')) return;
         wrap.querySelectorAll('.req-row').forEach(x=>x.style.background='');
         r.style.background='var(--bg3)';
+      });
+    });
+    wrap.querySelectorAll('.btn-edit-row').forEach(b=>{
+      b.addEventListener('click',e=>{
+        e.stopPropagation();
+        const item = allItems.find(i=>i._id===b.dataset.id);
+        if (item) { renderForm(item); showView('form'); }
+      });
+    });
+    wrap.querySelectorAll('.btn-del-row').forEach(b=>{
+      b.addEventListener('click',async e=>{
+        e.stopPropagation();
+        const item = allItems.find(i=>i._id===b.dataset.id);
+        if (!item) return;
+        if (!confirm(`¿Eliminar la requisición ${item.Title}? Esta acción no se puede deshacer.`)) return;
+        b.disabled=true; b.textContent='…';
+        try {
+          await deleteItem(item._id);
+          toast(`Requisición ${item.Title} eliminada`,'info');
+          await doLoad();
+        } catch(err) {
+          toast('Error al eliminar: '+err.message,'error');
+          b.disabled=false; b.textContent='🗑';
+        }
       });
     });
   }
@@ -1234,10 +1355,18 @@ function renderForm(item) {
       if (send && !item?.SubmittedAt) fields.SubmittedAt = now;
       if (!isEdit) {
         fields.CreatedAt = now;
-        await createItem(fields);
+        const created = await createItem(fields);
+        if (send) {
+          const fullItem = mapItem({...fields, id: created.id||Date.now().toString()});
+          await notificar(fullItem,'📋 Nueva requisición enviada para aprobación','',[ROLES_APPROVER[0], ROLES_ADMIN[0]]);
+        }
         toast(`Requisición ${reqNum} ${send?'enviada':'guardada'} correctamente.`,'success');
       } else {
         await updateItem(item._id, fields);
+        if (send && item.Status===S.DRAFT) {
+          const fullItem = mapItem({...item, ...fields});
+          await notificar(fullItem,'📋 Requisición enviada para aprobación','',[ROLES_APPROVER[0], ROLES_ADMIN[0]]);
+        }
         toast(`Requisición ${reqNum} actualizada.`,'success');
       }
       renderList(false);
@@ -1303,7 +1432,7 @@ function renderDetail(item) {
     </div>`).join('');
 
   // Action buttons
-  let actionBtns = '';
+  let actionBtns = `<button class="btn btn-secondary btn-sm" id="btn-print-req" title="Imprimir / Guardar PDF">🖨 PDF</button>`;
   if (canEdit) actionBtns += `<button class="btn btn-secondary" id="btn-edit-req">✏ Editar</button>`;
   if (canApproveN1) actionBtns += `<button class="btn btn-success" id="btn-appn1">✔ Aprobar N1</button><button class="btn btn-danger" id="btn-rejn1">✖ Rechazar N1</button>`;
   if (canApproveN2) actionBtns += `<button class="btn btn-success" id="btn-appn2">✔ Aprobar N2</button><button class="btn btn-danger" id="btn-rejn2">✖ Rechazar N2</button>`;
@@ -1396,6 +1525,7 @@ function renderDetail(item) {
   `;
 
   document.getElementById('btn-back-detail').addEventListener('click',()=>renderList(false));
+  document.getElementById('btn-print-req').addEventListener('click',()=>imprimirRequisicion(item));
   if (canEdit) document.getElementById('btn-edit-req')?.addEventListener('click',()=>renderForm(item));
 
   // Approval modals
@@ -1410,15 +1540,19 @@ function renderDetail(item) {
   if (canApproveN1) {
     document.getElementById('btn-appn1').addEventListener('click',()=>{
       approvalModal('Aprobar — Nivel 1', async(note)=>{
+        const updated = {...item, Status:S.APP1, Lvl1At:isoNow(), Lvl1By:currentUser.username, Lvl1Note:note};
         await doAction(item, {Status:S.APP1, Lvl1At:isoNow(), Lvl1By:currentUser.username, Lvl1Note:note});
-        toast('Aprobado Nivel 1','success');
+        await notificar(updated,'Aprobada Nivel 1 — Pendiente aprobación final',note,[ROLES_ADMIN[0], item.RequesterMail]);
+        toast('Aprobado Nivel 1 — notificación enviada','success');
         renderList(false);
       });
     });
     document.getElementById('btn-rejn1').addEventListener('click',()=>{
       approvalModal('Rechazar — Nivel 1', async(note)=>{
+        const updated = {...item, Status:S.REJ1, Lvl1At:isoNow(), Lvl1By:currentUser.username, Lvl1Note:note};
         await doAction(item, {Status:S.REJ1, Lvl1At:isoNow(), Lvl1By:currentUser.username, Lvl1Note:note});
-        toast('Rechazado Nivel 1','error');
+        await notificar(updated,'Rechazada Nivel 1',note,[item.RequesterMail]);
+        toast('Rechazado Nivel 1 — notificación enviada','error');
         renderList(false);
       });
     });
@@ -1426,15 +1560,19 @@ function renderDetail(item) {
   if (canApproveN2) {
     document.getElementById('btn-appn2').addEventListener('click',()=>{
       approvalModal('Aprobar — Nivel 2', async(note)=>{
+        const updated = {...item, Status:S.APP2, Lvl2At:isoNow(), Lvl2By:currentUser.username, Lvl2Note:note};
         await doAction(item, {Status:S.APP2, Lvl2At:isoNow(), Lvl2By:currentUser.username, Lvl2Note:note});
-        toast('Aprobado Nivel 2','success');
+        await notificar(updated,'✅ Aprobada Nivel 2 — Aguardando OC',note,[item.RequesterMail, ROLES_APPROVER[0]]);
+        toast('Aprobado Nivel 2 — notificación enviada','success');
         renderList(false);
       });
     });
     document.getElementById('btn-rejn2').addEventListener('click',()=>{
       approvalModal('Rechazar — Nivel 2', async(note)=>{
+        const updated = {...item, Status:S.REJ2, Lvl2At:isoNow(), Lvl2By:currentUser.username, Lvl2Note:note};
         await doAction(item, {Status:S.REJ2, Lvl2At:isoNow(), Lvl2By:currentUser.username, Lvl2Note:note});
-        toast('Rechazado Nivel 2','error');
+        await notificar(updated,'Rechazada Nivel 2',note,[item.RequesterMail]);
+        toast('Rechazado Nivel 2 — notificación enviada','error');
         renderList(false);
       });
     });
@@ -1451,8 +1589,11 @@ function renderDetail(item) {
         const date = document.getElementById('oc-date').value;
         const buyer = document.getElementById('oc-buyer').value.trim();
         if (!num||!buyer) { toast('Completá N° OC y Comprador','error'); return; }
-        await doAction(item, {Status:S.OC, OCNumber:num, OCDate:date, OCBuyer:buyer, Lvl2At:isoNow(), Lvl2By:currentUser.username});
-        toast('OC asignada correctamente','success');
+        const fields = {Status:S.OC, OCNumber:num, OCDate:date, Buyer:buyer, Lvl2At:isoNow(), Lvl2By:currentUser.username};
+        await doAction(item, fields);
+        const updated = {...item, ...fields};
+        await notificar(updated,`🛒 OC Asignada: ${num}`,`Comprador: ${buyer}. Fecha: ${fmt(date)}`,[item.RequesterMail, ROLES_APPROVER[0]]);
+        toast('OC asignada — notificación enviada','success');
         renderList(false);
       }},{label:'Cancelar',cls:'btn-secondary'}]);
     });
@@ -1534,11 +1675,14 @@ function renderDashboard() {
 
   function renderDashContent() {
     const items = allItems;
-    const total = items.length;
-    const pendN1 = items.filter(i=>i.Status===S.SENT).length;
-    const pendN2 = items.filter(i=>i.Status===S.APP1).length;
-    const withOC = items.filter(i=>i.Status===S.OC).length;
-    const mine   = items.filter(i=>i.RequesterMail===currentUser.username).length;
+    const total    = items.length;
+    const pendN1   = items.filter(i=>i.Status===S.SENT).length;
+    const pendN2   = items.filter(i=>i.Status===S.APP1).length;
+    const withOC   = items.filter(i=>i.Status===S.OC).length;
+    const app2     = items.filter(i=>i.Status===S.APP2).length;
+    const rejected = items.filter(i=>i.Status===S.REJ1||i.Status===S.REJ2).length;
+    const mine     = items.filter(i=>i.RequesterMail===currentUser.username).length;
+    const criticas = items.filter(i=>i.Urgency==='Crítica'&&(i.Status===S.SENT||i.Status===S.APP1)).length;
 
     // By status
     const byStatus = {};
@@ -1574,7 +1718,10 @@ function renderDashboard() {
         <div class="kpi"><div class="kpi-label">Total Requisiciones</div><div class="kpi-value">${total}</div></div>
         <div class="kpi"><div class="kpi-label">Pendientes N1</div><div class="kpi-value text-accent">${pendN1}</div></div>
         <div class="kpi"><div class="kpi-label">Pendientes N2</div><div class="kpi-value text-yellow">${pendN2}</div></div>
-        <div class="kpi"><div class="kpi-label">Con OC Asignada</div><div class="kpi-value text-green">${withOC}</div></div>
+        <div class="kpi"><div class="kpi-label">Aprobadas s/OC</div><div class="kpi-value text-green">${app2}</div></div>
+        <div class="kpi"><div class="kpi-label">Con OC Asignada</div><div class="kpi-value text-accent">${withOC}</div></div>
+        <div class="kpi"><div class="kpi-label">Rechazadas</div><div class="kpi-value text-red">${rejected}</div></div>
+        <div class="kpi"><div class="kpi-label">Críticas Pendientes</div><div class="kpi-value text-red">${criticas}</div><div class="kpi-sub">requieren atención</div></div>
         <div class="kpi"><div class="kpi-label">Mis Requisiciones</div><div class="kpi-value">${mine}</div></div>
       </div>
       <!-- Charts -->
