@@ -402,6 +402,7 @@ tr:hover td{background:var(--bg2)}
     <div id="view-detail" class="hidden"></div>
     <div id="view-dashboard" class="hidden"></div>
     <div id="view-gerente" class="hidden"></div>
+    <div id="view-finanzas" class="hidden"></div>
     <div id="view-init" class="hidden"></div>
   </main>
 
@@ -433,6 +434,18 @@ const CFG = {
 const ROLES_ADMIN    = ['svalenzuela@metagal.com.ar'];
 const ROLES_APPROVER = ['nconte@metagal.com.ar'];
 const ROLES_GERENTE  = ['rlopez@metagal.com.ar'];
+const ROLES_FINANZAS = ['cbetti@metagal.com.ar','dgrageda@metagal.com.ar','mbianchi@metagal.com.ar'];
+// Estos roles no pueden crear requisiciones
+const ROLES_NO_CREATE = ['rlopez@metagal.com.ar','cbetti@metagal.com.ar'];
+
+// Destinatarios sugeridos para aprobación de Finanzas
+const FINANZAS_SUGERIDOS = [
+  {mail:'cbetti@metagal.com.ar',    nombre:'Cristina Betti — Gerente Finanzas y Administración'},
+  {mail:'dgrageda@metagal.com.ar',  nombre:'Diego Grágeda — Jefe de Finanzas'},
+  {mail:'mbianchi@metagal.com.ar',  nombre:'María Bianchi — Jefa de Contabilidad'},
+  {mail:'nconte@metagal.com.ar',    nombre:'Nicolás Conte — Aprobador N1'},
+  {mail:'svalenzuela@metagal.com.ar',nombre:'Santiago Valenzuela — Admin'},
+];
 
 const DEPARTMENTS = [
   {name:'Mantenimiento', code:'MANT'},
@@ -459,22 +472,28 @@ const S = {
   REJ1:     'Rechazada Nivel 1',
   APP1:     'Aprobada Nivel 1 (Pendiente Nivel 2)',
   REJ2:     'Rechazada Nivel 2',
-  APP2:     'Aprobada Nivel 2 (Pendiente Gerencia)',
+  APP2:     'Aprobada N2 (Pendiente Gerencia)',
+  APP2NOGER:'Aprobada N2 (Pendiente OC)',
   REJGER:   'Rechazada por Gerencia',
-  APPGER:   'Aprobada por Gerencia',
+  APPGER:   'Aprobada Gerencia (Pendiente Finanzas)',
+  REJFIN:   'Rechazada por Finanzas',
+  APPFIN:   'Aprobada por Finanzas',
   OC:       'OC Asignada',
 };
 
 const STATUS_BADGE = {
-  [S.DRAFT]:  'badge-draft',
-  [S.SENT]:   'badge-sent',
-  [S.REJ1]:   'badge-rej1',
-  [S.APP1]:   'badge-app1',
-  [S.REJ2]:   'badge-rej2',
-  [S.APP2]:   'badge-app1',
-  [S.REJGER]: 'badge-rej2',
-  [S.APPGER]: 'badge-app2',
-  [S.OC]:     'badge-oc',
+  [S.DRAFT]:    'badge-draft',
+  [S.SENT]:     'badge-sent',
+  [S.REJ1]:     'badge-rej1',
+  [S.APP1]:     'badge-app1',
+  [S.REJ2]:     'badge-rej2',
+  [S.APP2]:     'badge-app1',
+  [S.APP2NOGER]:'badge-app1',
+  [S.REJGER]:   'badge-rej2',
+  [S.APPGER]:   'badge-app1',
+  [S.REJFIN]:   'badge-rej2',
+  [S.APPFIN]:   'badge-app2',
+  [S.OC]:       'badge-oc',
 };
 
 // ================================================================
@@ -756,26 +775,75 @@ async function generateNumber(dept) {
 }
 
 // ================================================================
-// TIPO DE CAMBIO
+// TIPO DE CAMBIO — BNA Billete + manual override
 // ================================================================
+let tcManual = { usd_compra:null, usd_venta:null, eur_compra:null, eur_venta:null };
+
 async function fetchTC() {
+  const badge = document.getElementById('tc-badge');
+  badge.textContent = 'TC: actualizando…';
   try {
-    // Series: 148.3_IIIQ_2016_24=A (dolar mayorista) & 148.3_IIIQ_2016_22=A (minorista)
-    // Using datos.gob.ar API for BCB data
-    const url = 'https://apis.datos.gob.ar/series/api/series/?ids=168.1_T_CAMBIOR_D_0_0_26:value,168.1_T_CAMBIOR_D_0_0_27:value&last=1&format=json';
-    const res = await fetch(url);
-    if (!res.ok) throw new Error();
-    const json = await res.json();
-    const data = json?.data?.[0];
-    if (data) {
-      tcData.minorista = data[1] ? '$'+Number(data[1]).toLocaleString('es-AR',{minimumFractionDigits:2}) : '—';
-      tcData.mayorista  = data[2] ? '$'+Number(data[2]).toLocaleString('es-AR',{minimumFractionDigits:2}) : '—';
+    // BNA API informal (scraping via proxy público)
+    const res = await fetch('https://apis.datos.gob.ar/series/api/series/?ids=168.1_T_CAMBIOR_D_0_0_26:value,168.1_T_CAMBIOR_D_0_0_27:value&last=1&format=json');
+    if (res.ok) {
+      const json = await res.json();
+      const d = json?.data?.[0];
+      if (d) {
+        if (!tcManual.usd_compra) tcManual.usd_compra = d[1] ? Number(d[1]).toFixed(2) : null;
+        if (!tcManual.usd_venta)  tcManual.usd_venta  = d[2] ? Number(d[2]).toFixed(2) : null;
+      }
     }
-  } catch(e) {
-    // silent — show — already set
-  }
-  document.getElementById('tc-badge').textContent = `TC: M${tcData.mayorista} / B${tcData.minorista}`;
-  document.getElementById('tc-badge').title = `Tipo de cambio BNA — Mayorista: ${tcData.mayorista} | Minorista: ${tcData.minorista} (clic para actualizar)`;
+  } catch(e) {}
+  updateTCBadge();
+}
+
+function updateTCBadge() {
+  const badge = document.getElementById('tc-badge');
+  const usdC = tcManual.usd_compra ? `$${Number(tcManual.usd_compra).toLocaleString('es-AR',{minimumFractionDigits:2})}` : '—';
+  const usdV = tcManual.usd_venta  ? `$${Number(tcManual.usd_venta).toLocaleString('es-AR',{minimumFractionDigits:2})}` : '—';
+  const eurC = tcManual.eur_compra ? `€${Number(tcManual.eur_compra).toLocaleString('es-AR',{minimumFractionDigits:2})}` : '—';
+  const eurV = tcManual.eur_venta  ? `€${Number(tcManual.eur_venta).toLocaleString('es-AR',{minimumFractionDigits:2})}` : '—';
+  badge.textContent = `USD C:${usdC} V:${usdV}${tcManual.eur_venta?` | EUR V:${eurV}`:''}`;
+  badge.title = `TC BNA Billete (clic para editar)\nUSD Compra: ${usdC} | USD Venta: ${usdV}\nEUR Compra: ${eurC} | EUR Venta: ${eurV}`;
+}
+
+function showTCEditor() {
+  showModal(`
+    <p style="font-size:12px;color:var(--text2);margin-bottom:16px">Valores BNA Billete. Podés editarlos manualmente si necesitás usar Divisa u otro tipo.</p>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>USD Compra (Billete)</label>
+        <input type="number" id="tc-usd-c" value="${tcManual.usd_compra||''}" placeholder="Ej: 1050.00" step="0.01"/>
+      </div>
+      <div class="form-group">
+        <label>USD Venta (Billete)</label>
+        <input type="number" id="tc-usd-v" value="${tcManual.usd_venta||''}" placeholder="Ej: 1090.00" step="0.01"/>
+      </div>
+      <div class="form-group">
+        <label>EUR Compra</label>
+        <input type="number" id="tc-eur-c" value="${tcManual.eur_compra||''}" placeholder="Ej: 1150.00" step="0.01"/>
+      </div>
+      <div class="form-group">
+        <label>EUR Venta</label>
+        <input type="number" id="tc-eur-v" value="${tcManual.eur_venta||''}" placeholder="Ej: 1200.00" step="0.01"/>
+      </div>
+    </div>
+    <div style="margin-top:12px;font-size:11px;color:var(--text2)">💡 Tip: BNA publica Billete y Divisa. Billete = efectivo. Divisa = transferencias bancarias (generalmente mayor).</div>
+  `, 'Tipo de Cambio BNA', [
+    {label:'Guardar', cls:'btn-primary', cb:()=>{
+      tcManual.usd_compra = document.getElementById('tc-usd-c').value||null;
+      tcManual.usd_venta  = document.getElementById('tc-usd-v').value||null;
+      tcManual.eur_compra = document.getElementById('tc-eur-c').value||null;
+      tcManual.eur_venta  = document.getElementById('tc-eur-v').value||null;
+      updateTCBadge();
+      toast('Tipo de cambio actualizado','success');
+    }},
+    {label:'Actualizar desde BNA', cls:'btn-secondary', cb:()=>{
+      tcManual = {usd_compra:null,usd_venta:null,eur_compra:null,eur_venta:null};
+      fetchTC();
+    }},
+    {label:'Cancelar', cls:'btn-secondary'},
+  ]);
 }
 
 // ================================================================
@@ -838,6 +906,12 @@ function mapItem(raw) {
     GerAt:          raw.GerAt||'',
     GerBy:          raw.GerBy||'',
     GerNote:        raw.GerNote||'',
+    GLCorregido:    raw.GLCorregido||false,
+    FinDestinatarios:raw.FinDestinatarios||'',
+    FinAt:          raw.FinAt||'',
+    FinBy:          raw.FinBy||'',
+    FinNote:        raw.FinNote||'',
+    RequiereGerencia: raw.RequiereGerencia||false,
     SubmittedAt:  raw.SubmittedAt||'',
     Lvl1At:       raw.Lvl1At||'',
     Lvl1By:       raw.Lvl1By||'',
@@ -864,6 +938,7 @@ function parseComments(json) {
 }
 
 function canEditDraft(item) {
+  if (userRole === 'admin') return true; // admin edita cualquier cosa
   return item.Status === S.DRAFT && item.RequesterMail === currentUser?.username;
 }
 
@@ -882,20 +957,23 @@ function exportCSV(rows, filename) {
 async function loadItems() {
   const rawItems = await readDB();
   const mapped = rawItems.map(mapItem);
-  if (userRole === 'admin') {
+  if (userRole==='admin') {
     allItems = mapped;
-  } else if (userRole === 'approver') {
-    allItems = mapped.filter(i =>
-      i.Status === S.SENT || i.Status === S.APPGER ||
-      i.RequesterMail === currentUser.username
+  } else if (userRole==='approver') {
+    allItems = mapped.filter(i=>
+      i.Status===S.SENT||i.Status===S.APPFIN||i.Status===S.APP2NOGER||
+      i.RequesterMail===currentUser.username
     );
-  } else if (userRole === 'gerente') {
-    allItems = mapped.filter(i =>
-      i.Status === S.APP2 || i.Status === S.APPGER ||
-      i.Status === S.REJGER || i.Status === S.OC
+  } else if (userRole==='gerente') {
+    allItems = mapped.filter(i=>
+      [S.APP2,S.APPGER,S.REJGER,S.APPFIN,S.OC].includes(i.Status)
+    );
+  } else if (userRole==='finanzas') {
+    allItems = mapped.filter(i=>
+      [S.APPGER,S.APPFIN,S.REJFIN,S.OC].includes(i.Status)
     );
   } else {
-    allItems = mapped.filter(i => i.RequesterMail === currentUser.username);
+    allItems = mapped.filter(i=>i.RequesterMail===currentUser.username);
   }
   return allItems;
 }
@@ -903,7 +981,7 @@ async function loadItems() {
 // ================================================================
 // NAVIGATION
 // ================================================================
-const VIEWS = ['list','form','detail','dashboard','gerente','init'];
+const VIEWS = ['list','form','detail','dashboard','gerente','finanzas','init'];
 function showView(name) {
   VIEWS.forEach(v=>document.getElementById('view-'+v).classList.add('hidden'));
   document.getElementById('view-'+name).classList.remove('hidden');
@@ -911,18 +989,20 @@ function showView(name) {
 
 function buildNav() {
   const nav = document.getElementById('nav');
+  const email = (currentUser?.username||'').toLowerCase();
+  const canCreate = !ROLES_NO_CREATE.map(r=>r.toLowerCase()).includes(email);
   const btns = [];
   btns.push({view:'list', label:'📋 Mis Requisiciones'});
-  if (userRole !== 'gerente') btns.push({view:'form', label:'➕ Nueva'});
+  if (canCreate) btns.push({view:'form', label:'➕ Nueva'});
   if (userRole==='approver') btns.push({view:'list', label:'📥 Aprobaciones N1', extra:'approvals'});
+  if (userRole==='finanzas') btns.push({view:'finanzas', label:'💰 Vista Finanzas'});
+  if (userRole==='gerente')  btns.push({view:'gerente',  label:'📊 Reporte Gerencia'});
   if (userRole==='admin') {
-    btns.push({view:'list', label:'📥 Aprobaciones N2', extra:'approvals'});
-    btns.push({view:'gerente', label:'📊 Vista Gerencia'});
-    btns.push({view:'dashboard', label:'📈 Análisis'});
-    btns.push({view:'init', label:'⚙ Inicialización'});
-  }
-  if (userRole==='gerente') {
-    btns.push({view:'gerente', label:'📊 Reporte Gerencia'});
+    btns.push({view:'list',     label:'📥 Aprobaciones N2',  extra:'approvals'});
+    btns.push({view:'gerente',  label:'🏢 Vista Gerencia'});
+    btns.push({view:'finanzas', label:'💰 Vista Finanzas'});
+    btns.push({view:'dashboard',label:'📈 Análisis'});
+    btns.push({view:'init',     label:'⚙ Inicialización'});
   }
   nav.innerHTML = btns.map(b=>`
     <button class="nav-btn" data-view="${b.view}" data-extra="${b.extra||''}">${b.label}</button>
@@ -938,6 +1018,8 @@ function buildNav() {
         renderDashboard(); showView('dashboard');
       } else if (btn.dataset.view==='init') {
         renderInit(); showView('init');
+      } else if (btn.dataset.view==='finanzas') {
+        renderFinanzasView(); showView('finanzas');
       } else if (btn.dataset.view==='gerente') {
         renderGerenteView(); showView('gerente');
       } else {
@@ -1034,8 +1116,8 @@ function renderList(approvalsMode=false) {
       const bc = getBadgeClass(i.Status);
       const ub = getUrgencyBadge(i.Urgency);
       const lines = parseLines(i.LinesJSON);
-      const canDel = userRole==='admin' || (i.Status===S.DRAFT && i.RequesterMail===currentUser.username);
-      const canEdit = i.Status===S.DRAFT && (userRole==='admin'||i.RequesterMail===currentUser.username);
+      const canDel  = userRole==='admin' || (i.Status===S.DRAFT && i.RequesterMail===currentUser.username);
+      const canEdit = userRole==='admin' || (i.Status===S.DRAFT && i.RequesterMail===currentUser.username);
       const isOverdue = i.NeedBy && new Date(i.NeedBy)<new Date() && i.Status!==S.OC && i.Status!==S.DRAFT && i.Status!==S.REJ1 && i.Status!==S.REJ2;
       return `<tr data-id="${i._id}" class="req-row" style="${isOverdue?'border-left:3px solid var(--orange)':''}">
         <td style="cursor:pointer"><span class="num">${escH(i.Title)}</span>${isOverdue?` <span style="font-size:10px;color:var(--orange)" title="Fecha necesaria vencida">⏰</span>`:''}${parseComments(i.CommentsJSON||'[]').length?` <span style="font-size:10px;color:var(--accent2)" title="Tiene comentarios">💬${parseComments(i.CommentsJSON||'[]').length}</span>`:''}</td>
@@ -1145,6 +1227,7 @@ function renderForm(item) {
     <div class="section-header">
       <div>
         <div class="section-title">${isEdit?'Editar Requisición':'Nueva Requisición'}</div>
+        ${isEdit && userRole==='admin' && item?.Status!==S.DRAFT ? `<div style="background:rgba(232,160,32,.12);border:1px solid rgba(232,160,32,.4);border-radius:4px;padding:8px 14px;margin-top:8px;font-size:12px;color:var(--accent)">⚠ Editando como Administrador — estado actual: <strong>${escH(item.Status)}</strong></div>` : ''}
         ${item?`<div class="section-sub"><span class="num">${escH(item.Title)}</span></div>`:''}
       </div>
       <div class="ml-auto d-flex">
@@ -1197,6 +1280,13 @@ function renderForm(item) {
         <div class="form-group">
           <label>Fecha necesaria (opcional)</label>
           <input type="date" id="f-needby" value="${item?.NeedBy?item.NeedBy.slice(0,10):''}"/>
+        </div>
+        <div class="form-group span2" style="display:flex;align-items:center;gap:12px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px">
+          <input type="checkbox" id="f-req-ger" style="width:auto;margin:0" ${item?.RequiereGerencia?'checked':''}/>
+          <div>
+            <label style="margin:0;text-transform:none;font-size:13px;color:var(--text0);font-weight:500">Requiere aprobación de Gerencia (Raúl López)</label>
+            <div style="font-size:11px;color:var(--text2);margin-top:2px">Marcá esta opción para requisiciones de mayor envergadura o monto</div>
+          </div>
         </div>
       </div>
     </div>
@@ -1376,6 +1466,7 @@ function renderForm(item) {
       const newFiles = await uploadNewFiles(reqNum);
       const allAttach = [...existAtt, ...newFiles];
       const now = isoNow();
+      const reqGer = document.getElementById('f-req-ger')?.checked || false;
       const fields = {
         Title:           reqNum,
         Dept:            v.dept,
@@ -1387,6 +1478,7 @@ function renderForm(item) {
         Justification:   v.just,
         Vendor:          document.getElementById('f-vendor').value.trim(),
         NeedBy:          document.getElementById('f-needby').value||null,
+        RequiereGerencia: reqGer,
         Status:          send ? S.SENT : S.DRAFT,
         LinesJSON:       JSON.stringify(v.lines),
         AttachmentsJSON: JSON.stringify(allAttach),
@@ -1435,12 +1527,13 @@ function renderDetail(item) {
   const bc = getBadgeClass(item.Status);
   const ub = getUrgencyBadge(item.Urgency);
 
-  const canEdit      = canEditDraft(item);
-  const canApproveN1 = (userRole==='approver'||userRole==='admin') && item.Status===S.SENT;
-  const canApproveN2 = userRole==='admin' && item.Status===S.APP1;
-  const canApproveGer= (userRole==='gerente'||userRole==='admin') && item.Status===S.APP2;
-  const canAssignOC  = (userRole==='admin'||userRole==='approver') && item.Status===S.APPGER;
-  const canReopen    = userRole==='admin' && (item.Status===S.REJ1||item.Status===S.REJ2||item.Status===S.REJGER);
+  const canEdit       = canEditDraft(item);
+  const canApproveN1  = (userRole==='approver'||userRole==='admin') && item.Status===S.SENT;
+  const canApproveN2  = userRole==='admin' && item.Status===S.APP1;
+  const canApproveGer = (userRole==='gerente'||userRole==='admin') && item.Status===S.APP2;
+  const canApproveFin = (userRole==='finanzas'||userRole==='admin') && item.Status===S.APPGER;
+  const canAssignOC   = (userRole==='admin'||userRole==='approver') && (item.Status===S.APPFIN||item.Status===S.APP2NOGER);
+  const canReopen     = userRole==='admin' && [S.REJ1,S.REJ2,S.REJGER,S.REJFIN].includes(item.Status);
 
   // Line items table
   const linesHtml = lines.map(l=>`
@@ -1465,6 +1558,7 @@ function renderDetail(item) {
   if (item.Lvl1At)      history.push({when:item.Lvl1At,      what:`${item.Status===S.REJ1?'Rechazada':'Aprobada'} N1 por ${item.Lvl1By}${item.Lvl1Note?' — '+item.Lvl1Note:''}`});
   if (item.Lvl2At)      history.push({when:item.Lvl2At,      what:`${item.Status===S.REJ2?'Rechazada':'Aprobada'} N2 por ${item.Lvl2By}${item.Lvl2Note?' — '+item.Lvl2Note:''}`});
   if (item.GerAt)       history.push({when:item.GerAt,       what:`${item.Status===S.REJGER?'Rechazada':'Aprobada'} por Gerencia (${item.GerBy})${item.GerNote?' — '+item.GerNote:''}`});
+  if (item.FinAt)       history.push({when:item.FinAt,       what:`${item.Status===S.REJFIN?'Rechazada':'Aprobada'} por Finanzas (${item.FinBy})${item.FinNote?' — '+item.FinNote:''}`});
   if (item.OCNumber)    history.push({when:item.OCDate,       what:`OC asignada: ${item.OCNumber} — Comprador: ${item.Buyer}`});
   history.sort((a,b)=>a.when>b.when?1:-1);
   const historyHtml = history.map(h=>`
@@ -1479,8 +1573,9 @@ function renderDetail(item) {
   if (canEdit) actionBtns += `<button class="btn btn-secondary" id="btn-edit-req">✏ Editar</button>`;
   if (canApproveN1) actionBtns += `<button class="btn btn-success" id="btn-appn1">✔ Aprobar N1</button><button class="btn btn-danger" id="btn-rejn1">✖ Rechazar N1</button>`;
   if (canApproveN2) actionBtns += `<button class="btn btn-success" id="btn-appn2">✔ Aprobar N2</button><button class="btn btn-danger" id="btn-rejn2">✖ Rechazar N2</button>`;
-  if (canAssignOC)   actionBtns += `<button class="btn btn-info" id="btn-assign-oc">📄 Asignar OC</button>`;
-  if (canApproveGer) actionBtns += `<button class="btn btn-success" id="btn-appger">✔ Aprobar Gerencia</button><button class="btn btn-danger" id="btn-rejger">✖ Rechazar Gerencia</button>`;
+  if (canAssignOC)  actionBtns += `<button class="btn btn-info" id="btn-assign-oc">📄 Asignar OC</button>`;
+  if (canApproveGer)actionBtns += `<button class="btn btn-success" id="btn-appger">✔ Aprobar Gerencia</button><button class="btn btn-danger" id="btn-rejger">✖ Rechazar Gerencia</button>`;
+  if (canApproveFin)actionBtns += `<button class="btn btn-success" id="btn-appfin">✔ Aprobar Finanzas</button><button class="btn btn-danger" id="btn-rejfin">✖ Rechazar Finanzas</button>`;
   if (canReopen)    actionBtns += `<button class="btn btn-secondary" id="btn-reopen">↩ Reabrir a Borrador</button>`;
 
   // OC section
@@ -1498,7 +1593,7 @@ function renderDetail(item) {
     <div class="section-header">
       <div>
         <div class="section-title"><span class="num">${escH(item.Title)}</span> &nbsp;<span class="badge ${bc}">${escH(item.Status)}</span></div>
-        <div class="section-sub">Departamento: ${escH(item.Dept)} &nbsp;·&nbsp; Urgencia: <span class="badge ${ub}">${escH(item.Urgency)}</span></div>
+        <div class="section-sub">Departamento: ${escH(item.Dept)} &nbsp;·&nbsp; Urgencia: <span class="badge ${ub}">${escH(item.Urgency)}</span>${item.RequiereGerencia?` &nbsp;·&nbsp; <span class="badge badge-app1">🏢 Requiere Gerencia</span>`:''}</div>
       </div>
       <div class="ml-auto d-flex">
         <button class="btn btn-secondary" id="btn-back-detail">← Volver</button>
@@ -1514,7 +1609,7 @@ function renderDetail(item) {
             <h4>Solicitante</h4>
             <div class="detail-row"><span class="detail-label">Nombre:</span><span class="detail-value">${escH(item.RequesterName)}</span></div>
             <div class="detail-row"><span class="detail-label">Mail:</span><span class="detail-value">${escH(item.RequesterMail)}</span></div>
-            <div class="detail-row"><span class="detail-label">Cuenta GL:</span><span class="detail-value">${escH(item.GLAccount)||'—'}</span></div>
+            <div class="detail-row"><span class="detail-label">Cuenta GL:</span><span class="detail-value">${escH(item.GLAccount)||'—'}${item.GLCorregido?` <span style="font-size:11px;color:var(--yellow);background:rgba(212,160,23,.15);padding:1px 6px;border-radius:10px">corregido por Gerencia</span>`:''}</span></div>
             <div class="detail-row"><span class="detail-label">Centro de Costo:</span><span class="detail-value">${escH(item.CostCenter)||'—'}</span></div>
             <div class="detail-row"><span class="detail-label">Proveedor sugerido:</span><span class="detail-value">${escH(item.Vendor)||'—'}</span></div>
             <div class="detail-row"><span class="detail-label">Fecha necesaria:</span><span class="detail-value">${fmt(item.NeedBy)}</span></div>
@@ -1660,20 +1755,36 @@ function renderDetail(item) {
   }
   if (canApproveN2) {
     document.getElementById('btn-appn2').addEventListener('click',()=>{
-      approvalModal('Aprobar — Nivel 2 (pasa a Gerencia)', async(note)=>{
-        const updated = {...item, Status:S.APP2, Lvl2At:isoNow(), Lvl2By:currentUser.username, Lvl2Note:note};
-        await doAction(item, {Status:S.APP2, Lvl2At:isoNow(), Lvl2By:currentUser.username, Lvl2Note:note});
-        await notificar(updated,'✅ Aprobada N2 — Pendiente aprobación Gerencia',note,[ROLES_GERENTE[0], item.RequesterMail]);
-        toast('Aprobado N2 — enviado a Gerencia para aprobación final','success');
-        renderList(false);
-      });
+      const needsGer = item.RequiereGerencia;
+      const title = needsGer ? 'Aprobar N2 → enviar a Gerencia' : 'Aprobar N2 → listo para OC';
+      const hint = needsGer
+        ? '<div style="background:rgba(212,160,23,.1);border:1px solid rgba(212,160,23,.3);border-radius:4px;padding:8px 12px;font-size:12px;color:var(--yellow);margin-bottom:12px">Esta requisición requiere aprobación de Gerencia (Raúl López)</div>'
+        : '<div style="background:rgba(46,168,107,.1);border:1px solid rgba(46,168,107,.3);border-radius:4px;padding:8px 12px;font-size:12px;color:var(--green);margin-bottom:12px">Esta requisición NO requiere aprobación de Gerencia — pasará directamente a disponible para OC</div>';
+      showModal(`${hint}<div class="form-group"><label>Nota (opcional)</label><textarea id="approval-note" rows="3"></textarea></div>`,
+        title, [{label:'Confirmar', cls:'btn-primary', cb:async()=>{
+          const note = document.getElementById('approval-note').value.trim();
+          if (needsGer) {
+            const fields = {Status:S.APP2, Lvl2At:isoNow(), Lvl2By:currentUser.username, Lvl2Note:note};
+            await doAction(item, fields);
+            const updated = {...item, ...fields};
+            await notificar(updated,'✅ Aprobada N2 — Pendiente aprobación Gerencia',note,[ROLES_GERENTE[0], item.RequesterMail]);
+            toast('Enviado a Gerencia para aprobación','success');
+          } else {
+            const fields = {Status:S.APP2NOGER, Lvl2At:isoNow(), Lvl2By:currentUser.username, Lvl2Note:note};
+            await doAction(item, fields);
+            const updated = {...item, ...fields};
+            await notificar(updated,'✅ Aprobada — Lista para asignación de OC',note,[ROLES_APPROVER[0], item.RequesterMail]);
+            toast('Aprobado N2 — lista para OC','success');
+          }
+          renderList(false);
+        }},{label:'Cancelar',cls:'btn-secondary'}]);
     });
     document.getElementById('btn-rejn2').addEventListener('click',()=>{
       approvalModal('Rechazar — Nivel 2', async(note)=>{
-        const updated = {...item, Status:S.REJ2, Lvl2At:isoNow(), Lvl2By:currentUser.username, Lvl2Note:note};
-        await doAction(item, {Status:S.REJ2, Lvl2At:isoNow(), Lvl2By:currentUser.username, Lvl2Note:note});
-        await notificar(updated,'Rechazada Nivel 2',note,[item.RequesterMail]);
-        toast('Rechazado Nivel 2 — notificación enviada','error');
+        const fields = {Status:S.REJ2, Lvl2At:isoNow(), Lvl2By:currentUser.username, Lvl2Note:note};
+        await doAction(item, fields);
+        await notificar({...item,...fields},'Rechazada Nivel 2',note,[item.RequesterMail]);
+        toast('Rechazado N2','error');
         renderList(false);
       });
     });
@@ -1717,26 +1828,85 @@ function renderDetail(item) {
   }
   if (canApproveGer) {
     document.getElementById('btn-appger').addEventListener('click',()=>{
-      approvalModal('Aprobar — Gerencia General', async(note)=>{
-        const fields = {Status:S.APPGER, GerAt:isoNow(), GerBy:currentUser.username, GerNote:note};
-        await doAction(item, fields);
-        const updated = {...item, ...fields};
-        await notificar(updated,'✅ Aprobada por Gerencia — Lista para OC',note,[ROLES_APPROVER[0], ROLES_ADMIN[0], item.RequesterMail]);
-        toast('Aprobado por Gerencia — Nico y Santiago notificados','success');
-        renderList(false);
-      });
+      const sugOptions = FINANZAS_SUGERIDOS.map(f=>`
+        <label style="display:flex;align-items:center;gap:10px;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;margin-bottom:6px;font-size:13px">
+          <input type="checkbox" class="fin-check" value="${f.mail}" style="width:auto;margin:0"/>
+          <span>${f.nombre}</span>
+        </label>`).join('');
+      showModal(`
+        <div style="font-size:12px;color:var(--text2);margin-bottom:16px">Al aprobar, se enviará un mail de aprobación gerencial a los destinatarios que elijas. También podés corregir la cuenta contable.</div>
+        <div class="form-group mb-3">
+          <label>Corrección Cuenta Contable (GL) — actual: <span style="font-family:var(--mono);color:var(--accent)">${escH(item.GLAccount||'—')}</span></label>
+          <input type="text" id="ger-gl" value="${escH(item.GLAccount||'')}" placeholder="Dejar igual o corregir…"/>
+        </div>
+        <div class="form-group mb-3">
+          <label>Nota / Comentario de aprobación (aparece en el mail)</label>
+          <textarea id="ger-note" rows="3" placeholder="Ej: Aprobado. Validar cotización con proveedor antes de emitir OC."></textarea>
+        </div>
+        <div class="form-group mb-3">
+          <label>Enviar notificación a Finanzas</label>
+          ${sugOptions}
+        </div>
+        <div class="form-group">
+          <label>Agregar otros destinatarios (separados por coma)</label>
+          <input type="text" id="ger-extra" placeholder="email1@metagal.com.ar, email2@metagal.com.ar"/>
+        </div>
+      `, 'Aprobar — Gerencia General', [
+        {label:'✔ Aprobar y notificar', cls:'btn-primary', cb:async()=>{
+          const note    = document.getElementById('ger-note').value.trim();
+          const newGL   = document.getElementById('ger-gl').value.trim();
+          const checked = [...document.querySelectorAll('.fin-check:checked')].map(c=>c.value);
+          const extra   = (document.getElementById('ger-extra').value||'').split(',').map(s=>s.trim()).filter(s=>s.includes('@'));
+          const todos   = [...new Set([...checked, ...extra, item.RequesterMail])];
+          if (!checked.length && !extra.length) { toast('Seleccioná al menos un destinatario de Finanzas','error'); return; }
+          const fields = {
+            Status: S.APPGER,
+            GerAt: isoNow(), GerBy: currentUser.username, GerNote: note,
+            FinDestinatarios: todos.join(','),
+            ...(newGL && newGL!==item.GLAccount ? {GLAccount: newGL, GLCorregido: true} : {}),
+          };
+          await doAction(item, fields);
+          const updated = {...item, ...fields};
+          await notificar(updated, '✅ Aprobada por Gerencia General — Pendiente Finanzas', note, todos);
+          toast(`Aprobado por Gerencia — mail enviado a ${todos.length} destinatario(s)`, 'success');
+          renderList(false);
+        }},
+        {label:'Cancelar', cls:'btn-secondary'},
+      ]);
     });
     document.getElementById('btn-rejger').addEventListener('click',()=>{
       approvalModal('Rechazar — Gerencia General', async(note)=>{
         const fields = {Status:S.REJGER, GerAt:isoNow(), GerBy:currentUser.username, GerNote:note};
         await doAction(item, fields);
-        const updated = {...item, ...fields};
-        await notificar(updated,'Rechazada por Gerencia',note,[item.RequesterMail, ROLES_ADMIN[0]]);
-        toast('Rechazado por Gerencia — notificaciones enviadas','error');
+        await notificar({...item,...fields},'Rechazada por Gerencia',note,[item.RequesterMail, ROLES_ADMIN[0]]);
+        toast('Rechazado por Gerencia','error');
         renderList(false);
       });
     });
   }
+  if (canApproveFin) {
+    document.getElementById('btn-appfin').addEventListener('click',()=>{
+      approvalModal('Confirmar aprobación de Finanzas', async(note)=>{
+        const fields = {Status:S.APPFIN, FinAt:isoNow(), FinBy:currentUser.username, FinNote:note};
+        await doAction(item, fields);
+        const destStr = item.FinDestinatarios||'';
+        const dest = [...new Set([ROLES_APPROVER[0], ROLES_ADMIN[0], item.RequesterMail, ...destStr.split(',').filter(Boolean)])];
+        await notificar({...item,...fields},'✅ Aprobada Finanzas — Lista para OC',note,dest);
+        toast('Aprobado por Finanzas — lista para OC','success');
+        renderList(false);
+      });
+    });
+    document.getElementById('btn-rejfin').addEventListener('click',()=>{
+      approvalModal('Rechazar — Finanzas', async(note)=>{
+        const fields = {Status:S.REJFIN, FinAt:isoNow(), FinBy:currentUser.username, FinNote:note};
+        await doAction(item, fields);
+        await notificar({...item,...fields},'Rechazada por Finanzas',note,[item.RequesterMail, ROLES_ADMIN[0]]);
+        toast('Rechazado por Finanzas','error');
+        renderList(false);
+      });
+    });
+  }
+  if (canReopen) {
     document.getElementById('btn-reopen').addEventListener('click',async()=>{
       if (!confirm('¿Reabrir esta requisición como Borrador?')) return;
       await doAction(item, {Status:S.DRAFT});
@@ -1778,6 +1948,360 @@ function showModal(bodyHtml, title, buttons=[]) {
       overlay.remove();
     });
   });
+}
+
+// ================================================================
+// VISTA: FINANZAS — Cristina, Diego, María + Admin
+// ================================================================
+function renderFinanzasView() {
+  showView('finanzas');
+  const container = document.getElementById('view-finanzas');
+  const hoy = new Date().toISOString().slice(0,10);
+  const primerDiaMes = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0,10);
+
+  container.innerHTML = `
+    <div class="section-header">
+      <div>
+        <div class="section-title">Vista Finanzas</div>
+        <div class="section-sub">Análisis por cuenta contable y moneda — requisiciones aprobadas por Gerencia</div>
+      </div>
+      <div class="ml-auto d-flex">
+        <button class="btn btn-secondary btn-sm" id="fin-refresh">↻ Actualizar</button>
+      </div>
+    </div>
+
+    <!-- Filtros de fecha -->
+    <div class="card" style="padding:14px 20px;margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+        <div style="font-size:13px;font-weight:600;color:var(--text1);min-width:80px">Período:</div>
+        <div style="display:flex;align-items:center;gap:8px;flex:1;flex-wrap:wrap">
+          <label style="font-size:12px;color:var(--text2);text-transform:none;font-weight:400;margin:0">Desde</label>
+          <input type="date" id="fin-desde" value="${primerDiaMes}" style="width:150px;margin:0"/>
+          <label style="font-size:12px;color:var(--text2);text-transform:none;font-weight:400;margin:0">Hasta</label>
+          <input type="date" id="fin-hasta" value="${hoy}" style="width:150px;margin:0"/>
+          <button class="btn btn-primary btn-sm" id="fin-aplicar">Aplicar filtro</button>
+          <button class="btn btn-secondary btn-sm" id="fin-todo">Ver todo</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="font-size:12px;color:var(--text2)">TC Venta:</div>
+          <div style="font-size:12px;font-family:var(--mono);color:var(--accent)">
+            USD $${tcManual.usd_venta?Number(tcManual.usd_venta).toLocaleString('es-AR',{minimumFractionDigits:2}):'—'}
+            &nbsp;|&nbsp; EUR $${tcManual.eur_venta?Number(tcManual.eur_venta).toLocaleString('es-AR',{minimumFractionDigits:2}):'—'}
+          </div>
+          <button class="btn btn-secondary btn-xs" id="fin-tc-edit" title="Editar TC">✎ TC</button>
+        </div>
+        <button class="btn btn-secondary btn-sm" id="fin-export">⬇ Exportar CSV</button>
+      </div>
+    </div>
+
+    <div id="fin-loading" class="loading-overlay"><div class="loader"></div> Cargando…</div>
+    <div id="fin-content" class="hidden"></div>
+  `;
+
+  let allData = [];
+  let filtroDesde = null;
+  let filtroHasta = null;
+
+  async function load() {
+    document.getElementById('fin-loading').classList.remove('hidden');
+    document.getElementById('fin-content').classList.add('hidden');
+    try {
+      allData = (await readDB()).map(mapItem);
+      aplicarFiltro();
+    } catch(e) { toast('Error: '+e.message,'error'); }
+    finally { document.getElementById('fin-loading').classList.add('hidden'); }
+  }
+
+  function aplicarFiltro(desde, hasta) {
+    filtroDesde = desde || null;
+    filtroHasta = hasta || null;
+    renderContent(allData, filtroDesde, filtroHasta);
+  }
+
+  // Calcula totales por moneda de los ítems de una lista de requisiciones
+  function calcTotales(items) {
+    const t = {ARS:0, USD:0, EUR:0};
+    items.forEach(item=>{
+      parseLines(item.LinesJSON).forEach(l=>{
+        const c = l.currency||'ARS';
+        if (t[c]!==undefined) t[c] += (l.qty||0)*(l.price||0);
+      });
+    });
+    return t;
+  }
+
+  // Calcula equivalente ARS usando TC cargado
+  function toARS(totales) {
+    const usdV = parseFloat(tcManual.usd_venta)||0;
+    const eurV = parseFloat(tcManual.eur_venta)||0;
+    return totales.ARS + totales.USD*usdV + totales.EUR*eurV;
+  }
+
+  function fmt2(n) { return n.toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+
+  function monedaCeldas(totales) {
+    return `
+      <td class="money" style="font-size:12px">${totales.ARS>0?'$'+fmt2(totales.ARS):'—'}</td>
+      <td class="money" style="font-size:12px;color:${totales.USD>0?'#4caf8a':'var(--text2)'}">${totales.USD>0?'U$S '+fmt2(totales.USD):'—'}</td>
+      <td class="money" style="font-size:12px;color:${totales.EUR>0?'#5b8dee':'var(--text2)'}">${totales.EUR>0?'€ '+fmt2(totales.EUR):'—'}</td>
+      <td class="money" style="font-size:12px;color:var(--accent);font-weight:600">${(tcManual.usd_venta||tcManual.eur_venta)?'$'+fmt2(toARS(totales)):'—'}</td>`;
+  }
+
+  function renderContent(all, desde, hasta) {
+    // Filtrar por fecha de creación
+    let filtrados = all.filter(i=>[S.APPGER,S.APPFIN,S.REJFIN,S.OC].includes(i.Status));
+    if (desde) filtrados = filtrados.filter(i=>(i.CreatedAt||i.SubmittedAt||'').slice(0,10)>=desde);
+    if (hasta) filtrados = filtrados.filter(i=>(i.CreatedAt||i.SubmittedAt||'').slice(0,10)<=hasta);
+
+    const pending  = filtrados.filter(i=>i.Status===S.APPGER);
+    const approved = filtrados.filter(i=>[S.APPFIN,S.OC].includes(i.Status));
+    const rejected = filtrados.filter(i=>i.Status===S.REJFIN);
+
+    const totPend = calcTotales(pending);
+    const totAppr = calcTotales(approved);
+
+    // Por cuenta contable
+    const byGL = {};
+    approved.forEach(item=>{
+      const gl = item.GLAccount||'Sin cuenta GL';
+      if (!byGL[gl]) byGL[gl] = {items:[]};
+      byGL[gl].items.push(item);
+    });
+
+    const glRows = Object.entries(byGL)
+      .sort((a,b)=>toARS(calcTotales(b[1].items))-toARS(calcTotales(a[1].items)))
+      .map(([gl,data])=>{
+        const t = calcTotales(data.items);
+        const depts = [...new Set(data.items.map(i=>i.Dept))].join(', ');
+        return `<tr>
+          <td style="font-family:var(--mono);font-weight:600;color:var(--accent);font-size:13px">${escH(gl)}</td>
+          <td style="text-align:center;font-size:13px">${data.items.length}</td>
+          ${monedaCeldas(t)}
+          <td style="font-size:11px;color:var(--text2)">${escH(depts)}</td>
+        </tr>`;
+      }).join('');
+
+    // Tabla de requisiciones con columnas por moneda
+    function reqTable(items, showApproval=false) {
+      if (!items.length) return `<div class="empty-state" style="padding:20px"><div class="empty-state-icon">📭</div>Sin requisiciones en este período</div>`;
+      return `<div style="overflow-x:auto"><table>
+        <thead><tr>
+          <th>N° Req.</th><th>Dpto</th><th>Solicitante</th><th>Cuenta GL</th><th>Urg.</th>
+          <th style="text-align:right">ARS</th>
+          <th style="text-align:right">USD</th>
+          <th style="text-align:right">EUR</th>
+          <th style="text-align:right;color:var(--accent)">Equiv. ARS</th>
+          ${showApproval?'<th>Aprobó Finanzas</th>':'<th>Nota Gerencia</th>'}
+          <th></th>
+        </tr></thead>
+        <tbody>${items.map(i=>{
+          const t = calcTotales([i]);
+          const arsEquiv = toARS(t);
+          return `<tr>
+            <td><span class="num" style="font-size:12px">${escH(i.Title)}</span>
+              ${i.GLCorregido?`<br/><span style="font-size:10px;background:rgba(212,160,23,.2);color:var(--yellow);padding:1px 5px;border-radius:8px">GL corregido</span>`:''}
+              ${i.RequiereGerencia?`<br/><span style="font-size:10px;background:rgba(46,168,107,.2);color:var(--green);padding:1px 5px;border-radius:8px">🏢 Ger.</span>`:''}
+            </td>
+            <td style="font-size:12px">${escH(i.Dept)}</td>
+            <td style="font-size:12px">${escH(i.RequesterName)}</td>
+            <td style="font-family:var(--mono);font-size:12px;color:var(--accent)">${escH(i.GLAccount||'—')}</td>
+            <td><span class="badge ${getUrgencyBadge(i.Urgency)}" style="font-size:10px">${escH(i.Urgency)}</span></td>
+            <td class="money" style="font-size:12px">${t.ARS>0?'$'+fmt2(t.ARS):'—'}</td>
+            <td class="money" style="font-size:12px;color:${t.USD>0?'#4caf8a':'var(--text2)'}">${t.USD>0?'U$S '+fmt2(t.USD):'—'}</td>
+            <td class="money" style="font-size:12px;color:${t.EUR>0?'#5b8dee':'var(--text2)'}">${t.EUR>0?'€ '+fmt2(t.EUR):'—'}</td>
+            <td class="money" style="font-size:12px;font-weight:600;color:var(--accent)">${(tcManual.usd_venta||tcManual.eur_venta)?'$'+fmt2(arsEquiv):'—'}</td>
+            <td style="font-size:11px;color:var(--text2)">
+              ${showApproval
+                ? (i.FinBy?i.FinBy.split('@')[0]+'<br/>'+fmtDT(i.FinAt):'—')
+                : escH((i.GerNote||'—').substring(0,60))}
+            </td>
+            <td><button class="btn btn-info btn-xs fin-detail-btn" data-id="${i._id}">Ver →</button></td>
+          </tr>`;
+        }).join('')}
+        <!-- Fila de totales -->
+        <tr style="background:var(--bg3);font-weight:700;border-top:2px solid var(--border)">
+          <td colspan="5" style="font-size:12px;color:var(--text2)">TOTAL (${items.length} requisiciones)</td>
+          <td class="money" style="font-size:13px">${calcTotales(items).ARS>0?'$'+fmt2(calcTotales(items).ARS):'—'}</td>
+          <td class="money" style="font-size:13px;color:#4caf8a">${calcTotales(items).USD>0?'U$S '+fmt2(calcTotales(items).USD):'—'}</td>
+          <td class="money" style="font-size:13px;color:#5b8dee">${calcTotales(items).EUR>0?'€ '+fmt2(calcTotales(items).EUR):'—'}</td>
+          <td class="money" style="font-size:13px;color:var(--accent)">${(tcManual.usd_venta||tcManual.eur_venta)?'$'+fmt2(toARS(calcTotales(items))):'—'}</td>
+          <td colspan="2"></td>
+        </tr>
+        </tbody>
+      </table></div>`;
+    }
+
+    const periodoStr = desde||hasta ? `${desde?'desde '+desde:''} ${hasta?'hasta '+hasta:''}` : 'todos los registros';
+    const usdV = tcManual.usd_venta; const eurV = tcManual.eur_venta;
+
+    const dc = document.getElementById('fin-content');
+    dc.innerHTML = `
+      <div style="font-size:12px;color:var(--text2);margin-bottom:12px">
+        Mostrando: <strong>${filtrados.length}</strong> requisiciones — ${periodoStr}
+        ${usdV||eurV ? ` &nbsp;·&nbsp; TC: ${usdV?'USD $'+fmt2(Number(usdV)):''}${eurV?' | EUR $'+fmt2(Number(eurV)):''}` : ' &nbsp;·&nbsp; <span style="color:var(--yellow)">⚠ Sin TC cargado — clic en "✎ TC" para ingresar</span>'}
+      </div>
+
+      <!-- KPIs -->
+      <div class="kpi-grid" style="margin-bottom:20px">
+        <div class="kpi"><div class="kpi-label">Pendientes Finanzas</div><div class="kpi-value text-yellow">${pending.length}</div></div>
+        <div class="kpi"><div class="kpi-label">Total ARS (pendientes)</div>
+          <div style="margin-top:4px">
+            ${totPend.ARS>0?`<div style="font-size:13px;font-family:var(--mono)">ARS $${fmt2(totPend.ARS)}</div>`:''}
+            ${totPend.USD>0?`<div style="font-size:13px;font-family:var(--mono);color:#4caf8a">USD ${fmt2(totPend.USD)}</div>`:''}
+            ${totPend.EUR>0?`<div style="font-size:13px;font-family:var(--mono);color:#5b8dee">EUR ${fmt2(totPend.EUR)}</div>`:''}
+            ${!totPend.ARS&&!totPend.USD&&!totPend.EUR?`<div class="kpi-value">—</div>`:''}
+          </div>
+        </div>
+        <div class="kpi"><div class="kpi-label">Aprobadas (período)</div><div class="kpi-value text-green">${approved.length}</div></div>
+        <div class="kpi"><div class="kpi-label">Comprometido aprobado</div>
+          <div style="margin-top:4px">
+            ${totAppr.ARS>0?`<div style="font-size:13px;font-family:var(--mono)">ARS $${fmt2(totAppr.ARS)}</div>`:''}
+            ${totAppr.USD>0?`<div style="font-size:13px;font-family:var(--mono);color:#4caf8a">USD ${fmt2(totAppr.USD)}</div>`:''}
+            ${totAppr.EUR>0?`<div style="font-size:13px;font-family:var(--mono);color:#5b8dee">EUR ${fmt2(totAppr.EUR)}</div>`:''}
+            ${usdV||eurV?`<div style="font-size:12px;color:var(--accent);font-weight:600;margin-top:4px">≈ ARS $${fmt2(toARS(totAppr))}</div>`:''}
+            ${!totAppr.ARS&&!totAppr.USD&&!totAppr.EUR?`<div class="kpi-value">—</div>`:''}
+          </div>
+        </div>
+      </div>
+
+      ${pending.length?`<div style="background:rgba(212,160,23,.08);border:1px solid rgba(212,160,23,.3);border-radius:4px;padding:10px 16px;margin-bottom:16px;font-size:13px;color:var(--yellow)">
+        ⏳ <strong>${pending.length}</strong> requisición(es) esperando aprobación de Finanzas
+      </div>`:''}
+
+      <!-- Pendientes -->
+      <div class="card mb-4">
+        <div class="section-title" style="font-size:14px;margin-bottom:14px">🔔 Pendientes de Aprobación Finanzas</div>
+        ${reqTable(pending, false)}
+      </div>
+
+      <!-- Por Cuenta Contable (aprobadas) -->
+      ${approved.length?`
+      <div class="card mb-4">
+        <div class="section-title" style="font-size:14px;margin-bottom:14px">📊 Comprometido por Cuenta Contable — aprobadas</div>
+        <div style="overflow-x:auto"><table>
+          <thead><tr>
+            <th>Cuenta GL</th>
+            <th style="text-align:center">Req.</th>
+            <th style="text-align:right">ARS</th>
+            <th style="text-align:right">USD</th>
+            <th style="text-align:right">EUR</th>
+            <th style="text-align:right;color:var(--accent)">Equiv. ARS</th>
+            <th>Departamentos</th>
+          </tr></thead>
+          <tbody>${glRows}
+          <!-- Total GL -->
+          <tr style="background:var(--bg3);font-weight:700;border-top:2px solid var(--border)">
+            <td style="font-size:12px;color:var(--text2)">TOTAL</td>
+            <td style="text-align:center">${approved.length}</td>
+            ${monedaCeldas(totAppr)}
+            <td></td>
+          </tr>
+          </tbody>
+        </table></div>
+      </div>`:''}
+
+      <!-- Aprobadas -->
+      <div class="card mb-4">
+        <div class="section-title" style="font-size:14px;margin-bottom:14px">✅ Aprobadas por Finanzas (${approved.length})</div>
+        ${reqTable(approved, true)}
+      </div>
+
+      ${rejected.length?`
+      <div class="card mb-4">
+        <div class="section-title" style="font-size:14px;margin-bottom:14px">✖ Rechazadas por Finanzas (${rejected.length})</div>
+        ${reqTable(rejected, false)}
+      </div>`:''}
+    `;
+    dc.classList.remove('hidden');
+
+    dc.querySelectorAll('.fin-detail-btn').forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        const found = allData.find(i=>i._id===btn.dataset.id);
+        if (found) { renderDetail(found); showView('detail'); }
+      });
+    });
+  }
+
+  // Export CSV fecha a fecha
+  function doExport(desde, hasta) {
+    const usdV = parseFloat(tcManual.usd_venta)||0;
+    const eurV = parseFloat(tcManual.eur_venta)||0;
+    let items = allData.filter(i=>[S.APPGER,S.APPFIN,S.REJFIN,S.OC].includes(i.Status));
+    if (desde) items = items.filter(i=>(i.CreatedAt||i.SubmittedAt||'').slice(0,10)>=desde);
+    if (hasta) items = items.filter(i=>(i.CreatedAt||i.SubmittedAt||'').slice(0,10)<=hasta);
+
+    const rows = [];
+    // Encabezado con metadatos del reporte
+    rows.push({
+      Numero:'REPORTE FINANZAS', Departamento:`Período: ${desde||'inicio'} al ${hasta||'hoy'}`,
+      Solicitante:'', Estado:'', CuentaGL:'',CentroCosto:'',
+      TotalARS:'',TotalUSD:'',TotalEUR:'',
+      TC_USD_Venta:usdV||'', TC_EUR_Venta:eurV||'',
+      EquivARS:'',Descripcion:'',Cantidad:'',Unidad:'',Moneda:'',PrecioUnit:'',TotalLinea:'',
+      GLCorregido:'',NotaGerencia:'',AprobadoGer:'',FechaGer:'',AprobadoFin:'',FechaFin:'',OC:'',Comprador:''
+    });
+
+    items.forEach(item=>{
+      const t = calcTotales([item]);
+      const arsEquiv = t.ARS + t.USD*usdV + t.EUR*eurV;
+      const lines = parseLines(item.LinesJSON);
+      lines.forEach((l,idx)=>{
+        rows.push({
+          Numero:        idx===0?item.Title:'',
+          Departamento:  idx===0?item.Dept:'',
+          Solicitante:   idx===0?item.RequesterName:'',
+          Estado:        idx===0?item.Status:'',
+          CuentaGL:      idx===0?item.GLAccount||'':'',
+          CentroCosto:   idx===0?item.CostCenter||'':'',
+          TotalARS:      idx===0&&t.ARS>0?t.ARS:'',
+          TotalUSD:      idx===0&&t.USD>0?t.USD:'',
+          TotalEUR:      idx===0&&t.EUR>0?t.EUR:'',
+          TC_USD_Venta:  idx===0&&usdV?usdV:'',
+          TC_EUR_Venta:  idx===0&&eurV?eurV:'',
+          EquivARS:      idx===0&&(usdV||eurV)?arsEquiv:'',
+          Descripcion:   l.desc,
+          Cantidad:      l.qty,
+          Unidad:        l.unit,
+          Moneda:        l.currency||'ARS',
+          PrecioUnit:    l.price,
+          TotalLinea:    (l.qty||0)*(l.price||0),
+          GLCorregido:   idx===0&&item.GLCorregido?'SÍ':'',
+          NotaGerencia:  idx===0?item.GerNote||'':'',
+          AprobadoGer:   idx===0?item.GerBy||'':'',
+          FechaGer:      idx===0?fmtDT(item.GerAt):'',
+          AprobadoFin:   idx===0?item.FinBy||'':'',
+          FechaFin:      idx===0?fmtDT(item.FinAt||''):'',
+          OC:            idx===0?item.OCNumber||'':'',
+          Comprador:     idx===0?item.Buyer||'':''
+        });
+      });
+    });
+
+    const fname = `Finanzas_${desde||'inicio'}_al_${hasta||hoy}.csv`;
+    exportCSV(rows, fname);
+    toast(`CSV exportado — ${items.length} requisiciones`, 'success');
+  }
+
+  // Eventos
+  document.getElementById('fin-refresh').addEventListener('click', load);
+  document.getElementById('fin-tc-edit').addEventListener('click', showTCEditor);
+  document.getElementById('fin-aplicar').addEventListener('click',()=>{
+    const desde = document.getElementById('fin-desde').value;
+    const hasta = document.getElementById('fin-hasta').value;
+    aplicarFiltro(desde||null, hasta||null);
+  });
+  document.getElementById('fin-todo').addEventListener('click',()=>{
+    document.getElementById('fin-desde').value='';
+    document.getElementById('fin-hasta').value='';
+    aplicarFiltro(null,null);
+  });
+  document.getElementById('fin-export').addEventListener('click',()=>{
+    const desde = document.getElementById('fin-desde').value||null;
+    const hasta = document.getElementById('fin-hasta').value||null;
+    doExport(desde, hasta);
+  });
+
+  load();
 }
 
 // ================================================================
@@ -2278,13 +2802,19 @@ function showLoginScreen() {
 async function initApp(account) {
   currentUser = account;
   const email = (account.username||'').toLowerCase();
-  if (ROLES_ADMIN.map(r=>r.toLowerCase()).includes(email))    userRole='admin';
-  else if (ROLES_APPROVER.map(r=>r.toLowerCase()).includes(email)) userRole='approver';
-  else if (ROLES_GERENTE.map(r=>r.toLowerCase()).includes(email))  userRole='gerente';
+  if (ROLES_ADMIN.map(r=>r.toLowerCase()).includes(email))       userRole='admin';
+  else if (ROLES_APPROVER.map(r=>r.toLowerCase()).includes(email))   userRole='approver';
+  else if (ROLES_GERENTE.map(r=>r.toLowerCase()).includes(email))    userRole='gerente';
+  else if (ROLES_FINANZAS.map(r=>r.toLowerCase()).includes(email))   userRole='finanzas';
   else userRole='user';
+  const canCreate = !ROLES_NO_CREATE.map(r=>r.toLowerCase()).includes(email);
 
   document.getElementById('user-name').textContent = account.name || account.username;
-  document.getElementById('user-role').textContent = {admin:'Administrador',approver:'Aprobador N1',gerente:'Gerente General',user:'Usuario'}[userRole];
+  document.getElementById('user-role').textContent = {
+    admin:'Administrador', approver:'Aprobador N1',
+    gerente:'Gerente General', finanzas:'Finanzas',
+    user:'Usuario'
+  }[userRole];
   document.getElementById('login-screen').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
 
@@ -2295,13 +2825,14 @@ async function initApp(account) {
     });
   });
 
-  document.getElementById('tc-badge').addEventListener('click', fetchTC);
+  document.getElementById('tc-badge').addEventListener('click', showTCEditor);
 
   buildNav();
   fetchTC();
-  if (userRole === 'gerente') {
-    renderGerenteView();
-    showView('gerente');
+  if (userRole==='gerente') {
+    renderGerenteView(); showView('gerente');
+  } else if (userRole==='finanzas') {
+    renderFinanzasView(); showView('finanzas');
   } else {
     renderList(false);
   }
