@@ -1137,7 +1137,7 @@ function renderList(approvalsMode=false) {
       const bc = getBadgeClass(i.Status);
       const ub = getUrgencyBadge(i.Urgency);
       const lines = parseLines(i.LinesJSON);
-      const canDel  = userRole==='admin' || (i.Status===S.DRAFT && i.RequesterMail===currentUser.username);
+      const canDel  = userRole==='admin' || ([S.DRAFT, S.SENT].includes(i.Status) && i.RequesterMail===currentUser.username);
       const canEdit = userRole==='admin' || (i.Status===S.DRAFT && i.RequesterMail===currentUser.username);
       const isOverdue = i.NeedBy && new Date(i.NeedBy)<new Date() && i.Status!==S.OC && i.Status!==S.DRAFT && i.Status!==S.REJ1 && i.Status!==S.REJ2;
       return `<tr data-id="${i._id}" class="req-row" style="${isOverdue?'border-left:3px solid var(--orange)':''}">
