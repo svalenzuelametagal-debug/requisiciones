@@ -521,7 +521,7 @@ let userRole    = 'user';  // 'admin' | 'approver' | 'user'
 
 
 let allItems    = [];
-let tcData      = {mayorista:'—', minorista:'—'};
+let tcData      = {mayorista:'—', minorista:'—'}; // legacy compat
 
 // ================================================================
 // AUTH
@@ -2755,46 +2755,57 @@ function renderInit() {
 // BOOTSTRAP
 // ================================================================
 async function bootstrap() {
-  document.getElementById('footer-year').textContent = new Date().getFullYear();
+  try {
+    document.getElementById('footer-year').textContent = new Date().getFullYear();
 
-  // Detectar si se abre desde archivo local (no funciona, necesita HTTPS)
-  if (window.location.protocol === 'file:') {
-    document.getElementById('login-screen').classList.remove('hidden');
-    document.getElementById('login-err').textContent =
-      '⚠ El archivo está abierto desde tu computadora. Debés subirlo a OneDrive y abrirlo desde ahí con el link de SharePoint (https://...).';
-    document.getElementById('login-err').classList.remove('hidden');
-    document.getElementById('btn-login').disabled = true;
-    document.getElementById('btn-login').textContent = 'Abrí el archivo desde OneDrive';
-    return;
-  }
+    if (window.location.protocol === 'file:') {
+      showLoginScreen();
+      document.getElementById('login-err').textContent =
+        '⚠ El archivo está abierto desde tu computadora. Subilo a GitHub y abrilo desde la URL (https://...).';
+      document.getElementById('login-err').classList.remove('hidden');
+      document.getElementById('btn-login').disabled = true;
+      document.getElementById('btn-login').textContent = 'Abrí la URL de GitHub Pages';
+      return;
+    }
 
-  await msalInstance.initialize();
-  // Handle redirect
-  await msalInstance.handleRedirectPromise().catch(()=>{});
+    await msalInstance.initialize();
+    await msalInstance.handleRedirectPromise().catch(()=>{});
 
-  const accounts = msalInstance.getAllAccounts();
-  if (accounts.length) {
-    await initApp(accounts[0]);
-  } else {
+    const accounts = msalInstance.getAllAccounts();
+    if (accounts.length) {
+      await initApp(accounts[0]);
+    } else {
+      showLoginScreen();
+    }
+  } catch(e) {
+    console.error('Bootstrap error:', e);
     showLoginScreen();
+    const errEl = document.getElementById('login-err');
+    if (errEl) {
+      errEl.textContent = 'Error al iniciar la aplicación: ' + (e.message||'Error desconocido') + '. Recargá la página.';
+      errEl.classList.remove('hidden');
+    }
   }
 }
 
 function showLoginScreen() {
   document.getElementById('login-screen').classList.remove('hidden');
   document.getElementById('app').classList.add('hidden');
-  document.getElementById('btn-login').addEventListener('click', async()=>{
-    const btn = document.getElementById('btn-login');
-    btn.disabled=true; btn.textContent='Conectando…';
+  const btn = document.getElementById('btn-login');
+  // Evitar duplicar el listener
+  const newBtn = btn.cloneNode(true);
+  btn.parentNode.replaceChild(newBtn, btn);
+  newBtn.addEventListener('click', async()=>{
+    newBtn.disabled=true; newBtn.textContent='Conectando…';
     const errEl = document.getElementById('login-err');
     errEl.classList.add('hidden');
     try {
       const res = await msalInstance.loginPopup({scopes:GRAPH_SCOPES});
       await initApp(res.account);
     } catch(e) {
-      errEl.textContent = 'Error al iniciar sesión. Verificá tu cuenta corporativa.';
+      errEl.textContent = 'Error: ' + (e.message||'No se pudo iniciar sesión') + '. Verificá que los popups estén permitidos para este sitio.';
       errEl.classList.remove('hidden');
-      btn.disabled=false; btn.textContent='🔑 Iniciar sesión con Microsoft 365';
+      newBtn.disabled=false; newBtn.textContent='🔑 Iniciar sesión con Microsoft 365';
     }
   });
 }
