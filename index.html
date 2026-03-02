@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
+<meta http-equiv="Pragma" content="no-cache"/>
+<meta http-equiv="Expires" content="0"/>
 <title>Metagal Argentina · Requisiciones de Compra</title>
 <script>
 // ── Implementación OAuth2 PKCE embebida (sin dependencias externas) ──
@@ -1039,7 +1042,7 @@ function renderList(approvalsMode=false) {
   container.innerHTML = `
     <div class="section-header">
       <div>
-        <div class="section-title">${approvalsMode?'Aprobaciones Pendientes':'Mis Requisiciones'}</div>
+        <div class="section-title">${approvalsMode ? 'Aprobaciones Pendientes' : (userRole==='admin'||userRole==='approver') ? 'Todas las Requisiciones' : 'Mis Requisiciones'}</div>
         <div class="section-sub" id="list-count"></div>
       </div>
       <div class="ml-auto d-flex">
