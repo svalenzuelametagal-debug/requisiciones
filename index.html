@@ -4,8 +4,6 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Metagal Argentina · Requisiciones de Compra</title>
-<link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
 <script>
 // ── Implementación OAuth2 PKCE embebida (sin dependencias externas) ──
 const msal = {
@@ -148,8 +146,8 @@ const msal = {
   --red: #d94040;
   --orange: #e0621a;
   --yellow: #d4a017;
-  --mono: 'IBM Plex Mono', monospace;
-  --sans: 'IBM Plex Sans', sans-serif;
+  --mono: 'Consolas', 'Courier New', monospace;
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
   --radius: 4px;
   --shadow: 0 2px 12px rgba(0,0,0,0.5);
 }
@@ -2587,7 +2585,7 @@ function renderDashboard() {
     if (window.Chart) {
     const CHART_COLORS = ['#3a8fd4','#e8a020','#2ea86b','#d94040','#e0621a','#a060d4','#40b0c8'];
     const chartDefaults = {
-      plugins:{legend:{labels:{color:'#b0bac6',font:{family:'IBM Plex Sans',size:11}}}},
+      plugins:{legend:{labels:{color:'#b0bac6',font:{family:'Segoe UI',size:11}}}},
       scales:{x:{ticks:{color:'#6e7e92',font:{size:11}},grid:{color:'#2e3542'}},y:{ticks:{color:'#6e7e92',font:{size:11}},grid:{color:'#2e3542'}}},
     };
 
@@ -2604,7 +2602,7 @@ function renderDashboard() {
         }]
       },
       options:{
-        plugins:{legend:{labels:{color:'#b0bac6',font:{family:'IBM Plex Sans',size:11}}}},
+        plugins:{legend:{labels:{color:'#b0bac6',font:{family:'Segoe UI',size:11}}}},
         onClick:(e,els,chart)=>{
           if (!els.length) return;
           const label = chart.data.labels[els[0].index];
