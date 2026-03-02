@@ -828,6 +828,7 @@ function mapItem(raw) {
     Status:       raw.Status||S.DRAFT,
     LinesJSON:    raw.LinesJSON||'[]',
     AttachmentsJSON:raw.AttachmentsJSON||'[]',
+    CommentsJSON:   raw.CommentsJSON||'[]',
     SubmittedAt:  raw.SubmittedAt||'',
     Lvl1At:       raw.Lvl1At||'',
     Lvl1By:       raw.Lvl1By||'',
@@ -847,6 +848,9 @@ function parseLines(json) {
   try { return JSON.parse(json)||[]; } catch{ return []; }
 }
 function parseAttachments(json) {
+  try { return JSON.parse(json)||[]; } catch{ return []; }
+}
+function parseComments(json) {
   try { return JSON.parse(json)||[]; } catch{ return []; }
 }
 
@@ -951,6 +955,7 @@ function renderList(approvalsMode=false) {
         <button class="btn btn-secondary btn-sm" id="btn-export-csv">⬇ CSV</button>
       </div>
     </div>
+    <div id="alerts-bar"></div>
     <div class="filter-bar">
       <input type="text" id="flt-q" placeholder="Buscar..." style="max-width:200px"/>
       <select id="flt-dept"><option value="">Todos los depto.</option>${deptOptions}</select>
@@ -966,6 +971,15 @@ function renderList(approvalsMode=false) {
     document.getElementById('list-table-wrap').classList.add('hidden');
     try {
       await loadItems();
+      const alertsBar = document.getElementById('alerts-bar');
+      if (alertsBar) {
+        const criticas = allItems.filter(i=>i.Urgency==='Crítica'&&(i.Status===S.SENT||i.Status===S.APP1));
+        const vencidas = allItems.filter(i=>i.NeedBy&&new Date(i.NeedBy)<new Date()&&i.Status!==S.OC&&i.Status!==S.DRAFT&&i.Status!==S.REJ1&&i.Status!==S.REJ2);
+        let html='';
+        if (criticas.length) html+=`<div style="background:rgba(217,64,64,.12);border:1px solid rgba(217,64,64,.3);border-radius:4px;padding:10px 16px;margin-bottom:10px;font-size:13px;color:var(--red)">⚠ <strong>${criticas.length} requisición(es) CRÍTICA(S)</strong> pendiente(s) de aprobación</div>`;
+        if (vencidas.length) html+=`<div style="background:rgba(224,98,26,.12);border:1px solid rgba(224,98,26,.3);border-radius:4px;padding:10px 16px;margin-bottom:10px;font-size:13px;color:var(--orange)">📅 <strong>${vencidas.length} requisición(es)</strong> con fecha necesaria vencida y sin OC asignada</div>`;
+        alertsBar.innerHTML=html;
+      }
       renderTable(approvalsMode);
     } catch(e) {
       toast('Error cargando requisiciones: '+e.message,'error');
@@ -1006,8 +1020,9 @@ function renderList(approvalsMode=false) {
       const lines = parseLines(i.LinesJSON);
       const canDel = userRole==='admin' || (i.Status===S.DRAFT && i.RequesterMail===currentUser.username);
       const canEdit = i.Status===S.DRAFT && (userRole==='admin'||i.RequesterMail===currentUser.username);
-      return `<tr data-id="${i._id}" class="req-row">
-        <td style="cursor:pointer"><span class="num">${escH(i.Title)}</span></td>
+      const isOverdue = i.NeedBy && new Date(i.NeedBy)<new Date() && i.Status!==S.OC && i.Status!==S.DRAFT && i.Status!==S.REJ1 && i.Status!==S.REJ2;
+      return `<tr data-id="${i._id}" class="req-row" style="${isOverdue?'border-left:3px solid var(--orange)':''}">
+        <td style="cursor:pointer"><span class="num">${escH(i.Title)}</span>${isOverdue?` <span style="font-size:10px;color:var(--orange)" title="Fecha necesaria vencida">⏰</span>`:''}${parseComments(i.CommentsJSON||'[]').length?` <span style="font-size:10px;color:var(--accent2)" title="Tiene comentarios">💬${parseComments(i.CommentsJSON||'[]').length}</span>`:''}</td>
         <td>${escH(i.Dept)}</td>
         <td>${escH(i.RequesterName)}</td>
         <td><span class="badge ${ub}">${escH(i.Urgency)}</span></td>
@@ -1204,67 +1219,77 @@ function renderForm(item) {
     </div>
   `;
 
-  // Render items
+  // ÍTEMS — fuente única de verdad: el array `lines`
+  let lines = parseLines(item?.LinesJSON||'[]');
+  if (!lines.length) lines.push({desc:'',qty:1,unit:'UN',currency:'ARS',price:'',link:'',obs:''});
+
+  function readLinesFromDOM() {
+    const rows = document.getElementById('items-body')?.querySelectorAll('tr')||[];
+    return Array.from(rows).map(r=>({
+      desc:     r.querySelector('.il-desc')?.value||'',
+      qty:      parseFloat(r.querySelector('.il-qty')?.value)||0,
+      unit:     r.querySelector('.il-unit')?.value||'UN',
+      currency: r.querySelector('.il-cur')?.value||'ARS',
+      price:    parseFloat(r.querySelector('.il-price')?.value)||0,
+      link:     r.querySelector('.il-link')?.value||'',
+      obs:      r.querySelector('.il-obs')?.value||'',
+    }));
+  }
+
+  function syncLinesFromDOM() {
+    const fromDOM = readLinesFromDOM();
+    if (fromDOM.length) lines = fromDOM;
+  }
+
   function renderItems() {
     const tbody = document.getElementById('items-body');
-    const lines = getLines();
+    if (!tbody) return;
     tbody.innerHTML = lines.map((l,i)=>`
       <tr>
-        <td><input type="text" class="il-desc" data-i="${i}" value="${escH(l.desc)}" placeholder="Descripción del ítem"/></td>
-        <td><input type="number" class="il-qty" data-i="${i}" value="${escH(String(l.qty))}" min="0.01" step="any" style="width:60px"/></td>
-        <td><input type="text" class="il-unit" data-i="${i}" value="${escH(l.unit)}" style="width:50px"/></td>
-        <td><select class="il-cur" data-i="${i}">
-          <option ${l.currency==='ARS'?'selected':''}>ARS</option>
-          <option ${l.currency==='USD'?'selected':''}>USD</option>
+        <td><input type="text" class="il-desc" value="${escH(l.desc||'')}" placeholder="Descripción del ítem"/></td>
+        <td><input type="number" class="il-qty" value="${escH(String(l.qty||1))}" min="0.01" step="any" style="width:60px"/></td>
+        <td><input type="text" class="il-unit" value="${escH(l.unit||'UN')}" style="width:50px"/></td>
+        <td><select class="il-cur">
+          <option ${(l.currency||'ARS')==='ARS'?'selected':''}>ARS</option>
+          <option ${(l.currency||'ARS')==='USD'?'selected':''}>USD</option>
+          <option ${(l.currency||'ARS')==='EUR'?'selected':''}>EUR</option>
         </select></td>
-        <td><input type="number" class="il-price" data-i="${i}" value="${escH(String(l.price))}" min="0" step="any" style="width:80px"/></td>
-        <td><input type="text" class="il-link" data-i="${i}" value="${escH(l.link)}" placeholder="URL o referencia"/></td>
-        <td><input type="text" class="il-obs" data-i="${i}" value="${escH(l.obs)}" placeholder="Obs."/></td>
+        <td><input type="number" class="il-price" value="${escH(String(l.price||''))}" min="0" step="any" style="width:80px"/></td>
+        <td><input type="text" class="il-link" value="${escH(l.link||'')}" placeholder="URL o referencia"/></td>
+        <td><input type="text" class="il-obs" value="${escH(l.obs||'')}" placeholder="Obs."/></td>
         <td><button class="item-del" data-i="${i}" title="Eliminar">✕</button></td>
       </tr>`).join('');
+
     tbody.querySelectorAll('.item-del').forEach(b=>{
       b.addEventListener('click',()=>{
-        const lines = getLines();
+        syncLinesFromDOM();
         lines.splice(Number(b.dataset.i),1);
-        setLines(lines);
+        if (!lines.length) lines.push({desc:'',qty:1,unit:'UN',currency:'ARS',price:'',link:'',obs:''});
         renderItems();
         calcTotal();
       });
     });
-    ['il-desc','il-qty','il-unit','il-cur','il-price','il-link','il-obs'].forEach(cls=>{
-      tbody.querySelectorAll('.'+cls).forEach(el=>{
-        el.addEventListener('input',()=>calcTotal());
-      });
+    tbody.querySelectorAll('input,select').forEach(el=>{
+      el.addEventListener('input', calcTotal);
     });
     calcTotal();
   }
 
   function getLines() {
-    const tbody = document.getElementById('items-body');
-    if (!tbody?.children.length) return existingLines;
-    const rows = tbody.querySelectorAll('tr');
-    return Array.from(rows).map(r=>({
-      desc: r.querySelector('.il-desc')?.value||'',
-      qty:  parseFloat(r.querySelector('.il-qty')?.value)||0,
-      unit: r.querySelector('.il-unit')?.value||'UN',
-      currency: r.querySelector('.il-cur')?.value||'ARS',
-      price: parseFloat(r.querySelector('.il-price')?.value)||0,
-      link: r.querySelector('.il-link')?.value||'',
-      obs:  r.querySelector('.il-obs')?.value||'',
-    }));
+    syncLinesFromDOM();
+    return lines;
   }
 
-  function setLines(lines) { existingLines.splice(0,existingLines.length,...lines); }
-
   function calcTotal() {
-    const lines = getLines();
+    const current = readLinesFromDOM();
     const groups = {};
-    lines.forEach(l=>{
+    current.forEach(l=>{
       const c = l.currency||'ARS';
       groups[c] = (groups[c]||0) + (l.qty||0)*(l.price||0);
     });
-    const parts = Object.entries(groups).map(([c,v])=>`${c} ${v.toLocaleString('es-AR',{minimumFractionDigits:2})}`);
-    document.getElementById('items-total').textContent = parts.length ? 'Total estimado: '+parts.join(' + ') : '';
+    const parts = Object.entries(groups).filter(([,v])=>v>0).map(([c,v])=>`${c} ${v.toLocaleString('es-AR',{minimumFractionDigits:2})}`);
+    const el = document.getElementById('items-total');
+    if (el) el.textContent = parts.length ? 'Total estimado: '+parts.join(' + ') : '';
   }
 
   // Render existing attachments
@@ -1276,9 +1301,8 @@ function renderForm(item) {
   }
 
   document.getElementById('btn-add-item').addEventListener('click',()=>{
-    const lines = getLines();
+    syncLinesFromDOM();
     lines.push({desc:'',qty:1,unit:'UN',currency:'ARS',price:'',link:'',obs:''});
-    setLines(lines);
     renderItems();
   });
 
@@ -1398,7 +1422,7 @@ function renderDetail(item) {
   const canEdit = canEditDraft(item);
   const canApproveN1 = (userRole==='approver'||userRole==='admin') && item.Status===S.SENT;
   const canApproveN2 = userRole==='admin' && item.Status===S.APP1;
-  const canAssignOC  = userRole==='admin' && item.Status===S.APP2;
+  const canAssignOC  = (userRole==='admin'||userRole==='approver') && item.Status===S.APP2;
   const canReopen    = userRole==='admin' && (item.Status===S.REJ1||item.Status===S.REJ2);
 
   // Line items table
@@ -1433,6 +1457,7 @@ function renderDetail(item) {
 
   // Action buttons
   let actionBtns = `<button class="btn btn-secondary btn-sm" id="btn-print-req" title="Imprimir / Guardar PDF">🖨 PDF</button>`;
+  actionBtns += `<button class="btn btn-secondary btn-sm" id="btn-dup-req" title="Duplicar como nuevo borrador">⧉ Duplicar</button>`;
   if (canEdit) actionBtns += `<button class="btn btn-secondary" id="btn-edit-req">✏ Editar</button>`;
   if (canApproveN1) actionBtns += `<button class="btn btn-success" id="btn-appn1">✔ Aprobar N1</button><button class="btn btn-danger" id="btn-rejn1">✖ Rechazar N1</button>`;
   if (canApproveN2) actionBtns += `<button class="btn btn-success" id="btn-appn2">✔ Aprobar N2</button><button class="btn btn-danger" id="btn-rejn2">✖ Rechazar N2</button>`;
@@ -1516,6 +1541,16 @@ function renderDetail(item) {
         </div>
         <div class="form-section">
           <div class="req-detail-section">
+            <h4>Comentarios internos</h4>
+            <div id="comments-list" style="margin-bottom:12px"></div>
+            <div style="display:flex;gap:8px">
+              <input type="text" id="comment-input" placeholder="Agregar comentario…" style="flex:1"/>
+              <button class="btn btn-secondary btn-sm" id="btn-add-comment">Enviar</button>
+            </div>
+          </div>
+        </div>
+        <div class="form-section">
+          <div class="req-detail-section">
             <h4>Historial</h4>
             <div>${historyHtml||'<div class="text-muted" style="font-size:12px">Sin historial</div>'}</div>
           </div>
@@ -1526,6 +1561,53 @@ function renderDetail(item) {
 
   document.getElementById('btn-back-detail').addEventListener('click',()=>renderList(false));
   document.getElementById('btn-print-req').addEventListener('click',()=>imprimirRequisicion(item));
+
+  // Duplicar requisición
+  document.getElementById('btn-dup-req').addEventListener('click',()=>{
+    const clone = {
+      ...item,
+      _id: null,
+      Title: '',
+      Status: S.DRAFT,
+      SubmittedAt:'', Lvl1At:'', Lvl1By:'', Lvl1Note:'',
+      Lvl2At:'', Lvl2By:'', Lvl2Note:'',
+      OCNumber:'', OCDate:'', Buyer:'',
+      CreatedAt:'', UpdatedAt:'',
+      CommentsJSON:'[]',
+    };
+    toast('Duplicando como nuevo borrador…','info');
+    renderForm(clone);
+    showView('form');
+  });
+
+  // Comentarios
+  const comments = parseComments(item.CommentsJSON||'[]');
+  function renderComments() {
+    const el = document.getElementById('comments-list');
+    if (!el) return;
+    if (!comments.length) { el.innerHTML='<div class="text-muted" style="font-size:12px">Sin comentarios aún</div>'; return; }
+    el.innerHTML = comments.map(c=>`
+      <div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px">
+        <div style="color:var(--text2);min-width:130px;font-family:var(--mono);font-size:11px">${fmtDT(c.at)}</div>
+        <div><span style="color:var(--accent2);font-weight:500">${escH(c.by.split('@')[0])}</span> <span style="color:var(--text1)">${escH(c.text)}</span></div>
+      </div>`).join('');
+  }
+  renderComments();
+  document.getElementById('btn-add-comment')?.addEventListener('click', async()=>{
+    const input = document.getElementById('comment-input');
+    const text = input?.value?.trim();
+    if (!text) return;
+    comments.push({at:isoNow(), by:currentUser.username, text});
+    input.value='';
+    try {
+      await updateItem(item._id, {CommentsJSON:JSON.stringify(comments), UpdatedAt:isoNow()});
+      renderComments();
+    } catch(e) { toast('Error guardando comentario','error'); }
+  });
+  document.getElementById('comment-input')?.addEventListener('keydown',e=>{
+    if (e.key==='Enter') document.getElementById('btn-add-comment')?.click();
+  });
+
   if (canEdit) document.getElementById('btn-edit-req')?.addEventListener('click',()=>renderForm(item));
 
   // Approval modals
@@ -1578,21 +1660,37 @@ function renderDetail(item) {
     });
   }
   if (canAssignOC) {
-    document.getElementById('btn-assign-oc').addEventListener('click',()=>{
+    document.getElementById('btn-assign-oc').addEventListener('click', async ()=>{
       const now = new Date().toISOString().slice(0,10);
+      const year = new Date().getFullYear();
+      // Auto-suggest next OC number
+      let suggestedOC = `OC-${year}-0001`;
+      try {
+        const all = await readDB();
+        const ocNums = all.filter(i=>i.OCNumber).map(i=>i.OCNumber);
+        const maxNum = ocNums.reduce((max,oc)=>{
+          const n = parseInt((oc.split('-').pop()||'0'),10);
+          return n>max?n:max;
+        },0);
+        suggestedOC = `OC-${year}-${String(maxNum+1).padStart(4,'0')}`;
+      } catch(e){}
       showModal(`
-        <div class="form-group mb-3"><label>N° Orden de Compra *</label><input type="text" id="oc-num" placeholder="OC-2025-0001"/></div>
+        <div class="form-group mb-3"><label>N° Orden de Compra *</label><input type="text" id="oc-num" value="${suggestedOC}" placeholder="OC-2025-0001"/></div>
         <div class="form-group mb-3"><label>Fecha OC</label><input type="date" id="oc-date" value="${now}"/></div>
-        <div class="form-group"><label>Comprador *</label><input type="text" id="oc-buyer" value="${currentUser.name||currentUser.username}"/></div>
-      `, 'Asignar Orden de Compra', [{label:'Asignar', cls:'btn-primary', cb:async()=>{
-        const num = document.getElementById('oc-num').value.trim();
-        const date = document.getElementById('oc-date').value;
+        <div class="form-group mb-3"><label>Comprador *</label><input type="text" id="oc-buyer" value="${currentUser.name||currentUser.username}"/></div>
+        <div class="form-group"><label>Observaciones OC (opcional)</label><textarea id="oc-obs" rows="2" placeholder="Notas adicionales sobre la OC…"></textarea></div>
+      `, 'Asignar Orden de Compra', [{label:'Asignar OC', cls:'btn-primary', cb:async()=>{
+        const num   = document.getElementById('oc-num').value.trim();
+        const date  = document.getElementById('oc-date').value;
         const buyer = document.getElementById('oc-buyer').value.trim();
+        const obs   = document.getElementById('oc-obs').value.trim();
         if (!num||!buyer) { toast('Completá N° OC y Comprador','error'); return; }
-        const fields = {Status:S.OC, OCNumber:num, OCDate:date, Buyer:buyer, Lvl2At:isoNow(), Lvl2By:currentUser.username};
+        const fields = {Status:S.OC, OCNumber:num, OCDate:date, Buyer:buyer,
+          Lvl2At:item.Lvl2At||isoNow(), Lvl2By:item.Lvl2By||currentUser.username,
+          Lvl2Note:obs||item.Lvl2Note||''};
         await doAction(item, fields);
         const updated = {...item, ...fields};
-        await notificar(updated,`🛒 OC Asignada: ${num}`,`Comprador: ${buyer}. Fecha: ${fmt(date)}`,[item.RequesterMail, ROLES_APPROVER[0]]);
+        await notificar(updated,`🛒 OC Asignada: ${num}`,`Comprador: ${buyer}${obs?' — '+obs:''}. Fecha: ${fmt(date)}`,[item.RequesterMail, ...(item.RequesterMail!==ROLES_APPROVER[0]?[ROLES_APPROVER[0]]:[])]);
         toast('OC asignada — notificación enviada','success');
         renderList(false);
       }},{label:'Cancelar',cls:'btn-secondary'}]);
