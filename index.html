@@ -540,23 +540,34 @@ async function getToken() {
 }
 
 // ================================================================
-// ALMACENAMIENTO EN ONEDRIVE (JSON) — sin SharePoint Lists
+// ALMACENAMIENTO COMPARTIDO — OneDrive del Admin (Santiago)
 // ================================================================
-// Guarda todo en: Documents/Requisiciones-Adjuntos/data/requisiciones.json
+// Estos valores se completan en el paso de Inicialización (solo admin)
+// y quedan grabados en localStorage para todos los usuarios.
 const DB_PATH = '/Documents/Requisiciones-Adjuntos/data/requisiciones.json';
 
-async function getDriveRoot() {
-  return await graphReq('GET', '/me/drive/root');
+function getCfg() {
+  try { return JSON.parse(localStorage.getItem('mgal_cfg')||'{}'); } catch(e) { return {}; }
+}
+function saveCfg(obj) {
+  localStorage.setItem('mgal_cfg', JSON.stringify({...getCfg(),...obj}));
 }
 
+// Lee usando driveId+itemId del archivo compartido (o fallback a /me/drive si no está configurado)
 async function readDB() {
+  const token = await getToken();
+  const cfg = getCfg();
+  let url;
+  if (cfg.driveId && cfg.itemId) {
+    url = `https://graph.microsoft.com/v1.0/drives/${cfg.driveId}/items/${cfg.itemId}/content`;
+  } else {
+    // No configurado aún — solo funciona para el admin
+    url = `https://graph.microsoft.com/v1.0/me/drive/root:${DB_PATH}:/content`;
+  }
   try {
-    const token = await getToken();
-    const res = await fetch('https://graph.microsoft.com/v1.0/me/drive/root:' + DB_PATH + ':/content', {
-      headers: { Authorization: `Bearer ${token}` }
-    });
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
     if (res.status === 404) return [];
-    if (!res.ok) throw new Error('Error leyendo base de datos');
+    if (!res.ok) throw new Error(`Error ${res.status} leyendo base de datos`);
     return await res.json();
   } catch(e) {
     if (e.message.includes('404') || e.message.includes('itemNotFound')) return [];
@@ -566,16 +577,26 @@ async function readDB() {
 
 async function writeDB(data) {
   const token = await getToken();
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-  const res = await fetch('https://graph.microsoft.com/v1.0/me/drive/root:' + DB_PATH + ':/content', {
+  const cfg = getCfg();
+  let url;
+  if (cfg.driveId && cfg.itemId) {
+    url = `https://graph.microsoft.com/v1.0/drives/${cfg.driveId}/items/${cfg.itemId}/content`;
+  } else {
+    url = `https://graph.microsoft.com/v1.0/me/drive/root:${DB_PATH}:/content`;
+  }
+  const res = await fetch(url, {
     method: 'PUT',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: blob
+    body: JSON.stringify(data, null, 2)
   });
-  if (!res.ok) throw new Error('Error guardando datos');
+  if (!res.ok) {
+    const e = await res.json().catch(()=>({}));
+    throw new Error(e?.error?.message || 'Error guardando datos');
+  }
   return res.json();
 }
 
+// Crea carpetas en el OneDrive del admin y devuelve driveId + itemId para compartir
 async function ensureDBFolder() {
   const token = await getToken();
   const paths = [
@@ -583,72 +604,90 @@ async function ensureDBFolder() {
     '/Documents/Requisiciones-Adjuntos/data'
   ];
   for (const p of paths) {
-    const check = await fetch('https://graph.microsoft.com/v1.0/me/drive/root:' + p, {
+    const check = await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:${p}`, {
       headers: { Authorization: `Bearer ${token}` }
     });
     if (!check.ok) {
-      const parts = p.split('/');
-      const name = parts.pop();
+      const parts = p.split('/'); const name = parts.pop();
       const parent = parts.join('/') || '/';
-      await fetch('https://graph.microsoft.com/v1.0/me/drive/root:' + parent + ':/children', {
+      await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:${parent}:/children`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, folder: {}, '@microsoft.graph.conflictBehavior': 'replace' })
+        body: JSON.stringify({ name, folder:{}, '@microsoft.graph.conflictBehavior':'replace' })
       });
     }
   }
 }
 
-// ── Reemplazos de API anteriores ──────────────────────────────
-async function listItems() {
-  return await readDB();
+// Crea el archivo JSON, lo comparte con la organización y devuelve driveId+itemId
+async function setupSharedStorage() {
+  const token = await getToken();
+
+  // 1. Crear carpetas
+  await ensureDBFolder();
+
+  // 2. Crear archivo JSON vacío si no existe
+  const fileCheck = await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:${DB_PATH}:/content`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!fileCheck.ok) {
+    await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:${DB_PATH}:/content`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: '[]'
+    });
+  }
+
+  // 3. Obtener el driveItem del archivo
+  const itemRes = await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:${DB_PATH}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!itemRes.ok) throw new Error('No se pudo obtener el archivo');
+  const item = await itemRes.json();
+  const driveId = item.parentReference.driveId;
+  const itemId  = item.id;
+
+  // 4. Crear link de compartir con toda la organización (edición)
+  const shareRes = await fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${itemId}/createLink`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'edit', scope: 'organization' })
+  });
+  if (!shareRes.ok) {
+    const e = await shareRes.json().catch(()=>({}));
+    throw new Error('Error creando link compartido: ' + (e?.error?.message||shareRes.status));
+  }
+
+  // 5. Guardar config en localStorage de este usuario
+  saveCfg({ driveId, itemId });
+
+  return { driveId, itemId };
 }
 
-async function createItem(fields) {
-  const data = await readDB();
-  const newItem = { id: Date.now().toString(), ...fields };
-  data.push(newItem);
-  await writeDB(data);
-  return newItem;
-}
-
-async function updateItem(itemId, fields) {
-  const data = await readDB();
-  const idx = data.findIndex(i => i.id === itemId);
-  if (idx === -1) throw new Error('Requisición no encontrada');
-  data[idx] = { ...data[idx], ...fields };
-  await writeDB(data);
-  return data[idx];
-}
+// ── Reemplazos de API ──────────────────────────────────────────
+async function listItems()          { return await readDB(); }
+async function createItem(fields)   { const d=await readDB(); const n={id:Date.now().toString(),...fields}; d.push(n); await writeDB(d); return n; }
+async function updateItem(id,fields){ const d=await readDB(); const i=d.findIndex(x=>x.id===id); if(i===-1) throw new Error('No encontrada'); d[i]={...d[i],...fields}; await writeDB(d); return d[i]; }
+async function deleteItem(id)       { await writeDB((await readDB()).filter(x=>x.id!==id)); }
 
 async function ensureFolder(folderPath) {
   const token = await getToken();
-  const check = await fetch('https://graph.microsoft.com/v1.0/me/drive/root:' + folderPath, {
-    headers: { Authorization: `Bearer ${token}` }
-  });
+  const check = await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:${folderPath}`, { headers:{Authorization:`Bearer ${token}`} });
   if (check.ok) return;
-  const parts = folderPath.split('/');
-  const name = parts.pop();
-  const parent = parts.join('/') || '/';
-  await fetch('https://graph.microsoft.com/v1.0/me/drive/root:' + parent + ':/children', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, folder: {}, '@microsoft.graph.conflictBehavior': 'replace' })
+  const parts=folderPath.split('/'); const name=parts.pop(); const parent=parts.join('/')||'/';
+  await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:${parent}:/children`, {
+    method:'POST', headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},
+    body:JSON.stringify({name,folder:{}, '@microsoft.graph.conflictBehavior':'replace'})
   });
 }
 
 async function uploadFile(folderPath, file) {
   const token = await getToken();
-  const url = 'https://graph.microsoft.com/v1.0/me/drive/root:' + folderPath + '/' + encodeURIComponent(file.name) + ':/content';
+  const url = `https://graph.microsoft.com/v1.0/me/drive/root:${folderPath}/${encodeURIComponent(file.name)}:/content`;
   const res = await fetch(url, {
-    method: 'PUT',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': file.type || 'application/octet-stream' },
-    body: file
+    method:'PUT', headers:{Authorization:`Bearer ${token}`,'Content-Type':file.type||'application/octet-stream'}, body:file
   });
-  if (!res.ok) {
-    const e = await res.json().catch(() => ({}));
-    throw new Error(e?.error?.message || 'Error subiendo archivo');
-  }
+  if (!res.ok) { const e=await res.json().catch(()=>({})); throw new Error(e?.error?.message||'Error subiendo archivo'); }
   return res.json();
 }
 
@@ -2720,55 +2759,137 @@ function renderDashboard() {
 function renderInit() {
   showView('init');
   const container = document.getElementById('view-init');
+  const cfg = getCfg();
+  const isConfigured = !!(cfg.driveId && cfg.itemId);
+
   container.innerHTML = `
     <div class="section-header">
       <div><div class="section-title">Inicialización del Sistema</div>
-      <div class="section-sub">Crea las carpetas necesarias en tu OneDrive</div></div>
+      <div class="section-sub">Configuración del almacenamiento compartido</div></div>
     </div>
-    <div class="card" style="max-width:700px">
+
+    ${isConfigured ? `<div style="background:rgba(46,168,107,.1);border:1px solid rgba(46,168,107,.3);border-radius:4px;padding:10px 16px;margin-bottom:16px;font-size:13px;color:var(--green)">
+      ✔ Tu navegador está configurado correctamente para acceder al archivo compartido.<br/>
+      <span style="font-size:11px;color:var(--text2);font-family:var(--mono)">driveId: ${cfg.driveId.substring(0,20)}…</span>
+    </div>` : `<div style="background:rgba(232,160,32,.1);border:1px solid rgba(232,160,32,.3);border-radius:4px;padding:10px 16px;margin-bottom:16px;font-size:13px;color:var(--accent)">
+      ⚠ Este navegador todavía no está conectado al archivo compartido. Ejecutá el Paso 1.
+    </div>`}
+
+    <div class="card mb-4" style="max-width:760px">
+      <div class="section-title" style="font-size:14px;margin-bottom:10px">Paso 1 — Configurar almacenamiento compartido <span style="font-size:11px;color:var(--text2)">(solo vos, una vez)</span></div>
       <p style="font-size:13px;color:var(--text1);margin-bottom:16px">
-        Este proceso crea la carpeta <strong>Documents/Requisiciones-Adjuntos</strong> y la subcarpeta <strong>data</strong> en tu OneDrive donde se guardan todas las requisiciones. Podés ejecutarlo más de una vez sin riesgo.
+        Crea el archivo JSON en <strong>tu</strong> OneDrive y lo comparte con toda la organización. 
+        Después podés generar el link de activación para los demás usuarios.
       </p>
-      <button class="btn btn-primary" id="btn-run-init">▶ Ejecutar inicialización</button>
+      <button class="btn btn-primary" id="btn-run-init">▶ ${isConfigured ? 'Volver a configurar' : 'Configurar almacenamiento'}</button>
       <div id="init-log" class="init-result mt-4 hidden"></div>
+    </div>
+
+    <div class="card mb-4" style="max-width:760px" id="step2-card">
+      <div class="section-title" style="font-size:14px;margin-bottom:10px">Paso 2 — Activar otros usuarios</div>
+      <p style="font-size:13px;color:var(--text1);margin-bottom:16px">
+        Cada usuario necesita abrir el <strong>Link de Activación</strong> una sola vez para que su navegador quede configurado.
+        Después inician sesión normalmente y ya pueden ver todas las requisiciones.
+      </p>
+      ${isConfigured ? `
+        <div style="background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:12px;margin-bottom:12px;word-break:break-all;font-size:12px;font-family:var(--mono);color:var(--accent2)" id="activation-url">
+          ${generateActivationUrl(cfg)}
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary btn-sm" id="btn-copy-url">📋 Copiar link</button>
+          <button class="btn btn-secondary btn-sm" id="btn-test-link">↗ Abrir en nueva pestaña</button>
+        </div>
+        <p style="font-size:11px;color:var(--text2);margin-top:10px">Mandá este link por Teams o email a Nicolás, Raúl, Cristina, Diego y María. Solo necesitan abrirlo una vez.</p>
+      ` : `<div style="color:var(--text2);font-size:13px">Primero ejecutá el Paso 1 para generar el link.</div>`}
+    </div>
+
+    <div class="card" style="max-width:760px">
+      <div class="section-title" style="font-size:14px;margin-bottom:10px">Estado del sistema</div>
+      <button class="btn btn-secondary btn-sm" id="btn-check-status">Verificar estado</button>
+      <div id="status-log" class="init-result mt-4 hidden"></div>
     </div>
   `;
 
   document.getElementById('btn-run-init').addEventListener('click', runInit);
+  document.getElementById('btn-check-status').addEventListener('click', checkStatus);
+  document.getElementById('btn-copy-url')?.addEventListener('click',()=>{
+    navigator.clipboard.writeText(document.getElementById('activation-url').textContent.trim());
+    toast('Link copiado al portapapeles','success');
+  });
+  document.getElementById('btn-test-link')?.addEventListener('click',()=>{
+    window.open(document.getElementById('activation-url').textContent.trim(), '_blank');
+  });
 
-  async function log(msg, cls = 'init-info') {
+  async function log(msg, cls='init-info') {
     const el = document.getElementById('init-log');
     el.classList.remove('hidden');
     el.innerHTML += `<div class="${cls}">${escH(msg)}</div>`;
     el.scrollTop = el.scrollHeight;
   }
 
+  async function slog(msg, cls='init-info') {
+    const el = document.getElementById('status-log');
+    el.classList.remove('hidden');
+    el.innerHTML += `<div class="${cls}">${escH(msg)}</div>`;
+  }
+
   async function runInit() {
     const btn = document.getElementById('btn-run-init');
     btn.disabled = true;
     document.getElementById('init-log').innerHTML = '';
-    await log('[' + new Date().toLocaleTimeString('es-AR') + '] Iniciando…', 'init-info');
+    await log('[' + new Date().toLocaleTimeString('es-AR') + '] Iniciando configuración…');
     try {
-      await log('Verificando acceso a OneDrive…', 'init-info');
+      await log('Verificando cuenta…');
       const me = await graphReq('GET', '/me');
-      await log('✔ Conectado como: ' + (me.displayName || me.userPrincipalName), 'init-ok');
+      await log('✔ Conectado como: ' + (me.displayName||me.userPrincipalName), 'init-ok');
 
-      await log('Creando carpetas necesarias…', 'init-info');
-      await ensureDBFolder();
-      await log('✔ Carpeta Documents/Requisiciones-Adjuntos/data creada o ya existente', 'init-ok');
+      await log('Creando carpetas en tu OneDrive…');
+      await log('Configurando almacenamiento compartido y link de organización…');
+      const { driveId, itemId } = await setupSharedStorage();
+      await log('✔ Archivo compartido creado correctamente', 'init-ok');
+      await log(`  driveId: ${driveId}`, 'init-info');
+      await log(`  itemId:  ${itemId}`, 'init-info');
 
-      await log('Verificando base de datos…', 'init-info');
+      await log('Verificando base de datos…');
       const data = await readDB();
-      await log('✔ Base de datos OK — ' + data.length + ' requisición(es) existentes', 'init-ok');
+      await log('✔ Base de datos OK — ' + data.length + ' requisición(es)', 'init-ok');
+      await log('─'.repeat(50));
+      await log('✔ ¡Configuración completada! Ahora generá el link del Paso 2 y mandáselo a los demás usuarios.', 'init-ok');
 
-      await log('─'.repeat(50), 'init-info');
-      await log('✔ Inicialización completada. Ya podés crear requisiciones.', 'init-ok');
-    } catch (e) {
+      // Rerender para mostrar el link
+      setTimeout(()=>renderInit(), 500);
+    } catch(e) {
       await log('✖ Error: ' + e.message, 'init-err');
+      if (e.message.includes('createLink') || e.message.includes('403')) {
+        await log('  → El administrador de IT necesita habilitar el sharing de OneDrive para tu cuenta.', 'init-err');
+      }
     } finally {
       btn.disabled = false;
     }
   }
+
+  async function checkStatus() {
+    document.getElementById('status-log').innerHTML = '';
+    try {
+      const cfg = getCfg();
+      await slog('Configuración local: ' + (cfg.driveId ? '✔ Presente' : '✖ No configurado'));
+      if (cfg.driveId) {
+        await slog('Leyendo base de datos compartida…');
+        const data = await readDB();
+        await slog(`✔ Conectado — ${data.length} requisición(es) en la base`, 'init-ok');
+      }
+      const me = await graphReq('GET', '/me');
+      await slog('✔ Sesión activa: ' + me.userPrincipalName, 'init-ok');
+    } catch(e) {
+      await slog('✖ Error: ' + e.message, 'init-err');
+    }
+  }
+}
+
+function generateActivationUrl(cfg) {
+  const encoded = btoa(JSON.stringify({ driveId: cfg.driveId, itemId: cfg.itemId }));
+  const base = window.location.href.split('?')[0].split('#')[0];
+  return `${base}?activar=${encoded}`;
 }
 
 // ================================================================
@@ -2778,10 +2899,24 @@ async function bootstrap() {
   try {
     document.getElementById('footer-year').textContent = new Date().getFullYear();
 
+    // Procesar link de activación (?activar=BASE64)
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('activar')) {
+      try {
+        const cfg = JSON.parse(atob(params.get('activar')));
+        if (cfg.driveId && cfg.itemId) {
+          saveCfg({ driveId: cfg.driveId, itemId: cfg.itemId });
+          // Limpiar la URL
+          window.history.replaceState({}, '', window.location.pathname);
+          toast('✔ Configuración activada — ya podés ver todas las requisiciones', 'success');
+        }
+      } catch(e) { console.warn('Link de activación inválido', e); }
+    }
+
     if (window.location.protocol === 'file:') {
       showLoginScreen();
       document.getElementById('login-err').textContent =
-        '⚠ El archivo está abierto desde tu computadora. Subilo a GitHub y abrilo desde la URL (https://...).';
+        '⚠ El archivo está abierto desde tu computadora. Abrilo desde la URL de GitHub Pages (https://...).';
       document.getElementById('login-err').classList.remove('hidden');
       document.getElementById('btn-login').disabled = true;
       document.getElementById('btn-login').textContent = 'Abrí la URL de GitHub Pages';
@@ -2802,7 +2937,7 @@ async function bootstrap() {
     showLoginScreen();
     const errEl = document.getElementById('login-err');
     if (errEl) {
-      errEl.textContent = 'Error al iniciar la aplicación: ' + (e.message||'Error desconocido') + '. Recargá la página.';
+      errEl.textContent = 'Error al iniciar: ' + (e.message||'desconocido') + '. Recargá la página.';
       errEl.classList.remove('hidden');
     }
   }
@@ -2860,6 +2995,10 @@ async function initApp(account) {
 
   buildNav();
   fetchTC();
+  // Avisar si el storage no está configurado y no es admin
+  if (!getCfg().driveId && userRole !== 'admin') {
+    toast('⚠ Tu cuenta aún no está activada. Pedile a Santiago el link de activación.', 'error');
+  }
   if (userRole==='gerente') {
     renderGerenteView(); showView('gerente');
   } else if (userRole==='finanzas') {
