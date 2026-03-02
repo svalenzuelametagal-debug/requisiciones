@@ -401,6 +401,7 @@ tr:hover td{background:var(--bg2)}
     <div id="view-form" class="hidden"></div>
     <div id="view-detail" class="hidden"></div>
     <div id="view-dashboard" class="hidden"></div>
+    <div id="view-gerente" class="hidden"></div>
     <div id="view-init" class="hidden"></div>
   </main>
 
@@ -431,6 +432,7 @@ const CFG = {
 // ================================================================
 const ROLES_ADMIN    = ['svalenzuela@metagal.com.ar'];
 const ROLES_APPROVER = ['nconte@metagal.com.ar'];
+const ROLES_GERENTE  = ['rlopez@metagal.com.ar'];
 
 const DEPARTMENTS = [
   {name:'Mantenimiento', code:'MANT'},
@@ -457,18 +459,22 @@ const S = {
   REJ1:     'Rechazada Nivel 1',
   APP1:     'Aprobada Nivel 1 (Pendiente Nivel 2)',
   REJ2:     'Rechazada Nivel 2',
-  APP2:     'Aprobada Nivel 2',
+  APP2:     'Aprobada Nivel 2 (Pendiente Gerencia)',
+  REJGER:   'Rechazada por Gerencia',
+  APPGER:   'Aprobada por Gerencia',
   OC:       'OC Asignada',
 };
 
 const STATUS_BADGE = {
-  [S.DRAFT]: 'badge-draft',
-  [S.SENT]:  'badge-sent',
-  [S.REJ1]:  'badge-rej1',
-  [S.APP1]:  'badge-app1',
-  [S.REJ2]:  'badge-rej2',
-  [S.APP2]:  'badge-app2',
-  [S.OC]:    'badge-oc',
+  [S.DRAFT]:  'badge-draft',
+  [S.SENT]:   'badge-sent',
+  [S.REJ1]:   'badge-rej1',
+  [S.APP1]:   'badge-app1',
+  [S.REJ2]:   'badge-rej2',
+  [S.APP2]:   'badge-app1',
+  [S.REJGER]: 'badge-rej2',
+  [S.APPGER]: 'badge-app2',
+  [S.OC]:     'badge-oc',
 };
 
 // ================================================================
@@ -829,6 +835,9 @@ function mapItem(raw) {
     LinesJSON:    raw.LinesJSON||'[]',
     AttachmentsJSON:raw.AttachmentsJSON||'[]',
     CommentsJSON:   raw.CommentsJSON||'[]',
+    GerAt:          raw.GerAt||'',
+    GerBy:          raw.GerBy||'',
+    GerNote:        raw.GerNote||'',
     SubmittedAt:  raw.SubmittedAt||'',
     Lvl1At:       raw.Lvl1At||'',
     Lvl1By:       raw.Lvl1By||'',
@@ -877,8 +886,13 @@ async function loadItems() {
     allItems = mapped;
   } else if (userRole === 'approver') {
     allItems = mapped.filter(i =>
-      i.Status === S.SENT || i.Status === S.APP1 ||
+      i.Status === S.SENT || i.Status === S.APPGER ||
       i.RequesterMail === currentUser.username
+    );
+  } else if (userRole === 'gerente') {
+    allItems = mapped.filter(i =>
+      i.Status === S.APP2 || i.Status === S.APPGER ||
+      i.Status === S.REJGER || i.Status === S.OC
     );
   } else {
     allItems = mapped.filter(i => i.RequesterMail === currentUser.username);
@@ -889,26 +903,26 @@ async function loadItems() {
 // ================================================================
 // NAVIGATION
 // ================================================================
-const VIEWS = ['list','form','detail','dashboard','init'];
+const VIEWS = ['list','form','detail','dashboard','gerente','init'];
 function showView(name) {
   VIEWS.forEach(v=>document.getElementById('view-'+v).classList.add('hidden'));
   document.getElementById('view-'+name).classList.remove('hidden');
-  document.querySelectorAll('.nav-btn').forEach(b=>{
-    b.classList.toggle('active', b.dataset.view===name);
-  });
 }
 
 function buildNav() {
   const nav = document.getElementById('nav');
   const btns = [];
-  btns.push({view:'list',label:'📋 Mis Requisiciones'});
-  btns.push({view:'form',label:'➕ Nueva'});
-  if (userRole==='admin' || userRole==='approver') {
-    btns.push({view:'list',label:'📥 Aprobaciones',extra:'approvals'});
-  }
+  btns.push({view:'list', label:'📋 Mis Requisiciones'});
+  if (userRole !== 'gerente') btns.push({view:'form', label:'➕ Nueva'});
+  if (userRole==='approver') btns.push({view:'list', label:'📥 Aprobaciones N1', extra:'approvals'});
   if (userRole==='admin') {
-    btns.push({view:'dashboard',label:'📊 Análisis'});
-    btns.push({view:'init',label:'⚙ Inicialización'});
+    btns.push({view:'list', label:'📥 Aprobaciones N2', extra:'approvals'});
+    btns.push({view:'gerente', label:'📊 Vista Gerencia'});
+    btns.push({view:'dashboard', label:'📈 Análisis'});
+    btns.push({view:'init', label:'⚙ Inicialización'});
+  }
+  if (userRole==='gerente') {
+    btns.push({view:'gerente', label:'📊 Reporte Gerencia'});
   }
   nav.innerHTML = btns.map(b=>`
     <button class="nav-btn" data-view="${b.view}" data-extra="${b.extra||''}">${b.label}</button>
@@ -917,16 +931,18 @@ function buildNav() {
     btn.addEventListener('click',()=>{
       if (btn.dataset.extra==='approvals') {
         renderList(true);
+        showView('list');
       } else if (btn.dataset.view==='form') {
-        renderForm(null);
+        renderForm(null); showView('form');
       } else if (btn.dataset.view==='dashboard') {
-        renderDashboard();
+        renderDashboard(); showView('dashboard');
       } else if (btn.dataset.view==='init') {
-        renderInit();
+        renderInit(); showView('init');
+      } else if (btn.dataset.view==='gerente') {
+        renderGerenteView(); showView('gerente');
       } else {
-        renderList(false);
+        renderList(false); showView('list');
       }
-      showView(btn.dataset.view);
       document.querySelectorAll('.nav-btn').forEach(x=>x.classList.remove('active'));
       btn.classList.add('active');
     });
@@ -1419,11 +1435,12 @@ function renderDetail(item) {
   const bc = getBadgeClass(item.Status);
   const ub = getUrgencyBadge(item.Urgency);
 
-  const canEdit = canEditDraft(item);
+  const canEdit      = canEditDraft(item);
   const canApproveN1 = (userRole==='approver'||userRole==='admin') && item.Status===S.SENT;
   const canApproveN2 = userRole==='admin' && item.Status===S.APP1;
-  const canAssignOC  = (userRole==='admin'||userRole==='approver') && item.Status===S.APP2;
-  const canReopen    = userRole==='admin' && (item.Status===S.REJ1||item.Status===S.REJ2);
+  const canApproveGer= (userRole==='gerente'||userRole==='admin') && item.Status===S.APP2;
+  const canAssignOC  = (userRole==='admin'||userRole==='approver') && item.Status===S.APPGER;
+  const canReopen    = userRole==='admin' && (item.Status===S.REJ1||item.Status===S.REJ2||item.Status===S.REJGER);
 
   // Line items table
   const linesHtml = lines.map(l=>`
@@ -1443,10 +1460,11 @@ function renderDetail(item) {
 
   // History
   const history = [];
-  if (item.CreatedAt)   history.push({when:item.CreatedAt,   what:`Creada en estado ${item.Status==='Borrador'?'Borrador':'(borrador)'}`});
+  if (item.CreatedAt)   history.push({when:item.CreatedAt,   what:`Creada como Borrador`});
   if (item.SubmittedAt) history.push({when:item.SubmittedAt, what:'Enviada para aprobación N1'});
-  if (item.Lvl1At)      history.push({when:item.Lvl1At,      what:`${item.Status===S.REJ1||item.Status===S.REJ2?'Rechazada':'Aprobada'} N1 por ${item.Lvl1By}${item.Lvl1Note?' — '+item.Lvl1Note:''}`});
+  if (item.Lvl1At)      history.push({when:item.Lvl1At,      what:`${item.Status===S.REJ1?'Rechazada':'Aprobada'} N1 por ${item.Lvl1By}${item.Lvl1Note?' — '+item.Lvl1Note:''}`});
   if (item.Lvl2At)      history.push({when:item.Lvl2At,      what:`${item.Status===S.REJ2?'Rechazada':'Aprobada'} N2 por ${item.Lvl2By}${item.Lvl2Note?' — '+item.Lvl2Note:''}`});
+  if (item.GerAt)       history.push({when:item.GerAt,       what:`${item.Status===S.REJGER?'Rechazada':'Aprobada'} por Gerencia (${item.GerBy})${item.GerNote?' — '+item.GerNote:''}`});
   if (item.OCNumber)    history.push({when:item.OCDate,       what:`OC asignada: ${item.OCNumber} — Comprador: ${item.Buyer}`});
   history.sort((a,b)=>a.when>b.when?1:-1);
   const historyHtml = history.map(h=>`
@@ -1461,7 +1479,8 @@ function renderDetail(item) {
   if (canEdit) actionBtns += `<button class="btn btn-secondary" id="btn-edit-req">✏ Editar</button>`;
   if (canApproveN1) actionBtns += `<button class="btn btn-success" id="btn-appn1">✔ Aprobar N1</button><button class="btn btn-danger" id="btn-rejn1">✖ Rechazar N1</button>`;
   if (canApproveN2) actionBtns += `<button class="btn btn-success" id="btn-appn2">✔ Aprobar N2</button><button class="btn btn-danger" id="btn-rejn2">✖ Rechazar N2</button>`;
-  if (canAssignOC)  actionBtns += `<button class="btn btn-info" id="btn-assign-oc">📄 Asignar OC</button>`;
+  if (canAssignOC)   actionBtns += `<button class="btn btn-info" id="btn-assign-oc">📄 Asignar OC</button>`;
+  if (canApproveGer) actionBtns += `<button class="btn btn-success" id="btn-appger">✔ Aprobar Gerencia</button><button class="btn btn-danger" id="btn-rejger">✖ Rechazar Gerencia</button>`;
   if (canReopen)    actionBtns += `<button class="btn btn-secondary" id="btn-reopen">↩ Reabrir a Borrador</button>`;
 
   // OC section
@@ -1641,11 +1660,11 @@ function renderDetail(item) {
   }
   if (canApproveN2) {
     document.getElementById('btn-appn2').addEventListener('click',()=>{
-      approvalModal('Aprobar — Nivel 2', async(note)=>{
+      approvalModal('Aprobar — Nivel 2 (pasa a Gerencia)', async(note)=>{
         const updated = {...item, Status:S.APP2, Lvl2At:isoNow(), Lvl2By:currentUser.username, Lvl2Note:note};
         await doAction(item, {Status:S.APP2, Lvl2At:isoNow(), Lvl2By:currentUser.username, Lvl2Note:note});
-        await notificar(updated,'✅ Aprobada Nivel 2 — Aguardando OC',note,[item.RequesterMail, ROLES_APPROVER[0]]);
-        toast('Aprobado Nivel 2 — notificación enviada','success');
+        await notificar(updated,'✅ Aprobada N2 — Pendiente aprobación Gerencia',note,[ROLES_GERENTE[0], item.RequesterMail]);
+        toast('Aprobado N2 — enviado a Gerencia para aprobación final','success');
         renderList(false);
       });
     });
@@ -1696,7 +1715,28 @@ function renderDetail(item) {
       }},{label:'Cancelar',cls:'btn-secondary'}]);
     });
   }
-  if (canReopen) {
+  if (canApproveGer) {
+    document.getElementById('btn-appger').addEventListener('click',()=>{
+      approvalModal('Aprobar — Gerencia General', async(note)=>{
+        const fields = {Status:S.APPGER, GerAt:isoNow(), GerBy:currentUser.username, GerNote:note};
+        await doAction(item, fields);
+        const updated = {...item, ...fields};
+        await notificar(updated,'✅ Aprobada por Gerencia — Lista para OC',note,[ROLES_APPROVER[0], ROLES_ADMIN[0], item.RequesterMail]);
+        toast('Aprobado por Gerencia — Nico y Santiago notificados','success');
+        renderList(false);
+      });
+    });
+    document.getElementById('btn-rejger').addEventListener('click',()=>{
+      approvalModal('Rechazar — Gerencia General', async(note)=>{
+        const fields = {Status:S.REJGER, GerAt:isoNow(), GerBy:currentUser.username, GerNote:note};
+        await doAction(item, fields);
+        const updated = {...item, ...fields};
+        await notificar(updated,'Rechazada por Gerencia',note,[item.RequesterMail, ROLES_ADMIN[0]]);
+        toast('Rechazado por Gerencia — notificaciones enviadas','error');
+        renderList(false);
+      });
+    });
+  }
     document.getElementById('btn-reopen').addEventListener('click',async()=>{
       if (!confirm('¿Reabrir esta requisición como Borrador?')) return;
       await doAction(item, {Status:S.DRAFT});
@@ -1738,6 +1778,129 @@ function showModal(bodyHtml, title, buttons=[]) {
       overlay.remove();
     });
   });
+}
+
+// ================================================================
+// VISTA: GERENCIA — Raúl López + Admin
+// ================================================================
+function renderGerenteView() {
+  showView('gerente');
+  const container = document.getElementById('view-gerente');
+  container.innerHTML = `
+    <div class="section-header">
+      <div>
+        <div class="section-title">Reporte Ejecutivo — Gerencia General</div>
+        <div class="section-sub">Requisiciones que requieren aprobación de Gerencia y resumen ejecutivo</div>
+      </div>
+      <div class="ml-auto d-flex">
+        <button class="btn btn-secondary btn-sm" id="ger-refresh">↻ Actualizar</button>
+        <button class="btn btn-secondary btn-sm" id="ger-export">⬇ CSV</button>
+      </div>
+    </div>
+    <div id="ger-loading" class="loading-overlay"><div class="loader"></div> Cargando…</div>
+    <div id="ger-content" class="hidden"></div>
+  `;
+
+  async function load() {
+    document.getElementById('ger-loading').classList.remove('hidden');
+    document.getElementById('ger-content').classList.add('hidden');
+    try {
+      const all = await readDB();
+      const mapped = all.map(mapItem);
+      renderGerContent(mapped);
+    } catch(e) { toast('Error cargando datos: '+e.message,'error'); }
+    finally { document.getElementById('ger-loading').classList.add('hidden'); }
+  }
+
+  function renderGerContent(all) {
+    const pendGer  = all.filter(i=>i.Status===S.APP2);
+    const appGer   = all.filter(i=>i.Status===S.APPGER||i.Status===S.OC);
+    const rejGer   = all.filter(i=>i.Status===S.REJGER);
+    const criticas = all.filter(i=>i.Urgency==='Crítica'&&i.Status===S.APP2);
+
+    function miniTable(items, emptyMsg) {
+      if (!items.length) return `<div class="empty-state" style="padding:24px"><div class="empty-state-icon">📭</div>${emptyMsg}</div>`;
+      return `<div style="overflow-x:auto"><table>
+        <thead><tr><th>N° Req.</th><th>Departamento</th><th>Solicitante</th><th>Urgencia</th><th>Ítems</th><th>Total estimado</th><th>Fecha necesaria</th><th>Justificación</th><th></th></tr></thead>
+        <tbody>${items.map(i=>{
+          const lines = parseLines(i.LinesJSON);
+          const totals = {};
+          lines.forEach(l=>{ totals[l.currency||'ARS']=(totals[l.currency||'ARS']||0)+(l.qty||0)*(l.price||0); });
+          const totalStr = Object.entries(totals).filter(([,v])=>v>0).map(([c,v])=>`${c} ${v.toLocaleString('es-AR',{minimumFractionDigits:2})}`).join(' + ')||'—';
+          const ub = getUrgencyBadge(i.Urgency);
+          const bc = getBadgeClass(i.Status);
+          return `<tr style="cursor:pointer" class="ger-row" data-id="${i._id}">
+            <td><span class="num">${escH(i.Title)}</span></td>
+            <td>${escH(i.Dept)}</td>
+            <td>${escH(i.RequesterName)}</td>
+            <td><span class="badge ${ub}">${escH(i.Urgency)}</span></td>
+            <td>${lines.length}</td>
+            <td class="money" style="font-size:12px">${totalStr}</td>
+            <td>${fmt(i.NeedBy)}</td>
+            <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text2);font-size:12px">${escH(i.Justification).substring(0,80)}</td>
+            <td><button class="btn btn-info btn-xs ger-detail-btn" data-id="${i._id}">Ver detalle</button></td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table></div>`;
+    }
+
+    const dc = document.getElementById('ger-content');
+    dc.innerHTML = `
+      <!-- KPIs Gerencia -->
+      <div class="kpi-grid" style="margin-bottom:24px">
+        <div class="kpi"><div class="kpi-label">Pendientes mi aprobación</div><div class="kpi-value text-yellow">${pendGer.length}</div></div>
+        <div class="kpi"><div class="kpi-label">Críticas pendientes</div><div class="kpi-value text-red">${criticas.length}</div></div>
+        <div class="kpi"><div class="kpi-label">Aprobadas por Gerencia</div><div class="kpi-value text-green">${appGer.length}</div></div>
+        <div class="kpi"><div class="kpi-label">Rechazadas por Gerencia</div><div class="kpi-value">${rejGer.length}</div></div>
+      </div>
+
+      <!-- Pendientes -->
+      ${pendGer.length?`<div style="background:rgba(212,160,23,.08);border:1px solid rgba(212,160,23,.3);border-radius:4px;padding:10px 16px;margin-bottom:16px;font-size:13px;color:var(--yellow)">
+        ⏳ Hay <strong>${pendGer.length}</strong> requisición(es) esperando su aprobación
+        ${criticas.length?` — <strong>${criticas.length} CRÍTICA(S)</strong>`:''}</div>`:''}
+
+      <div class="card mb-4">
+        <div class="section-title" style="font-size:14px;margin-bottom:14px">🔔 Pendientes de Aprobación Gerencia</div>
+        ${miniTable(pendGer,'No hay requisiciones pendientes de su aprobación')}
+      </div>
+
+      <div class="card mb-4">
+        <div class="section-title" style="font-size:14px;margin-bottom:14px">✅ Aprobadas por Gerencia (con o sin OC)</div>
+        ${miniTable(appGer,'Sin requisiciones aprobadas aún')}
+      </div>
+
+      ${rejGer.length?`<div class="card mb-4">
+        <div class="section-title" style="font-size:14px;margin-bottom:14px">✖ Rechazadas por Gerencia</div>
+        ${miniTable(rejGer,'')}
+      </div>`:''}
+    `;
+    dc.classList.remove('hidden');
+
+    // Row clicks → detail
+    dc.querySelectorAll('.ger-row,.ger-detail-btn').forEach(el=>{
+      el.addEventListener('click', e=>{
+        const id = el.dataset.id;
+        const found = all.find(i=>i._id===id);
+        if (found) { renderDetail(found); showView('detail'); }
+      });
+    });
+  }
+
+  document.getElementById('ger-refresh').addEventListener('click', load);
+  document.getElementById('ger-export').addEventListener('click', async()=>{
+    const all = (await readDB()).map(mapItem).filter(i=>
+      i.Status===S.APP2||i.Status===S.APPGER||i.Status===S.REJGER||i.Status===S.OC
+    );
+    exportCSV(all.map(i=>({
+      Numero:i.Title,Dept:i.Dept,Solicitante:i.RequesterName,Urgencia:i.Urgency,
+      Estado:i.Status,Justificacion:i.Justification,FechaNecesaria:fmt(i.NeedBy),
+      AprobadoN2Por:i.Lvl2By,FechaAprobN2:fmtDT(i.Lvl2At),
+      AprobadoGerPor:i.GerBy||'',FechaAprobGer:fmtDT(i.GerAt||''),NotaGer:i.GerNote||'',
+      OC:i.OCNumber,Comprador:i.Buyer
+    })), `ReporteGerencia_${new Date().toISOString().slice(0,10)}.csv`);
+  });
+
+  load();
 }
 
 // ================================================================
@@ -2117,10 +2280,11 @@ async function initApp(account) {
   const email = (account.username||'').toLowerCase();
   if (ROLES_ADMIN.map(r=>r.toLowerCase()).includes(email))    userRole='admin';
   else if (ROLES_APPROVER.map(r=>r.toLowerCase()).includes(email)) userRole='approver';
+  else if (ROLES_GERENTE.map(r=>r.toLowerCase()).includes(email))  userRole='gerente';
   else userRole='user';
 
   document.getElementById('user-name').textContent = account.name || account.username;
-  document.getElementById('user-role').textContent = {admin:'Administrador',approver:'Aprobador N1',user:'Usuario'}[userRole];
+  document.getElementById('user-role').textContent = {admin:'Administrador',approver:'Aprobador N1',gerente:'Gerente General',user:'Usuario'}[userRole];
   document.getElementById('login-screen').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
 
@@ -2135,7 +2299,12 @@ async function initApp(account) {
 
   buildNav();
   fetchTC();
-  renderList(false);
+  if (userRole === 'gerente') {
+    renderGerenteView();
+    showView('gerente');
+  } else {
+    renderList(false);
+  }
 }
 
 bootstrap().catch(e=>console.error('Bootstrap error:',e.message));
