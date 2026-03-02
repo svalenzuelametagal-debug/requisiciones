@@ -540,8 +540,10 @@ async function getToken() {
 }
 
 // ================================================================
-// ALMACENAMIENTO COMPARTIDO — endpoint /shares/ de Graph API
+// ALMACENAMIENTO COMPARTIDO — OneDrive del Admin (Santiago)
 // ================================================================
+// Estos valores se completan en el paso de Inicialización (solo admin)
+// y quedan grabados en localStorage para todos los usuarios.
 const DB_PATH = '/Documents/Requisiciones-Adjuntos/data/requisiciones.json';
 
 function getCfg() {
@@ -551,27 +553,21 @@ function saveCfg(obj) {
   localStorage.setItem('mgal_cfg', JSON.stringify({...getCfg(),...obj}));
 }
 
-function encodeSharingUrl(sharingUrl) {
-  const b64 = btoa(sharingUrl).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
-  return 'u!' + b64;
-}
-
+// Lee usando driveId+itemId del archivo compartido (o fallback a /me/drive si no está configurado)
 async function readDB() {
   const token = await getToken();
   const cfg = getCfg();
   let url;
-  if (cfg.sharingUrl) {
-    url = `https://graph.microsoft.com/v1.0/shares/${encodeSharingUrl(cfg.sharingUrl)}/driveItem/content`;
+  if (cfg.driveId && cfg.itemId) {
+    url = `https://graph.microsoft.com/v1.0/drives/${cfg.driveId}/items/${cfg.itemId}/content`;
   } else {
+    // No configurado aún — solo funciona para el admin
     url = `https://graph.microsoft.com/v1.0/me/drive/root:${DB_PATH}:/content`;
   }
   try {
     const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
     if (res.status === 404) return [];
-    if (!res.ok) {
-      const e = await res.json().catch(()=>({}));
-      throw new Error(`Error ${res.status}: ${e?.error?.message||'leyendo base de datos'}`);
-    }
+    if (!res.ok) throw new Error(`Error ${res.status} leyendo base de datos`);
     return await res.json();
   } catch(e) {
     if (e.message.includes('404') || e.message.includes('itemNotFound')) return [];
@@ -584,21 +580,11 @@ async function writeDB(data) {
   const cfg = getCfg();
   let url;
   if (cfg.sharingUrl) {
-    if (!cfg.driveId || !cfg.itemId) {
-      const metaRes = await fetch(`https://graph.microsoft.com/v1.0/shares/${encodeSharingUrl(cfg.sharingUrl)}/driveItem`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (!metaRes.ok) {
-        const e = await metaRes.json().catch(()=>({}));
-        throw new Error('Sin acceso al archivo compartido: ' + (e?.error?.message||metaRes.status) + '. Pedile a Santiago el link de activacion.');
-      }
-      const meta = await metaRes.json();
-      saveCfg({ driveId: meta.parentReference.driveId, itemId: meta.id });
-      cfg.driveId = meta.parentReference.driveId;
-      cfg.itemId  = meta.id;
-    }
-    url = `https://graph.microsoft.com/v1.0/drives/${cfg.driveId}/items/${cfg.itemId}/content`;
+    // Usar el endpoint /shares/ para escribir — funciona para cualquier usuario
+    // con el link de edicion de la organizacion, sin permisos adicionales
+    url = `https://graph.microsoft.com/v1.0/shares/${encodeSharingUrl(cfg.sharingUrl)}/driveItem/content`;
   } else {
+    // Admin sin configurar — escribe en su propio drive
     url = `https://graph.microsoft.com/v1.0/me/drive/root:${DB_PATH}:/content`;
   }
   const res = await fetch(url, {
@@ -613,52 +599,75 @@ async function writeDB(data) {
   return res.json();
 }
 
+// Crea carpetas en el OneDrive del admin y devuelve driveId + itemId para compartir
 async function ensureDBFolder() {
   const token = await getToken();
-  for (const p of ['/Documents/Requisiciones-Adjuntos','/Documents/Requisiciones-Adjuntos/data']) {
-    const check = await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:${p}`, { headers:{Authorization:`Bearer ${token}`} });
+  const paths = [
+    '/Documents/Requisiciones-Adjuntos',
+    '/Documents/Requisiciones-Adjuntos/data'
+  ];
+  for (const p of paths) {
+    const check = await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:${p}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
     if (!check.ok) {
-      const parts=p.split('/'); const name=parts.pop(); const parent=parts.join('/')||'/';
+      const parts = p.split('/'); const name = parts.pop();
+      const parent = parts.join('/') || '/';
       await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:${parent}:/children`, {
-        method:'POST', headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},
-        body:JSON.stringify({name,folder:{}, '@microsoft.graph.conflictBehavior':'replace'})
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, folder:{}, '@microsoft.graph.conflictBehavior':'replace' })
       });
     }
   }
 }
 
+// Crea el archivo JSON, lo comparte con la organización y devuelve driveId+itemId
 async function setupSharedStorage() {
   const token = await getToken();
+
+  // 1. Crear carpetas
   await ensureDBFolder();
 
-  const fileCheck = await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:${DB_PATH}:/content`, { headers:{Authorization:`Bearer ${token}`} });
+  // 2. Crear archivo JSON vacío si no existe
+  const fileCheck = await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:${DB_PATH}:/content`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
   if (!fileCheck.ok) {
     await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:${DB_PATH}:/content`, {
-      method:'PUT', headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'}, body:'[]'
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: '[]'
     });
   }
 
-  const itemRes = await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:${DB_PATH}`, { headers:{Authorization:`Bearer ${token}`} });
+  // 3. Obtener el driveItem del archivo
+  const itemRes = await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:${DB_PATH}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
   if (!itemRes.ok) throw new Error('No se pudo obtener el archivo');
   const item = await itemRes.json();
   const driveId = item.parentReference.driveId;
   const itemId  = item.id;
 
+  // 4. Crear link de compartir con toda la organización (edición)
   const shareRes = await fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${itemId}/createLink`, {
-    method:'POST', headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},
-    body:JSON.stringify({ type:'edit', scope:'organization' })
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'edit', scope: 'organization' })
   });
   if (!shareRes.ok) {
     const e = await shareRes.json().catch(()=>({}));
-    throw new Error('Error creando link: ' + (e?.error?.message||shareRes.status));
+    throw new Error('Error creando link compartido: ' + (e?.error?.message||shareRes.status));
   }
-  const shareData = await shareRes.json();
-  const sharingUrl = shareData.link.webUrl;
 
-  saveCfg({ driveId, itemId, sharingUrl });
-  return { driveId, itemId, sharingUrl };
+  // 5. Guardar config en localStorage de este usuario
+  saveCfg({ driveId, itemId });
+
+  return { driveId, itemId };
 }
 
+// ── Reemplazos de API ──────────────────────────────────────────
 async function listItems()          { return await readDB(); }
 async function createItem(fields)   { const d=await readDB(); const n={id:Date.now().toString(),...fields}; d.push(n); await writeDB(d); return n; }
 async function updateItem(id,fields){ const d=await readDB(); const i=d.findIndex(x=>x.id===id); if(i===-1) throw new Error('No encontrada'); d[i]={...d[i],...fields}; await writeDB(d); return d[i]; }
@@ -2754,7 +2763,7 @@ function renderInit() {
   showView('init');
   const container = document.getElementById('view-init');
   const cfg = getCfg();
-  const isConfigured = !!(cfg.sharingUrl);
+  const isConfigured = !!(cfg.driveId && cfg.itemId);
 
   container.innerHTML = `
     <div class="section-header">
@@ -2764,7 +2773,7 @@ function renderInit() {
 
     ${isConfigured ? `<div style="background:rgba(46,168,107,.1);border:1px solid rgba(46,168,107,.3);border-radius:4px;padding:10px 16px;margin-bottom:16px;font-size:13px;color:var(--green)">
       ✔ Tu navegador está configurado correctamente para acceder al archivo compartido.<br/>
-      <span style="font-size:11px;color:var(--text2);font-family:var(--mono)">sharingUrl configurado correctamente</span>
+      <span style="font-size:11px;color:var(--text2);font-family:var(--mono)">driveId: ${cfg.driveId.substring(0,20)}…</span>
     </div>` : `<div style="background:rgba(232,160,32,.1);border:1px solid rgba(232,160,32,.3);border-radius:4px;padding:10px 16px;margin-bottom:16px;font-size:13px;color:var(--accent)">
       ⚠ Este navegador todavía no está conectado al archivo compartido. Ejecutá el Paso 1.
     </div>`}
@@ -2881,9 +2890,7 @@ function renderInit() {
 }
 
 function generateActivationUrl(cfg) {
-  // sharingUrl es lo que los otros usuarios necesitan para leer y escribir
-  const payload = JSON.stringify({ driveId: cfg.driveId, itemId: cfg.itemId, sharingUrl: cfg.sharingUrl });
-  const encoded = encodeURIComponent(btoa(unescape(encodeURIComponent(payload))));
+  const encoded = btoa(JSON.stringify({ driveId: cfg.driveId, itemId: cfg.itemId }));
   const base = window.location.href.split('?')[0].split('#')[0];
   return `${base}?activar=${encoded}`;
 }
@@ -2899,19 +2906,14 @@ async function bootstrap() {
     const params = new URLSearchParams(window.location.search);
     if (params.get('activar')) {
       try {
-        const raw = decodeURIComponent(params.get('activar'));
-        const cfg = JSON.parse(decodeURIComponent(escape(atob(raw))));
-        if (cfg.sharingUrl) {
-          saveCfg({ driveId: cfg.driveId||null, itemId: cfg.itemId||null, sharingUrl: cfg.sharingUrl });
+        const cfg = JSON.parse(atob(params.get('activar')));
+        if (cfg.driveId && cfg.itemId) {
+          saveCfg({ driveId: cfg.driveId, itemId: cfg.itemId });
+          // Limpiar la URL
           window.history.replaceState({}, '', window.location.pathname);
-          showLoginScreen();
-          const errEl = document.getElementById('login-err');
-          errEl.style.cssText = 'color:var(--green);background:rgba(46,168,107,.1);border:1px solid rgba(46,168,107,.3);border-radius:4px;padding:10px 14px;margin-top:12px';
-          errEl.textContent = '\u2714 Activacion exitosa! Ya podes iniciar sesion y ver todas las requisiciones.';
-          errEl.classList.remove('hidden');
-          return;
+          toast('✔ Configuración activada — ya podés ver todas las requisiciones', 'success');
         }
-      } catch(e) { console.warn('Link de activacion invalido:', e); }
+      } catch(e) { console.warn('Link de activación inválido', e); }
     }
 
     if (window.location.protocol === 'file:') {
