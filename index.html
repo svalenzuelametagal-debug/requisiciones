@@ -955,13 +955,8 @@ function exportCSV(rows, filename) {
 async function loadItems() {
   const rawItems = await readDB();
   const mapped = rawItems.map(mapItem);
-  if (userRole==='admin') {
-    allItems = mapped;
-  } else if (userRole==='approver') {
-    allItems = mapped.filter(i=>
-      i.Status===S.SENT||i.Status===S.APPFIN||i.Status===S.APP2NOGER||
-      i.RequesterMail===currentUser.username
-    );
+  if (userRole==='admin' || userRole==='approver') {
+    allItems = mapped; // ven todas
   } else if (userRole==='gerente') {
     allItems = mapped.filter(i=>
       [S.APP2,S.APPGER,S.REJGER,S.APPFIN,S.OC].includes(i.Status)
@@ -990,7 +985,8 @@ function buildNav() {
   const email = (currentUser?.username||'').toLowerCase();
   const canCreate = !ROLES_NO_CREATE.map(r=>r.toLowerCase()).includes(email);
   const btns = [];
-  btns.push({view:'list', label:'📋 Mis Requisiciones'});
+  const listaLabel = (userRole==='admin'||userRole==='approver') ? '📋 Todas las Requisiciones' : '📋 Mis Requisiciones';
+  btns.push({view:'list', label:listaLabel});
   if (canCreate) btns.push({view:'form', label:'➕ Nueva'});
   if (userRole==='approver') btns.push({view:'list', label:'📥 Aprobaciones N1', extra:'approvals'});
   if (userRole==='finanzas') btns.push({view:'finanzas', label:'💰 Vista Finanzas'});
