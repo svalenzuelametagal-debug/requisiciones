@@ -127,7 +127,7 @@ const msal = {
   }
 };
 </script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
 <style>
 :root {
   --bg0: #0d0f11;
@@ -360,7 +360,7 @@ tr:hover td{background:var(--bg2)}
 <!-- ============================================================ -->
 <!-- LOGIN SCREEN                                                   -->
 <!-- ============================================================ -->
-<div id="login-screen" class="hidden">
+<div id="login-screen">
   <div class="login-card">
     <div id="login-logo-wrap">
       <img id="login-logo-img" src="./metagal_logo.png" alt="Metagal" style="height:48px;margin-bottom:12px" onerror="this.style.display='none';document.getElementById('login-logo-txt').style.display='block'"/>
@@ -521,7 +521,7 @@ let userRole    = 'user';  // 'admin' | 'approver' | 'user'
 
 
 let allItems    = [];
-let tcData      = {mayorista:'—', minorista:'—'};
+let tcData      = {mayorista:'—', minorista:'—'}; // legacy compat
 
 // ================================================================
 // AUTH
@@ -1956,174 +1956,349 @@ function showModal(bodyHtml, title, buttons=[]) {
 function renderFinanzasView() {
   showView('finanzas');
   const container = document.getElementById('view-finanzas');
+  const hoy = new Date().toISOString().slice(0,10);
+  const primerDiaMes = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0,10);
+
   container.innerHTML = `
     <div class="section-header">
       <div>
         <div class="section-title">Vista Finanzas</div>
-        <div class="section-sub">Requisiciones aprobadas por Gerencia — análisis por cuenta contable y resumen financiero</div>
+        <div class="section-sub">Análisis por cuenta contable y moneda — requisiciones aprobadas por Gerencia</div>
       </div>
       <div class="ml-auto d-flex">
         <button class="btn btn-secondary btn-sm" id="fin-refresh">↻ Actualizar</button>
-        <button class="btn btn-secondary btn-sm" id="fin-export">⬇ CSV</button>
       </div>
     </div>
+
+    <!-- Filtros de fecha -->
+    <div class="card" style="padding:14px 20px;margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+        <div style="font-size:13px;font-weight:600;color:var(--text1);min-width:80px">Período:</div>
+        <div style="display:flex;align-items:center;gap:8px;flex:1;flex-wrap:wrap">
+          <label style="font-size:12px;color:var(--text2);text-transform:none;font-weight:400;margin:0">Desde</label>
+          <input type="date" id="fin-desde" value="${primerDiaMes}" style="width:150px;margin:0"/>
+          <label style="font-size:12px;color:var(--text2);text-transform:none;font-weight:400;margin:0">Hasta</label>
+          <input type="date" id="fin-hasta" value="${hoy}" style="width:150px;margin:0"/>
+          <button class="btn btn-primary btn-sm" id="fin-aplicar">Aplicar filtro</button>
+          <button class="btn btn-secondary btn-sm" id="fin-todo">Ver todo</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="font-size:12px;color:var(--text2)">TC Venta:</div>
+          <div style="font-size:12px;font-family:var(--mono);color:var(--accent)">
+            USD $${tcManual.usd_venta?Number(tcManual.usd_venta).toLocaleString('es-AR',{minimumFractionDigits:2}):'—'}
+            &nbsp;|&nbsp; EUR $${tcManual.eur_venta?Number(tcManual.eur_venta).toLocaleString('es-AR',{minimumFractionDigits:2}):'—'}
+          </div>
+          <button class="btn btn-secondary btn-xs" id="fin-tc-edit" title="Editar TC">✎ TC</button>
+        </div>
+        <button class="btn btn-secondary btn-sm" id="fin-export">⬇ Exportar CSV</button>
+      </div>
+    </div>
+
     <div id="fin-loading" class="loading-overlay"><div class="loader"></div> Cargando…</div>
     <div id="fin-content" class="hidden"></div>
   `;
+
+  let allData = [];
+  let filtroDesde = null;
+  let filtroHasta = null;
 
   async function load() {
     document.getElementById('fin-loading').classList.remove('hidden');
     document.getElementById('fin-content').classList.add('hidden');
     try {
-      const all = (await readDB()).map(mapItem);
-      renderContent(all);
+      allData = (await readDB()).map(mapItem);
+      aplicarFiltro();
     } catch(e) { toast('Error: '+e.message,'error'); }
     finally { document.getElementById('fin-loading').classList.add('hidden'); }
   }
 
-  function renderContent(all) {
-    // Finanzas ve: pendientes su aprobación + historial aprobadas/rechazadas
-    const pending  = all.filter(i=>i.Status===S.APPGER);
-    const approved = all.filter(i=>[S.APPFIN,S.OC].includes(i.Status));
-    const rejected = all.filter(i=>i.Status===S.REJFIN);
+  function aplicarFiltro(desde, hasta) {
+    filtroDesde = desde || null;
+    filtroHasta = hasta || null;
+    renderContent(allData, filtroDesde, filtroHasta);
+  }
 
-    // Totales por cuenta contable (de las aprobadas por finanzas + OC)
-    const byGL = {};
-    const byCurrency = {};
-    approved.forEach(item=>{
-      const gl = item.GLAccount||'Sin cuenta GL';
-      if (!byGL[gl]) byGL[gl] = {items:[], totals:{}};
-      byGL[gl].items.push(item);
+  // Calcula totales por moneda de los ítems de una lista de requisiciones
+  function calcTotales(items) {
+    const t = {ARS:0, USD:0, EUR:0};
+    items.forEach(item=>{
       parseLines(item.LinesJSON).forEach(l=>{
         const c = l.currency||'ARS';
-        const v = (l.qty||0)*(l.price||0);
-        byGL[gl].totals[c] = (byGL[gl].totals[c]||0) + v;
-        byCurrency[c] = (byCurrency[c]||0) + v;
+        if (t[c]!==undefined) t[c] += (l.qty||0)*(l.price||0);
       });
     });
+    return t;
+  }
 
-    // TC para conversión
-    const usdV = parseFloat(tcManual.usd_venta)||null;
-    const eurV = parseFloat(tcManual.eur_venta)||null;
+  // Calcula equivalente ARS usando TC cargado
+  function toARS(totales) {
+    const usdV = parseFloat(tcManual.usd_venta)||0;
+    const eurV = parseFloat(tcManual.eur_venta)||0;
+    return totales.ARS + totales.USD*usdV + totales.EUR*eurV;
+  }
 
-    // KPI totals
-    let totalARS = byCurrency['ARS']||0;
-    if (usdV) totalARS += (byCurrency['USD']||0)*usdV;
-    if (eurV) totalARS += (byCurrency['EUR']||0)*eurV;
+  function fmt2(n) { return n.toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 
-    function moneyStr(totals) {
-      return Object.entries(totals).filter(([,v])=>v>0)
-        .map(([c,v])=>`<span class="money">${c} ${v.toLocaleString('es-AR',{minimumFractionDigits:2})}</span>`)
-        .join(' + ')||'—';
-    }
+  function monedaCeldas(totales) {
+    return `
+      <td class="money" style="font-size:12px">${totales.ARS>0?'$'+fmt2(totales.ARS):'—'}</td>
+      <td class="money" style="font-size:12px;color:${totales.USD>0?'#4caf8a':'var(--text2)'}">${totales.USD>0?'U$S '+fmt2(totales.USD):'—'}</td>
+      <td class="money" style="font-size:12px;color:${totales.EUR>0?'#5b8dee':'var(--text2)'}">${totales.EUR>0?'€ '+fmt2(totales.EUR):'—'}</td>
+      <td class="money" style="font-size:12px;color:var(--accent);font-weight:600">${(tcManual.usd_venta||tcManual.eur_venta)?'$'+fmt2(toARS(totales)):'—'}</td>`;
+  }
 
-    // GL breakdown table
-    const glRows = Object.entries(byGL).sort((a,b)=>{
-      const totA = Object.values(a[1].totals).reduce((s,v)=>s+v,0);
-      const totB = Object.values(b[1].totals).reduce((s,v)=>s+v,0);
-      return totB - totA;
-    }).map(([gl, data])=>`
-      <tr>
-        <td style="font-family:var(--mono);font-weight:600;color:var(--accent)">${escH(gl)}</td>
-        <td style="text-align:center">${data.items.length}</td>
-        <td>${moneyStr(data.totals)}</td>
-        <td style="font-size:11px;color:var(--text2)">${data.items.map(i=>escH(i.Dept)).filter((v,i,a)=>a.indexOf(v)===i).join(', ')}</td>
-      </tr>`).join('');
+  function renderContent(all, desde, hasta) {
+    // Filtrar por fecha de creación
+    let filtrados = all.filter(i=>[S.APPGER,S.APPFIN,S.REJFIN,S.OC].includes(i.Status));
+    if (desde) filtrados = filtrados.filter(i=>(i.CreatedAt||i.SubmittedAt||'').slice(0,10)>=desde);
+    if (hasta) filtrados = filtrados.filter(i=>(i.CreatedAt||i.SubmittedAt||'').slice(0,10)<=hasta);
 
-    function pendingTable(items) {
-      if (!items.length) return `<div class="empty-state" style="padding:20px"><div class="empty-state-icon">📭</div>Sin requisiciones pendientes</div>`;
+    const pending  = filtrados.filter(i=>i.Status===S.APPGER);
+    const approved = filtrados.filter(i=>[S.APPFIN,S.OC].includes(i.Status));
+    const rejected = filtrados.filter(i=>i.Status===S.REJFIN);
+
+    const totPend = calcTotales(pending);
+    const totAppr = calcTotales(approved);
+
+    // Por cuenta contable
+    const byGL = {};
+    approved.forEach(item=>{
+      const gl = item.GLAccount||'Sin cuenta GL';
+      if (!byGL[gl]) byGL[gl] = {items:[]};
+      byGL[gl].items.push(item);
+    });
+
+    const glRows = Object.entries(byGL)
+      .sort((a,b)=>toARS(calcTotales(b[1].items))-toARS(calcTotales(a[1].items)))
+      .map(([gl,data])=>{
+        const t = calcTotales(data.items);
+        const depts = [...new Set(data.items.map(i=>i.Dept))].join(', ');
+        return `<tr>
+          <td style="font-family:var(--mono);font-weight:600;color:var(--accent);font-size:13px">${escH(gl)}</td>
+          <td style="text-align:center;font-size:13px">${data.items.length}</td>
+          ${monedaCeldas(t)}
+          <td style="font-size:11px;color:var(--text2)">${escH(depts)}</td>
+        </tr>`;
+      }).join('');
+
+    // Tabla de requisiciones con columnas por moneda
+    function reqTable(items, showApproval=false) {
+      if (!items.length) return `<div class="empty-state" style="padding:20px"><div class="empty-state-icon">📭</div>Sin requisiciones en este período</div>`;
       return `<div style="overflow-x:auto"><table>
-        <thead><tr><th>N° Req.</th><th>Dpto</th><th>Solicitante</th><th>Cuenta GL</th><th>Urgencia</th><th>Total estimado</th><th>Nota Gerencia</th><th>Aprobado por Gerencia</th><th></th></tr></thead>
+        <thead><tr>
+          <th>N° Req.</th><th>Dpto</th><th>Solicitante</th><th>Cuenta GL</th><th>Urg.</th>
+          <th style="text-align:right">ARS</th>
+          <th style="text-align:right">USD</th>
+          <th style="text-align:right">EUR</th>
+          <th style="text-align:right;color:var(--accent)">Equiv. ARS</th>
+          ${showApproval?'<th>Aprobó Finanzas</th>':'<th>Nota Gerencia</th>'}
+          <th></th>
+        </tr></thead>
         <tbody>${items.map(i=>{
-          const lines = parseLines(i.LinesJSON);
-          const totals = {};
-          lines.forEach(l=>{const c=l.currency||'ARS';totals[c]=(totals[c]||0)+(l.qty||0)*(l.price||0);});
+          const t = calcTotales([i]);
+          const arsEquiv = toARS(t);
           return `<tr>
-            <td><span class="num">${escH(i.Title)}</span>${i.GLCorregido?` <span style="font-size:10px;background:rgba(212,160,23,.2);color:var(--yellow);padding:1px 5px;border-radius:8px">GL corregido</span>`:''}${i.RequiereGerencia?` <span style="font-size:10px;background:rgba(46,168,107,.2);color:var(--green);padding:1px 5px;border-radius:8px">🏢 Ger.</span>`:''}</td>
+            <td><span class="num" style="font-size:12px">${escH(i.Title)}</span>
+              ${i.GLCorregido?`<br/><span style="font-size:10px;background:rgba(212,160,23,.2);color:var(--yellow);padding:1px 5px;border-radius:8px">GL corregido</span>`:''}
+              ${i.RequiereGerencia?`<br/><span style="font-size:10px;background:rgba(46,168,107,.2);color:var(--green);padding:1px 5px;border-radius:8px">🏢 Ger.</span>`:''}
+            </td>
             <td style="font-size:12px">${escH(i.Dept)}</td>
             <td style="font-size:12px">${escH(i.RequesterName)}</td>
             <td style="font-family:var(--mono);font-size:12px;color:var(--accent)">${escH(i.GLAccount||'—')}</td>
-            <td><span class="badge ${getUrgencyBadge(i.Urgency)}">${escH(i.Urgency)}</span></td>
-            <td style="font-size:12px">${moneyStr(totals)}</td>
-            <td style="font-size:11px;color:var(--text2);max-width:160px">${escH(i.GerNote||'—').substring(0,80)}</td>
-            <td style="font-size:11px;color:var(--text2)">${i.GerBy?i.GerBy.split('@')[0]:''}<br/>${fmtDT(i.GerAt)}</td>
+            <td><span class="badge ${getUrgencyBadge(i.Urgency)}" style="font-size:10px">${escH(i.Urgency)}</span></td>
+            <td class="money" style="font-size:12px">${t.ARS>0?'$'+fmt2(t.ARS):'—'}</td>
+            <td class="money" style="font-size:12px;color:${t.USD>0?'#4caf8a':'var(--text2)'}">${t.USD>0?'U$S '+fmt2(t.USD):'—'}</td>
+            <td class="money" style="font-size:12px;color:${t.EUR>0?'#5b8dee':'var(--text2)'}">${t.EUR>0?'€ '+fmt2(t.EUR):'—'}</td>
+            <td class="money" style="font-size:12px;font-weight:600;color:var(--accent)">${(tcManual.usd_venta||tcManual.eur_venta)?'$'+fmt2(arsEquiv):'—'}</td>
+            <td style="font-size:11px;color:var(--text2)">
+              ${showApproval
+                ? (i.FinBy?i.FinBy.split('@')[0]+'<br/>'+fmtDT(i.FinAt):'—')
+                : escH((i.GerNote||'—').substring(0,60))}
+            </td>
             <td><button class="btn btn-info btn-xs fin-detail-btn" data-id="${i._id}">Ver →</button></td>
           </tr>`;
-        }).join('')}</tbody>
+        }).join('')}
+        <!-- Fila de totales -->
+        <tr style="background:var(--bg3);font-weight:700;border-top:2px solid var(--border)">
+          <td colspan="5" style="font-size:12px;color:var(--text2)">TOTAL (${items.length} requisiciones)</td>
+          <td class="money" style="font-size:13px">${calcTotales(items).ARS>0?'$'+fmt2(calcTotales(items).ARS):'—'}</td>
+          <td class="money" style="font-size:13px;color:#4caf8a">${calcTotales(items).USD>0?'U$S '+fmt2(calcTotales(items).USD):'—'}</td>
+          <td class="money" style="font-size:13px;color:#5b8dee">${calcTotales(items).EUR>0?'€ '+fmt2(calcTotales(items).EUR):'—'}</td>
+          <td class="money" style="font-size:13px;color:var(--accent)">${(tcManual.usd_venta||tcManual.eur_venta)?'$'+fmt2(toARS(calcTotales(items))):'—'}</td>
+          <td colspan="2"></td>
+        </tr>
+        </tbody>
       </table></div>`;
     }
 
+    const periodoStr = desde||hasta ? `${desde?'desde '+desde:''} ${hasta?'hasta '+hasta:''}` : 'todos los registros';
+    const usdV = tcManual.usd_venta; const eurV = tcManual.eur_venta;
+
     const dc = document.getElementById('fin-content');
     dc.innerHTML = `
-      <!-- KPIs Finanzas -->
-      <div class="kpi-grid" style="margin-bottom:24px">
-        <div class="kpi"><div class="kpi-label">Pendientes mi aprobación</div><div class="kpi-value text-yellow">${pending.length}</div></div>
-        <div class="kpi"><div class="kpi-label">Aprobadas por Finanzas</div><div class="kpi-value text-green">${approved.length}</div></div>
-        <div class="kpi"><div class="kpi-label">Con OC Asignada</div><div class="kpi-value text-accent">${all.filter(i=>i.Status===S.OC).length}</div></div>
-        <div class="kpi"><div class="kpi-label">Total aprobado (ARS equiv.)</div><div class="kpi-value" style="font-size:16px">${totalARS?'$'+totalARS.toLocaleString('es-AR',{minimumFractionDigits:0,maximumFractionDigits:0}):'—'}</div><div class="kpi-sub">${usdV?`TC USD: $${Number(usdV).toLocaleString('es-AR')}`:'Sin TC cargado'}</div></div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:12px">
+        Mostrando: <strong>${filtrados.length}</strong> requisiciones — ${periodoStr}
+        ${usdV||eurV ? ` &nbsp;·&nbsp; TC: ${usdV?'USD $'+fmt2(Number(usdV)):''}${eurV?' | EUR $'+fmt2(Number(eurV)):''}` : ' &nbsp;·&nbsp; <span style="color:var(--yellow)">⚠ Sin TC cargado — clic en "✎ TC" para ingresar</span>'}
       </div>
 
-      ${pending.length?`<div style="background:rgba(212,160,23,.08);border:1px solid rgba(212,160,23,.3);border-radius:4px;padding:10px 16px;margin-bottom:16px;font-size:13px;color:var(--yellow)">⏳ Hay <strong>${pending.length}</strong> requisición(es) esperando su aprobación de Finanzas</div>`:''}
-
-      <!-- Pendientes Finanzas -->
-      <div class="card mb-4">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-          <div class="section-title" style="font-size:14px">🔔 Pendientes de Aprobación Finanzas</div>
+      <!-- KPIs -->
+      <div class="kpi-grid" style="margin-bottom:20px">
+        <div class="kpi"><div class="kpi-label">Pendientes Finanzas</div><div class="kpi-value text-yellow">${pending.length}</div></div>
+        <div class="kpi"><div class="kpi-label">Total ARS (pendientes)</div>
+          <div style="margin-top:4px">
+            ${totPend.ARS>0?`<div style="font-size:13px;font-family:var(--mono)">ARS $${fmt2(totPend.ARS)}</div>`:''}
+            ${totPend.USD>0?`<div style="font-size:13px;font-family:var(--mono);color:#4caf8a">USD ${fmt2(totPend.USD)}</div>`:''}
+            ${totPend.EUR>0?`<div style="font-size:13px;font-family:var(--mono);color:#5b8dee">EUR ${fmt2(totPend.EUR)}</div>`:''}
+            ${!totPend.ARS&&!totPend.USD&&!totPend.EUR?`<div class="kpi-value">—</div>`:''}
+          </div>
         </div>
-        ${pendingTable(pending)}
+        <div class="kpi"><div class="kpi-label">Aprobadas (período)</div><div class="kpi-value text-green">${approved.length}</div></div>
+        <div class="kpi"><div class="kpi-label">Comprometido aprobado</div>
+          <div style="margin-top:4px">
+            ${totAppr.ARS>0?`<div style="font-size:13px;font-family:var(--mono)">ARS $${fmt2(totAppr.ARS)}</div>`:''}
+            ${totAppr.USD>0?`<div style="font-size:13px;font-family:var(--mono);color:#4caf8a">USD ${fmt2(totAppr.USD)}</div>`:''}
+            ${totAppr.EUR>0?`<div style="font-size:13px;font-family:var(--mono);color:#5b8dee">EUR ${fmt2(totAppr.EUR)}</div>`:''}
+            ${usdV||eurV?`<div style="font-size:12px;color:var(--accent);font-weight:600;margin-top:4px">≈ ARS $${fmt2(toARS(totAppr))}</div>`:''}
+            ${!totAppr.ARS&&!totAppr.USD&&!totAppr.EUR?`<div class="kpi-value">—</div>`:''}
+          </div>
+        </div>
       </div>
 
-      <!-- Por Cuenta Contable -->
-      ${Object.keys(byGL).length?`
+      ${pending.length?`<div style="background:rgba(212,160,23,.08);border:1px solid rgba(212,160,23,.3);border-radius:4px;padding:10px 16px;margin-bottom:16px;font-size:13px;color:var(--yellow)">
+        ⏳ <strong>${pending.length}</strong> requisición(es) esperando aprobación de Finanzas
+      </div>`:''}
+
+      <!-- Pendientes -->
       <div class="card mb-4">
-        <div class="section-title" style="font-size:14px;margin-bottom:14px">📊 Compromisos por Cuenta Contable (aprobadas)</div>
+        <div class="section-title" style="font-size:14px;margin-bottom:14px">🔔 Pendientes de Aprobación Finanzas</div>
+        ${reqTable(pending, false)}
+      </div>
+
+      <!-- Por Cuenta Contable (aprobadas) -->
+      ${approved.length?`
+      <div class="card mb-4">
+        <div class="section-title" style="font-size:14px;margin-bottom:14px">📊 Comprometido por Cuenta Contable — aprobadas</div>
         <div style="overflow-x:auto"><table>
-          <thead><tr><th>Cuenta GL</th><th style="text-align:center">Req.</th><th>Total estimado</th><th>Departamentos</th></tr></thead>
-          <tbody>${glRows}</tbody>
+          <thead><tr>
+            <th>Cuenta GL</th>
+            <th style="text-align:center">Req.</th>
+            <th style="text-align:right">ARS</th>
+            <th style="text-align:right">USD</th>
+            <th style="text-align:right">EUR</th>
+            <th style="text-align:right;color:var(--accent)">Equiv. ARS</th>
+            <th>Departamentos</th>
+          </tr></thead>
+          <tbody>${glRows}
+          <!-- Total GL -->
+          <tr style="background:var(--bg3);font-weight:700;border-top:2px solid var(--border)">
+            <td style="font-size:12px;color:var(--text2)">TOTAL</td>
+            <td style="text-align:center">${approved.length}</td>
+            ${monedaCeldas(totAppr)}
+            <td></td>
+          </tr>
+          </tbody>
         </table></div>
       </div>`:''}
 
-      <!-- Historial aprobadas -->
+      <!-- Aprobadas -->
       <div class="card mb-4">
         <div class="section-title" style="font-size:14px;margin-bottom:14px">✅ Aprobadas por Finanzas (${approved.length})</div>
-        ${pendingTable(approved)}
+        ${reqTable(approved, true)}
       </div>
 
       ${rejected.length?`
       <div class="card mb-4">
         <div class="section-title" style="font-size:14px;margin-bottom:14px">✖ Rechazadas por Finanzas (${rejected.length})</div>
-        ${pendingTable(rejected)}
+        ${reqTable(rejected, false)}
       </div>`:''}
     `;
     dc.classList.remove('hidden');
 
     dc.querySelectorAll('.fin-detail-btn').forEach(btn=>{
       btn.addEventListener('click',()=>{
-        const found = all.find(i=>i._id===btn.dataset.id);
+        const found = allData.find(i=>i._id===btn.dataset.id);
         if (found) { renderDetail(found); showView('detail'); }
       });
     });
   }
 
-  document.getElementById('fin-refresh').addEventListener('click', load);
-  document.getElementById('fin-export').addEventListener('click', async()=>{
-    const all = (await readDB()).map(mapItem).filter(i=>[S.APPGER,S.APPFIN,S.REJFIN,S.OC].includes(i.Status));
+  // Export CSV fecha a fecha
+  function doExport(desde, hasta) {
+    const usdV = parseFloat(tcManual.usd_venta)||0;
+    const eurV = parseFloat(tcManual.eur_venta)||0;
+    let items = allData.filter(i=>[S.APPGER,S.APPFIN,S.REJFIN,S.OC].includes(i.Status));
+    if (desde) items = items.filter(i=>(i.CreatedAt||i.SubmittedAt||'').slice(0,10)>=desde);
+    if (hasta) items = items.filter(i=>(i.CreatedAt||i.SubmittedAt||'').slice(0,10)<=hasta);
+
     const rows = [];
-    all.forEach(item=>{
+    // Encabezado con metadatos del reporte
+    rows.push({
+      Numero:'REPORTE FINANZAS', Departamento:`Período: ${desde||'inicio'} al ${hasta||'hoy'}`,
+      Solicitante:'', Estado:'', CuentaGL:'',CentroCosto:'',
+      TotalARS:'',TotalUSD:'',TotalEUR:'',
+      TC_USD_Venta:usdV||'', TC_EUR_Venta:eurV||'',
+      EquivARS:'',Descripcion:'',Cantidad:'',Unidad:'',Moneda:'',PrecioUnit:'',TotalLinea:'',
+      GLCorregido:'',NotaGerencia:'',AprobadoGer:'',FechaGer:'',AprobadoFin:'',FechaFin:'',OC:'',Comprador:''
+    });
+
+    items.forEach(item=>{
+      const t = calcTotales([item]);
+      const arsEquiv = t.ARS + t.USD*usdV + t.EUR*eurV;
       const lines = parseLines(item.LinesJSON);
-      lines.forEach(l=>{
+      lines.forEach((l,idx)=>{
         rows.push({
-          Numero:item.Title, Departamento:item.Dept, Solicitante:item.RequesterName,
-          Estado:item.Status, CuentaGL:item.GLAccount||'', CentroCosto:item.CostCenter||'',
-          Descripcion:l.desc, Cantidad:l.qty, Unidad:l.unit, Moneda:l.currency, PrecioUnit:l.price,
-          TotalLinea:(l.qty||0)*(l.price||0), NotaGerencia:item.GerNote||'',
-          AprobadoGer:item.GerBy||'', FechaGer:fmtDT(item.GerAt),
-          AprobadoFin:item.FinBy||'', FechaFin:fmtDT(item.FinAt||''),
-          OC:item.OCNumber||'', Comprador:item.Buyer||''
+          Numero:        idx===0?item.Title:'',
+          Departamento:  idx===0?item.Dept:'',
+          Solicitante:   idx===0?item.RequesterName:'',
+          Estado:        idx===0?item.Status:'',
+          CuentaGL:      idx===0?item.GLAccount||'':'',
+          CentroCosto:   idx===0?item.CostCenter||'':'',
+          TotalARS:      idx===0&&t.ARS>0?t.ARS:'',
+          TotalUSD:      idx===0&&t.USD>0?t.USD:'',
+          TotalEUR:      idx===0&&t.EUR>0?t.EUR:'',
+          TC_USD_Venta:  idx===0&&usdV?usdV:'',
+          TC_EUR_Venta:  idx===0&&eurV?eurV:'',
+          EquivARS:      idx===0&&(usdV||eurV)?arsEquiv:'',
+          Descripcion:   l.desc,
+          Cantidad:      l.qty,
+          Unidad:        l.unit,
+          Moneda:        l.currency||'ARS',
+          PrecioUnit:    l.price,
+          TotalLinea:    (l.qty||0)*(l.price||0),
+          GLCorregido:   idx===0&&item.GLCorregido?'SÍ':'',
+          NotaGerencia:  idx===0?item.GerNote||'':'',
+          AprobadoGer:   idx===0?item.GerBy||'':'',
+          FechaGer:      idx===0?fmtDT(item.GerAt):'',
+          AprobadoFin:   idx===0?item.FinBy||'':'',
+          FechaFin:      idx===0?fmtDT(item.FinAt||''):'',
+          OC:            idx===0?item.OCNumber||'':'',
+          Comprador:     idx===0?item.Buyer||'':''
         });
       });
     });
-    exportCSV(rows, `Finanzas_${new Date().toISOString().slice(0,10)}.csv`);
+
+    const fname = `Finanzas_${desde||'inicio'}_al_${hasta||hoy}.csv`;
+    exportCSV(rows, fname);
+    toast(`CSV exportado — ${items.length} requisiciones`, 'success');
+  }
+
+  // Eventos
+  document.getElementById('fin-refresh').addEventListener('click', load);
+  document.getElementById('fin-tc-edit').addEventListener('click', showTCEditor);
+  document.getElementById('fin-aplicar').addEventListener('click',()=>{
+    const desde = document.getElementById('fin-desde').value;
+    const hasta = document.getElementById('fin-hasta').value;
+    aplicarFiltro(desde||null, hasta||null);
+  });
+  document.getElementById('fin-todo').addEventListener('click',()=>{
+    document.getElementById('fin-desde').value='';
+    document.getElementById('fin-hasta').value='';
+    aplicarFiltro(null,null);
+  });
+  document.getElementById('fin-export').addEventListener('click',()=>{
+    const desde = document.getElementById('fin-desde').value||null;
+    const hasta = document.getElementById('fin-hasta').value||null;
+    doExport(desde, hasta);
   });
 
   load();
@@ -2270,17 +2445,33 @@ function renderDashboard() {
     <div id="dash-content" class="hidden"></div>
   `;
 
+  // Cargar Chart.js solo cuando se necesita
+  function loadChartJS(cb) {
+    if (window.Chart) { cb(); return; }
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js';
+    s.onload = cb;
+    s.onerror = () => {
+      // CDN bloqueado — mostrar igual sin gráficos
+      window.Chart = null;
+      cb();
+    };
+    document.head.appendChild(s);
+  }
+
   async function load() {
     document.getElementById('dash-loading').classList.remove('hidden');
     document.getElementById('dash-content').classList.add('hidden');
-    try {
-      await loadItems();
-      renderDashContent();
-    } catch(e) {
-      toast('Error cargando análisis: '+e.message,'error');
-    } finally {
-      document.getElementById('dash-loading').classList.add('hidden');
-    }
+    loadChartJS(async () => {
+      try {
+        await loadItems();
+        renderDashContent();
+      } catch(e) {
+        toast('Error cargando análisis: '+e.message,'error');
+      } finally {
+        document.getElementById('dash-loading').classList.add('hidden');
+      }
+    });
   }
 
   function renderDashContent() {
@@ -2393,6 +2584,7 @@ function renderDashboard() {
     });
 
     // Chart colors
+    if (window.Chart) {
     const CHART_COLORS = ['#3a8fd4','#e8a020','#2ea86b','#d94040','#e0621a','#a060d4','#40b0c8'];
     const chartDefaults = {
       plugins:{legend:{labels:{color:'#b0bac6',font:{family:'IBM Plex Sans',size:11}}}},
@@ -2470,6 +2662,12 @@ function renderDashboard() {
         }
       }
     });
+    } else {
+      ['ch-status','ch-dept','ch-month'].forEach(id=>{
+        const el = document.getElementById(id);
+        if (el && el.parentElement) el.parentElement.innerHTML = '<div style="color:var(--text2);font-size:12px;padding:20px;text-align:center">Gráficos no disponibles (red bloqueó Chart.js)<br/>Los datos de la tabla siguen disponibles.</div>';
+      });
+    }
   }
 
   function showDrillModal(title, rows) {
@@ -2580,46 +2778,57 @@ function renderInit() {
 // BOOTSTRAP
 // ================================================================
 async function bootstrap() {
-  document.getElementById('footer-year').textContent = new Date().getFullYear();
+  try {
+    document.getElementById('footer-year').textContent = new Date().getFullYear();
 
-  // Detectar si se abre desde archivo local (no funciona, necesita HTTPS)
-  if (window.location.protocol === 'file:') {
-    document.getElementById('login-screen').classList.remove('hidden');
-    document.getElementById('login-err').textContent =
-      '⚠ El archivo está abierto desde tu computadora. Debés subirlo a OneDrive y abrirlo desde ahí con el link de SharePoint (https://...).';
-    document.getElementById('login-err').classList.remove('hidden');
-    document.getElementById('btn-login').disabled = true;
-    document.getElementById('btn-login').textContent = 'Abrí el archivo desde OneDrive';
-    return;
-  }
+    if (window.location.protocol === 'file:') {
+      showLoginScreen();
+      document.getElementById('login-err').textContent =
+        '⚠ El archivo está abierto desde tu computadora. Subilo a GitHub y abrilo desde la URL (https://...).';
+      document.getElementById('login-err').classList.remove('hidden');
+      document.getElementById('btn-login').disabled = true;
+      document.getElementById('btn-login').textContent = 'Abrí la URL de GitHub Pages';
+      return;
+    }
 
-  await msalInstance.initialize();
-  // Handle redirect
-  await msalInstance.handleRedirectPromise().catch(()=>{});
+    await msalInstance.initialize();
+    await msalInstance.handleRedirectPromise().catch(()=>{});
 
-  const accounts = msalInstance.getAllAccounts();
-  if (accounts.length) {
-    await initApp(accounts[0]);
-  } else {
+    const accounts = msalInstance.getAllAccounts();
+    if (accounts.length) {
+      await initApp(accounts[0]);
+    } else {
+      showLoginScreen();
+    }
+  } catch(e) {
+    console.error('Bootstrap error:', e);
     showLoginScreen();
+    const errEl = document.getElementById('login-err');
+    if (errEl) {
+      errEl.textContent = 'Error al iniciar la aplicación: ' + (e.message||'Error desconocido') + '. Recargá la página.';
+      errEl.classList.remove('hidden');
+    }
   }
 }
 
 function showLoginScreen() {
   document.getElementById('login-screen').classList.remove('hidden');
   document.getElementById('app').classList.add('hidden');
-  document.getElementById('btn-login').addEventListener('click', async()=>{
-    const btn = document.getElementById('btn-login');
-    btn.disabled=true; btn.textContent='Conectando…';
+  const btn = document.getElementById('btn-login');
+  // Evitar duplicar el listener
+  const newBtn = btn.cloneNode(true);
+  btn.parentNode.replaceChild(newBtn, btn);
+  newBtn.addEventListener('click', async()=>{
+    newBtn.disabled=true; newBtn.textContent='Conectando…';
     const errEl = document.getElementById('login-err');
     errEl.classList.add('hidden');
     try {
       const res = await msalInstance.loginPopup({scopes:GRAPH_SCOPES});
       await initApp(res.account);
     } catch(e) {
-      errEl.textContent = 'Error al iniciar sesión. Verificá tu cuenta corporativa.';
+      errEl.textContent = 'Error: ' + (e.message||'No se pudo iniciar sesión') + '. Verificá que los popups estén permitidos para este sitio.';
       errEl.classList.remove('hidden');
-      btn.disabled=false; btn.textContent='🔑 Iniciar sesión con Microsoft 365';
+      newBtn.disabled=false; newBtn.textContent='🔑 Iniciar sesión con Microsoft 365';
     }
   });
 }
