@@ -887,7 +887,10 @@ function fmtDT(date) {
   } catch{return '—';}
 }
 function isoNow() { return new Date().toISOString(); }
-function escH(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function deaccent(s) {
+  return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'');
+}
+function escH(s){ return deaccent(String(s||'')).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 function getBadgeClass(status) {
   return STATUS_BADGE[status] || 'badge-draft';
@@ -899,18 +902,24 @@ function getUrgencyBadge(u) {
   return 'badge-normal';
 }
 
+// Normaliza acentos que vienen de Microsoft/OneDrive
+function normalizeStr(s) {
+  if (!s) return '';
+  return String(s).normalize('NFD').replace(/[̀-ͯ]/g,'');
+}
+
 function mapItem(raw) {
   return {
     _id:          raw.id || raw._id || '',
     Title:        raw.Title||'',
-    Dept:         raw.Dept||'',
-    RequesterName:raw.RequesterName||'',
+    Dept:         normalizeStr(raw.Dept||''),
+    RequesterName:normalizeStr(raw.RequesterName||''),
     RequesterMail:raw.RequesterMail||'',
     GLAccount:    raw.GLAccount||'',
     CostCenter:   raw.CostCenter||'',
-    Urgency:      raw.Urgency||'Normal',
-    Justification:raw.Justification||'',
-    Vendor:       raw.Vendor||'',
+    Urgency:      normalizeStr(raw.Urgency||'Normal'),
+    Justification:normalizeStr(raw.Justification||''),
+    Vendor:       normalizeStr(raw.Vendor||''),
     NeedBy:       raw.NeedBy||'',
     Status:       raw.Status||S.DRAFT,
     LinesJSON:    raw.LinesJSON||'[]',
@@ -1146,6 +1155,7 @@ function renderList(approvalsMode=false) {
         <td>${escH(i.RequesterName)}</td>
         <td><span class="badge ${ub}">${escH(i.Urgency)}</span></td>
         <td><span class="badge ${bc}">${escH(i.Status)}</span></td>
+        <td style="font-family:var(--mono);font-size:12px">${i.OCNumber?`<span style="color:var(--accent);font-weight:700">${escH(i.OCNumber)}</span><br/><span style="font-size:10px;color:var(--text2)">${escH(i.Buyer||'')}`:'<span style="color:var(--text2)">—</span>'}</td>
         <td>${lines.length} item(s)</td>
         <td>${fmt(i.NeedBy)}</td>
         <td>${fmt(i.CreatedAt)}</td>
@@ -1160,21 +1170,18 @@ function renderList(approvalsMode=false) {
       <div style="overflow-x:auto">
       <table>
         <thead><tr>
-          <th>N° Req.</th><th>Departamento</th><th>Solicitante</th><th>Urgencia</th><th>Estado</th><th>Items</th><th>Fecha necesaria</th><th>Creada</th><th>Justificacion</th><th></th>
+          <th>N° Req.</th><th>Departamento</th><th>Solicitante</th><th>Urgencia</th><th>Estado</th><th>OC</th><th>Items</th><th>Fecha necesaria</th><th>Creada</th><th>Justificacion</th><th></th>
         </tr></thead>
         <tbody id="list-tbody">${rows}</tbody>
       </table>
       </div>`;
     wrap.classList.remove('hidden');
     wrap.querySelectorAll('.req-row').forEach(r=>{
-      r.addEventListener('dblclick',()=>{
-        const item = allItems.find(i=>i._id===r.dataset.id);
-        if (item) { renderDetail(item); showView('detail'); }
-      });
+      r.style.cursor='pointer';
       r.addEventListener('click',e=>{
         if (e.target.closest('button')) return;
-        wrap.querySelectorAll('.req-row').forEach(x=>x.style.background='');
-        r.style.background='var(--bg3)';
+        const item = allItems.find(i=>i._id===r.dataset.id);
+        if (item) { renderDetail(item); showView('detail'); }
       });
     });
     wrap.querySelectorAll('.btn-edit-row').forEach(b=>{
@@ -2125,7 +2132,7 @@ function renderFinanzasView() {
         <tbody>${items.map(i=>{
           const t = calcTotales([i]);
           const arsEquiv = toARS(t);
-          return `<tr>
+          return `<tr data-fin-id="${i._id}" style="cursor:pointer">
             <td><span class="num" style="font-size:12px">${escH(i.Title)}</span>
               ${i.GLCorregido?`<br/><span style="font-size:10px;background:rgba(212,160,23,.2);color:var(--yellow);padding:1px 5px;border-radius:8px">GL corregido</span>`:''}
               ${i.RequiereGerencia?`<br/><span style="font-size:10px;background:rgba(46,168,107,.2);color:var(--green);padding:1px 5px;border-radius:8px">🏢 Ger.</span>`:''}
@@ -2143,7 +2150,7 @@ function renderFinanzasView() {
                 ? (i.FinBy?i.FinBy.split('@')[0]+'<br/>'+fmtDT(i.FinAt):'—')
                 : escH((i.GerNote||'—').substring(0,60))}
             </td>
-            <td><button class="btn btn-info btn-xs fin-detail-btn" data-id="${i._id}">Ver →</button></td>
+            <td><button class="btn btn-primary btn-xs fin-detail-btn" data-id="${i._id}" style="white-space:nowrap">Ver / Aprobar →</button></td>
           </tr>`;
         }).join('')}
         <!-- Fila de totales -->
@@ -2242,9 +2249,20 @@ function renderFinanzasView() {
     `;
     dc.classList.remove('hidden');
 
-    dc.querySelectorAll('.fin-detail-btn').forEach(btn=>{
-      btn.addEventListener('click',()=>{
-        const found = allData.find(i=>i._id===btn.dataset.id);
+    dc.querySelectorAll('.fin-detail-btn,.fin-row').forEach(el=>{
+      el.addEventListener('click',(e)=>{
+        if (e.target.tagName==='BUTTON' && !e.target.classList.contains('fin-detail-btn')) return;
+        const id = el.dataset.id || el.closest('[data-id]')?.dataset.id;
+        const found = allData.find(i=>i._id===id);
+        if (found) { renderDetail(found); showView('detail'); setTimeout(()=>{
+          const approveBtn = document.getElementById('btn-approve-fin');
+          if (approveBtn) approveBtn.scrollIntoView({behavior:'smooth',block:'center'});
+        },200); }
+      });
+    });
+    dc.querySelectorAll('tr[data-fin-id]').forEach(row=>{
+      row.addEventListener('dblclick',()=>{
+        const found = allData.find(i=>i._id===row.dataset.finId);
         if (found) { renderDetail(found); showView('detail'); }
       });
     });
@@ -2390,7 +2408,7 @@ function renderGerenteView() {
             <td class="money" style="font-size:12px">${totalStr}</td>
             <td>${fmt(i.NeedBy)}</td>
             <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text2);font-size:12px">${escH(i.Justification).substring(0,80)}</td>
-            <td><button class="btn btn-info btn-xs ger-detail-btn" data-id="${i._id}">Ver detalle</button></td>
+            <td><button class="btn btn-primary btn-xs ger-detail-btn" data-id="${i._id}" style="white-space:nowrap">Ver / Aprobar →</button></td>
           </tr>`;
         }).join('')}</tbody>
       </table></div>`;
@@ -2430,11 +2448,11 @@ function renderGerenteView() {
 
     // Row clicks → detail
     dc.querySelectorAll('.ger-row,.ger-detail-btn').forEach(el=>{
-      el.addEventListener('click', e=>{
+      ['click','dblclick'].forEach(evt=>el.addEventListener(evt, ()=>{
         const id = el.dataset.id;
         const found = all.find(i=>i._id===id);
         if (found) { renderDetail(found); showView('detail'); }
-      });
+      }));
     });
   }
 
