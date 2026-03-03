@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0"/>
 <title>Metagal Argentina · Requisiciones de Compra</title>
 <script>
-// ── Implementacion OAuth2 PKCE embebida (sin dependencias externas) ──
+// ── Implementación OAuth2 PKCE embebida (sin dependencias externas) ──
 const msal = {
   PublicClientApplication: class {
     constructor(cfg) {
@@ -62,7 +62,7 @@ const msal = {
         state,nonce,code_challenge:chal,code_challenge_method:'S256',prompt:'select_account'
       });
       const popup = window.open(authUrl,'_msal_popup','width=520,height=680,scrollbars=yes,resizable=yes');
-      if (!popup) throw new Error('El navegador bloqueo la ventana emergente. Permitilas para este sitio.');
+      if (!popup) throw new Error('El navegador bloqueó la ventana emergente. Permitilas para este sitio.');
       return new Promise((res,rej)=>{
         const tid = setInterval(async()=>{
           try {
@@ -79,7 +79,7 @@ const msal = {
               try { popup.close(); } catch{}
               if (err) { rej(new Error(u.searchParams.get('error_description')||err)); return; }
               const saved = sessionStorage.getItem(this._sk+'_st');
-              if (saved && st2 && saved!==st2) { rej(new Error('State mismatch — intenta de nuevo')); return; }
+              if (saved && st2 && saved!==st2) { rej(new Error('State mismatch — intentá de nuevo')); return; }
               try { const r = await this._exchange(code, scopes); res(r); }
               catch(e) { rej(e); }
             }
@@ -334,7 +334,7 @@ tr:hover td{background:var(--bg2)}
 .detail-label{color:var(--text2);min-width:160px;flex-shrink:0}
 .detail-value{color:var(--text0)}
 .urgency-banner{padding:8px 14px;border-radius:var(--radius);margin-bottom:16px;font-size:13px;font-weight:500}
-.urgency-Critica{background:rgba(217,64,64,.15);color:var(--red);border:1px solid rgba(217,64,64,.3)}
+.urgency-Crítica{background:rgba(217,64,64,.15);color:var(--red);border:1px solid rgba(217,64,64,.3)}
 .urgency-Alta{background:rgba(224,98,26,.15);color:var(--orange);border:1px solid rgba(224,98,26,.3)}
 .attach-list{display:flex;flex-direction:column;gap:6px}
 .attach-item{display:flex;align-items:center;gap:8px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:6px 12px;font-size:12px}
@@ -367,9 +367,9 @@ tr:hover td{background:var(--bg2)}
       <img id="login-logo-img" src="./metagal_logo.png" alt="Metagal" style="height:48px;margin-bottom:12px" onerror="this.style.display='none';document.getElementById('login-logo-txt').style.display='block'"/>
       <div id="login-logo-txt" class="login-logo" style="display:none">Metagal Argentina</div>
     </div>
-    <div class="login-sub">Gestion de Requisiciones</div>
-    <div class="login-title">Ingresa con tu cuenta corporativa</div>
-    <button id="btn-login" class="btn">🔑 Iniciar sesion con Microsoft 365</button>
+    <div class="login-sub">Gestión de Requisiciones</div>
+    <div class="login-title">Ingresá con tu cuenta corporativa</div>
+    <button id="btn-login" class="btn">🔑 Iniciar sesión con Microsoft 365</button>
     <div id="login-err" class="login-err hidden"></div>
   </div>
 </div>
@@ -418,7 +418,7 @@ tr:hover td{background:var(--bg2)}
 <!-- ============================================================ -->
 <script>
 // ================================================================
-// CONFIGURACION — MODIFICAR ANTES DE DESPLEGAR
+// CONFIGURACIÓN — MODIFICAR ANTES DE DESPLEGAR
 // ================================================================
 const CFG = {
   CLIENT_ID:             '8ba4118c-32a3-4efe-ad21-9a0ce819eebe',
@@ -439,26 +439,26 @@ const ROLES_FINANZAS = ['cbetti@metagal.com.ar','dgrageda@metagal.com.ar','mbian
 // Estos roles no pueden crear requisiciones
 const ROLES_NO_CREATE = ['rlopez@metagal.com.ar','cbetti@metagal.com.ar'];
 
-// Destinatarios sugeridos para aprobacion de Finanzas
+// Destinatarios sugeridos para aprobación de Finanzas
 const FINANZAS_SUGERIDOS = [
-  {mail:'cbetti@metagal.com.ar',    nombre:'Cristina Betti — Gerente Finanzas y Administracion'},
-  {mail:'dgrageda@metagal.com.ar',  nombre:'Diego Grageda — Jefe de Finanzas'},
-  {mail:'mbianchi@metagal.com.ar',  nombre:'Maria Bianchi — Jefa de Contabilidad'},
-  {mail:'nconte@metagal.com.ar',    nombre:'Nicolas Conte — Aprobador N1'},
+  {mail:'cbetti@metagal.com.ar',    nombre:'Cristina Betti — Gerente Finanzas y Administración'},
+  {mail:'dgrageda@metagal.com.ar',  nombre:'Diego Grágeda — Jefe de Finanzas'},
+  {mail:'mbianchi@metagal.com.ar',  nombre:'María Bianchi — Jefa de Contabilidad'},
+  {mail:'nconte@metagal.com.ar',    nombre:'Nicolás Conte — Aprobador N1'},
   {mail:'svalenzuela@metagal.com.ar',nombre:'Santiago Valenzuela — Admin'},
 ];
 
 const DEPARTMENTS = [
   {name:'Mantenimiento', code:'MANT'},
   {name:'Manufactura',   code:'MANU'},
-  {name:'Logistica',     code:'LOG'},
+  {name:'Logística',     code:'LOG'},
   {name:'PCP',           code:'PCP'},
-  {name:'Ingenieria',    code:'ING'},
+  {name:'Ingeniería',    code:'ING'},
   {name:'Compras',       code:'COMP'},
-  {name:'Administracion',code:'ADM'},
+  {name:'Administración',code:'ADM'},
   {name:'RRHH',          code:'RRHH'},
-  {name:'Direccion',     code:'DIR'},
-  {name:'Inyeccion',     code:'INY'},
+  {name:'Dirección',     code:'DIR'},
+  {name:'Inyección',     code:'INY'},
   {name:'Finanzas',      code:'FIN'},
   {name:'Gerencia',      code:'GER'},
   {name:'Calidad',       code:'CAL'},
@@ -512,7 +512,6 @@ const msalInstance = new msal.PublicClientApplication(msalConfig);
 
 const GRAPH_SCOPES = [
   'User.Read',
-  'Files.ReadWrite',
   'Mail.Send',
 ];
 
@@ -540,12 +539,10 @@ async function getToken() {
 }
 
 // ================================================================
+// ALMACENAMIENTO — GitHub API
 // ================================================================
-// ALMACENAMIENTO — GitHub API como base de datos
-// ================================================================
-// Santiago crea un repo privado en GitHub, genera un PAT (token),
-// y todos los usuarios leen/escriben el mismo archivo JSON.
-// No requiere IT, no requiere admin consent, funciona para todos.
+// Santiago configura repo+token en Init y genera link de activacion.
+// Todos los usuarios leen/escriben el mismo JSON via GitHub API.
 
 const DB_GITHUB_FILE = 'requisiciones.json';
 
@@ -555,10 +552,9 @@ function getCfg() {
 function saveCfg(obj) {
   localStorage.setItem('mgal_cfg', JSON.stringify({...getCfg(),...obj}));
 }
-
 function githubHeaders(token) {
   return {
-    'Authorization': `token ${token}`,
+    'Authorization': 'token ' + token,
     'Accept': 'application/vnd.github.v3+json',
     'Content-Type': 'application/json'
   };
@@ -566,13 +562,13 @@ function githubHeaders(token) {
 
 async function readDB() {
   const cfg = getCfg();
-  if (!cfg.ghToken || !cfg.ghRepo) throw new Error('Storage no configurado. Pedile a Santiago el link de activacion.');
-  const url = `https://api.github.com/repos/${cfg.ghRepo}/contents/${DB_GITHUB_FILE}`;
+  if (!cfg.ghToken || !cfg.ghRepo) throw new Error('Sin configuracion. Pedile a Santiago el link de activacion.');
+  const url = 'https://api.github.com/repos/' + cfg.ghRepo + '/contents/' + DB_GITHUB_FILE;
   const res = await fetch(url, { headers: githubHeaders(cfg.ghToken) });
   if (res.status === 404) return [];
   if (!res.ok) {
     const e = await res.json().catch(()=>({}));
-    throw new Error(`GitHub ${res.status}: ${e.message||'error leyendo datos'}`);
+    throw new Error('GitHub ' + res.status + ': ' + (e.message||'error leyendo datos'));
   }
   const data = await res.json();
   return JSON.parse(atob(data.content.replace(/\n/g,'')));
@@ -580,89 +576,54 @@ async function readDB() {
 
 async function writeDB(data) {
   const cfg = getCfg();
-  if (!cfg.ghToken || !cfg.ghRepo) throw new Error('Storage no configurado.');
-  const url = `https://api.github.com/repos/${cfg.ghRepo}/contents/${DB_GITHUB_FILE}`;
-
-  // Necesitamos el SHA actual para hacer PUT
+  if (!cfg.ghToken || !cfg.ghRepo) throw new Error('Sin configuracion.');
+  const url = 'https://api.github.com/repos/' + cfg.ghRepo + '/contents/' + DB_GITHUB_FILE;
   let sha = null;
   const getRes = await fetch(url, { headers: githubHeaders(cfg.ghToken) });
-  if (getRes.ok) {
-    const existing = await getRes.json();
-    sha = existing.sha;
-  } else if (getRes.status !== 404) {
+  if (getRes.ok) { sha = (await getRes.json()).sha; }
+  else if (getRes.status !== 404) {
     const e = await getRes.json().catch(()=>({}));
-    throw new Error(`GitHub ${getRes.status}: ${e.message||'error'}`);
+    throw new Error('GitHub ' + getRes.status + ': ' + (e.message||'error'));
   }
-
   const content = btoa(unescape(encodeURIComponent(JSON.stringify(data, null, 2))));
-  const body = { message: 'update requisiciones', content };
+  const body = { message: 'update', content };
   if (sha) body.sha = sha;
-
-  const res = await fetch(url, {
-    method: 'PUT',
-    headers: githubHeaders(cfg.ghToken),
-    body: JSON.stringify(body)
-  });
+  const res = await fetch(url, { method:'PUT', headers:githubHeaders(cfg.ghToken), body:JSON.stringify(body) });
   if (!res.ok) {
     const e = await res.json().catch(()=>({}));
-    throw new Error(`GitHub ${res.status}: ${e.message||'error guardando datos'}`);
+    throw new Error('GitHub ' + res.status + ': ' + (e.message||'error guardando'));
   }
   return res.json();
 }
 
 async function setupGitHubStorage(ghToken, ghRepo) {
-  // Verificar acceso al repo
-  const repoRes = await fetch(`https://api.github.com/repos/${ghRepo}`, {
-    headers: githubHeaders(ghToken)
-  });
+  const repoRes = await fetch('https://api.github.com/repos/' + ghRepo, { headers: githubHeaders(ghToken) });
   if (!repoRes.ok) {
     const e = await repoRes.json().catch(()=>({}));
-    throw new Error(`No se pudo acceder al repositorio: ${e.message||repoRes.status}`);
+    throw new Error('No se pudo acceder al repo: ' + (e.message||repoRes.status));
   }
-
-  // Crear archivo inicial si no existe
-  const fileRes = await fetch(`https://api.github.com/repos/${ghRepo}/contents/${DB_GITHUB_FILE}`, {
-    headers: githubHeaders(ghToken)
-  });
+  const fileRes = await fetch(
+    'https://api.github.com/repos/' + ghRepo + '/contents/' + DB_GITHUB_FILE,
+    { headers: githubHeaders(ghToken) }
+  );
   if (fileRes.status === 404) {
-    const content = btoa('[]');
-    await fetch(`https://api.github.com/repos/${ghRepo}/contents/${DB_GITHUB_FILE}`, {
-      method: 'PUT',
-      headers: githubHeaders(ghToken),
-      body: JSON.stringify({ message: 'init requisiciones', content })
+    await fetch('https://api.github.com/repos/' + ghRepo + '/contents/' + DB_GITHUB_FILE, {
+      method: 'PUT', headers: githubHeaders(ghToken),
+      body: JSON.stringify({ message: 'init', content: btoa('[]') })
     });
   }
-
   saveCfg({ ghToken, ghRepo });
   return { ghToken, ghRepo };
 }
 
-// ── CRUD ──────────────────────────────────────────────────────
-async function listItems()          { return await readDB(); }
-async function createItem(fields)   { const d=await readDB(); const n={id:Date.now().toString(),...fields}; d.push(n); await writeDB(d); return n; }
-async function updateItem(id,fields){ const d=await readDB(); const i=d.findIndex(x=>x.id===id); if(i===-1) throw new Error('No encontrada'); d[i]={...d[i],...fields}; await writeDB(d); return d[i]; }
-async function deleteItem(id)       { await writeDB((await readDB()).filter(x=>x.id!==id)); }
+// CRUD
+async function listItems()           { return await readDB(); }
+async function createItem(fields)    { const d=await readDB(); const n={id:Date.now().toString(),...fields}; d.push(n); await writeDB(d); return n; }
+async function updateItem(id,fields) { const d=await readDB(); const i=d.findIndex(x=>x.id===id); if(i<0) throw new Error('No encontrada'); d[i]={...d[i],...fields}; await writeDB(d); return d[i]; }
+async function deleteItem(id)        { await writeDB((await readDB()).filter(x=>x.id!==id)); }
 
-async function ensureFolder(folderPath) {
-  const token = await getToken();
-  const check = await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:${folderPath}`, { headers:{Authorization:`Bearer ${token}`} });
-  if (check.ok) return;
-  const parts=folderPath.split('/'); const name=parts.pop(); const parent=parts.join('/')||'/';
-  await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:${parent}:/children`, {
-    method:'POST', headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},
-    body:JSON.stringify({name,folder:{}, '@microsoft.graph.conflictBehavior':'replace'})
-  });
-}
 
-async function uploadFile(folderPath, file) {
-  const token = await getToken();
-  const url = `https://graph.microsoft.com/v1.0/me/drive/root:${folderPath}/${encodeURIComponent(file.name)}:/content`;
-  const res = await fetch(url, {
-    method:'PUT', headers:{Authorization:`Bearer ${token}`,'Content-Type':file.type||'application/octet-stream'}, body:file
-  });
-  if (!res.ok) { const e=await res.json().catch(()=>({})); throw new Error(e?.error?.message||'Error subiendo archivo'); }
-  return res.json();
-}
+
 
 async function graphReq(method, url, body = null) {
   const token = await getToken();
@@ -721,7 +682,7 @@ function buildMailHTML(item, accion, nota) {
       ${nota?`<div style="background:#fff3cd;border:1px solid #ffc107;border-radius:4px;padding:10px 14px;font-size:13px;margin-bottom:16px;color:#856404"><strong>Nota:</strong> ${nota}</div>`:''}
       <div style="background:#f9f9f9;border-radius:4px;padding:16px;margin-bottom:20px">
         <table style="width:100%;border-collapse:collapse">
-          <tr><td style="padding:5px 0;color:#888;font-size:12px;width:140px">N° Requisicion</td><td style="padding:5px 0;font-weight:700;font-family:monospace">${item.Title}</td></tr>
+          <tr><td style="padding:5px 0;color:#888;font-size:12px;width:140px">N° Requisición</td><td style="padding:5px 0;font-weight:700;font-family:monospace">${item.Title}</td></tr>
           <tr><td style="padding:5px 0;color:#888;font-size:12px">Estado</td><td style="padding:5px 0"><span style="background:${colorEstado}22;color:${colorEstado};padding:2px 8px;border-radius:12px;font-size:12px;font-weight:600">${item.Status}</span></td></tr>
           <tr><td style="padding:5px 0;color:#888;font-size:12px">Departamento</td><td style="padding:5px 0;font-size:13px">${item.Dept}</td></tr>
           <tr><td style="padding:5px 0;color:#888;font-size:12px">Solicitante</td><td style="padding:5px 0;font-size:13px">${item.RequesterName} &lt;${item.RequesterMail}&gt;</td></tr>
@@ -734,12 +695,12 @@ function buildMailHTML(item, accion, nota) {
           ${item.Buyer?`<tr><td style="padding:5px 0;color:#888;font-size:12px">Comprador</td><td style="padding:5px 0;font-size:13px">${item.Buyer}</td></tr>`:''}
         </table>
       </div>
-      <div style="font-size:13px;font-weight:700;color:#444;margin-bottom:8px">Justificacion</div>
+      <div style="font-size:13px;font-weight:700;color:#444;margin-bottom:8px">Justificación</div>
       <div style="font-size:13px;color:#555;margin-bottom:20px;line-height:1.6">${item.Justification}</div>
-      <div style="font-size:13px;font-weight:700;color:#444;margin-bottom:8px">Items (${lines.length})</div>
+      <div style="font-size:13px;font-weight:700;color:#444;margin-bottom:8px">Ítems (${lines.length})</div>
       <table style="width:100%;border-collapse:collapse;margin-bottom:20px;border:1px solid #eee">
         <thead><tr style="background:#f5f5f5">
-          <th style="padding:8px 12px;text-align:left;font-size:12px;color:#666">Descripcion</th>
+          <th style="padding:8px 12px;text-align:left;font-size:12px;color:#666">Descripción</th>
           <th style="padding:8px 12px;text-align:center;font-size:12px;color:#666">Cant./Unidad</th>
           <th style="padding:8px 12px;text-align:right;font-size:12px;color:#666">Precio est.</th>
           <th style="padding:8px 12px;text-align:left;font-size:12px;color:#666">Obs.</th>
@@ -759,9 +720,9 @@ async function notificar(item, accion, nota, destinatarios) {
 }
 
 function imprimirRequisicion(item) {
-  const html = buildMailHTML(item, `Requisicion ${item.Title}`, '');
+  const html = buildMailHTML(item, `Requisición ${item.Title}`, '');
   const win = window.open('', '_blank', 'width=820,height=900');
-  if (!win) { toast('Habilita las ventanas emergentes para imprimir','error'); return; }
+  if (!win) { toast('Habilitá las ventanas emergentes para imprimir','error'); return; }
   win.document.write(`<!DOCTYPE html><html><head><title>${item.Title}</title>
     <style>@media print{body{margin:0}button{display:none}}</style></head><body>
     <div style="text-align:center;padding:12px;background:#f0f0f0">
@@ -796,7 +757,7 @@ async function fetchTC() {
   const badge = document.getElementById('tc-badge');
   badge.textContent = 'TC: actualizando…';
   try {
-    // BNA API informal (scraping via proxy publico)
+    // BNA API informal (scraping via proxy público)
     const res = await fetch('https://apis.datos.gob.ar/series/api/series/?ids=168.1_T_CAMBIOR_D_0_0_26:value,168.1_T_CAMBIOR_D_0_0_27:value&last=1&format=json');
     if (res.ok) {
       const json = await res.json();
@@ -822,7 +783,7 @@ function updateTCBadge() {
 
 function showTCEditor() {
   showModal(`
-    <p style="font-size:12px;color:var(--text2);margin-bottom:16px">Valores BNA Billete. Podes editarlos manualmente si necesitas usar Divisa u otro tipo.</p>
+    <p style="font-size:12px;color:var(--text2);margin-bottom:16px">Valores BNA Billete. Podés editarlos manualmente si necesitás usar Divisa u otro tipo.</p>
     <div class="form-grid">
       <div class="form-group">
         <label>USD Compra (Billete)</label>
@@ -887,26 +848,21 @@ function fmtDT(date) {
   } catch{return '—';}
 }
 function isoNow() { return new Date().toISOString(); }
-function deaccent(s) {
-  return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'');
-}
-function escH(s){ return deaccent(String(s||'')).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function escH(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 function getBadgeClass(status) {
   return STATUS_BADGE[status] || 'badge-draft';
 }
 
 function getUrgencyBadge(u) {
-  if (u==='Critica') return 'badge-critical';
+  if (u==='Crítica') return 'badge-critical';
   if (u==='Alta') return 'badge-high';
   return 'badge-normal';
 }
 
-// Normaliza acentos que vienen de Microsoft/OneDrive
 function normalizeStr(s) {
   if (!s) return '';
-  // Elimina diacriticos (tildes, etc) usando NFD decomposition
-  return String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  return String(s).normalize('NFD').replace(/[̀-ͯ]/g,'');
 }
 
 function mapItem(raw) {
@@ -920,7 +876,7 @@ function mapItem(raw) {
     CostCenter:   raw.CostCenter||'',
     Urgency:      normalizeStr(raw.Urgency||'Normal'),
     Justification:normalizeStr(raw.Justification||''),
-    Vendor:       normalizeStr(raw.Vendor||''),
+    Vendor:       raw.Vendor||'',
     NeedBy:       raw.NeedBy||'',
     Status:       raw.Status||S.DRAFT,
     LinesJSON:    raw.LinesJSON||'[]',
@@ -983,10 +939,8 @@ async function loadItems() {
   if (userRole==='admin' || userRole==='approver') {
     allItems = mapped; // ven todas
   } else if (userRole==='gerente') {
-    // Raul solo ve las que el marcó como RequiereGerencia y pasaron N2
     allItems = mapped.filter(i=>
-      i.RequiereGerencia === true &&
-      [S.APP2,S.APPGER,S.REJGER].includes(i.Status)
+      i.RequiereGerencia===true && [S.APP2,S.APPGER,S.REJGER].includes(i.Status)
     );
   } else if (userRole==='finanzas') {
     allItems = mapped.filter(i=>
@@ -1022,8 +976,8 @@ function buildNav() {
     btns.push({view:'list',     label:'📥 Aprobaciones N2',  extra:'approvals'});
     btns.push({view:'gerente',  label:'🏢 Vista Gerencia'});
     btns.push({view:'finanzas', label:'💰 Vista Finanzas'});
-    btns.push({view:'dashboard',label:'📈 Analisis'});
-    btns.push({view:'init',     label:'⚙ Inicializacion'});
+    btns.push({view:'dashboard',label:'📈 Análisis'});
+    btns.push({view:'init',     label:'⚙ Inicialización'});
   }
   nav.innerHTML = btns.map(b=>`
     <button class="nav-btn" data-view="${b.view}" data-extra="${b.extra||''}">${b.label}</button>
@@ -1075,14 +1029,11 @@ function renderList(approvalsMode=false) {
       </div>
     </div>
     <div id="alerts-bar"></div>
-    <div class="filter-bar" style="flex-wrap:wrap;gap:8px">
-      <div style="display:flex;align-items:center;gap:4px;flex:1;min-width:220px">
-        <input type="text" id="flt-q" placeholder="🔍 Buscar en todas las requisiciones..." style="flex:1"/>
-        <button class="btn btn-secondary btn-xs" id="btn-clear-search" title="Limpiar busqueda" style="padding:6px 10px;white-space:nowrap">✕</button>
-      </div>
+    <div class="filter-bar">
+      <input type="text" id="flt-q" placeholder="Buscar..." style="max-width:200px"/>
       <select id="flt-dept"><option value="">Todos los depto.</option>${deptOptions}</select>
       <select id="flt-status"><option value="">Todos los estados</option>${statusOptions}</select>
-      <select id="flt-urg"><option value="">Toda urgencia</option><option>Normal</option><option>Alta</option><option>Critica</option></select>
+      <select id="flt-urg"><option value="">Toda urgencia</option><option>Normal</option><option>Alta</option><option>Crítica</option></select>
     </div>
     <div id="list-loading" class="loading-overlay"><div class="loader"></div> Cargando…</div>
     <div id="list-table-wrap" class="hidden"></div>
@@ -1095,11 +1046,11 @@ function renderList(approvalsMode=false) {
       await loadItems();
       const alertsBar = document.getElementById('alerts-bar');
       if (alertsBar) {
-        const criticas = allItems.filter(i=>i.Urgency==='Critica'&&(i.Status===S.SENT||i.Status===S.APP1));
+        const criticas = allItems.filter(i=>i.Urgency==='Crítica'&&(i.Status===S.SENT||i.Status===S.APP1));
         const vencidas = allItems.filter(i=>i.NeedBy&&new Date(i.NeedBy)<new Date()&&i.Status!==S.OC&&i.Status!==S.DRAFT&&i.Status!==S.REJ1&&i.Status!==S.REJ2);
         let html='';
-        if (criticas.length) html+=`<div style="background:rgba(217,64,64,.12);border:1px solid rgba(217,64,64,.3);border-radius:4px;padding:10px 16px;margin-bottom:10px;font-size:13px;color:var(--red)">⚠ <strong>${criticas.length} requisicion(es) CRITICA(S)</strong> pendiente(s) de aprobacion</div>`;
-        if (vencidas.length) html+=`<div style="background:rgba(224,98,26,.12);border:1px solid rgba(224,98,26,.3);border-radius:4px;padding:10px 16px;margin-bottom:10px;font-size:13px;color:var(--orange)">📅 <strong>${vencidas.length} requisicion(es)</strong> con fecha necesaria vencida y sin OC asignada</div>`;
+        if (criticas.length) html+=`<div style="background:rgba(217,64,64,.12);border:1px solid rgba(217,64,64,.3);border-radius:4px;padding:10px 16px;margin-bottom:10px;font-size:13px;color:var(--red)">⚠ <strong>${criticas.length} requisición(es) CRÍTICA(S)</strong> pendiente(s) de aprobación</div>`;
+        if (vencidas.length) html+=`<div style="background:rgba(224,98,26,.12);border:1px solid rgba(224,98,26,.3);border-radius:4px;padding:10px 16px;margin-bottom:10px;font-size:13px;color:var(--orange)">📅 <strong>${vencidas.length} requisición(es)</strong> con fecha necesaria vencida y sin OC asignada</div>`;
         alertsBar.innerHTML=html;
       }
       renderTable(approvalsMode);
@@ -1120,16 +1071,7 @@ function renderList(approvalsMode=false) {
       if (userRole==='approver') items = items.filter(i=>i.Status===S.SENT);
       else if (userRole==='admin') items = items.filter(i=>i.Status===S.APP1);
     }
-    if (q) items = items.filter(i=>{
-      const lines = parseLines(i.LinesJSON||'[]');
-      const lineText = lines.map(l=>l.desc||'').join(' ');
-      const searchStr = [
-        i.Title, i.RequesterName, i.Dept, i.Justification,
-        i.GLAccount, i.CostCenter, i.OCNumber, i.Buyer,
-        i.GerNote, i.FinNote, i.Status, lineText
-      ].join(' ').toLowerCase();
-      return searchStr.includes(q);
-    });
+    if (q) items = items.filter(i=>(i.Title+i.RequesterName+i.Dept+i.Justification).toLowerCase().includes(q));
     if (dept) items = items.filter(i=>i.Dept===dept);
     if (status) items = items.filter(i=>i.Status===status);
     if (urg) items = items.filter(i=>i.Urgency===urg);
@@ -1149,7 +1091,7 @@ function renderList(approvalsMode=false) {
       const bc = getBadgeClass(i.Status);
       const ub = getUrgencyBadge(i.Urgency);
       const lines = parseLines(i.LinesJSON);
-      const canDel  = userRole==='admin' || ([S.DRAFT, S.SENT].includes(i.Status) && i.RequesterMail===currentUser.username);
+      const canDel  = userRole==='admin' || ([S.DRAFT,S.SENT].includes(i.Status) && i.RequesterMail===currentUser.username);
       const canEdit = userRole==='admin' || (i.Status===S.DRAFT && i.RequesterMail===currentUser.username);
       const isOverdue = i.NeedBy && new Date(i.NeedBy)<new Date() && i.Status!==S.OC && i.Status!==S.DRAFT && i.Status!==S.REJ1 && i.Status!==S.REJ2;
       return `<tr data-id="${i._id}" class="req-row" style="${isOverdue?'border-left:3px solid var(--orange)':''}">
@@ -1158,8 +1100,8 @@ function renderList(approvalsMode=false) {
         <td>${escH(i.RequesterName)}</td>
         <td><span class="badge ${ub}">${escH(i.Urgency)}</span></td>
         <td><span class="badge ${bc}">${escH(i.Status)}</span></td>
-        <td style="font-family:var(--mono);font-size:12px">${i.OCNumber?`<span style="color:var(--accent);font-weight:700">${escH(i.OCNumber)}</span><br/><span style="font-size:10px;color:var(--text2)">${escH(i.Buyer||'')}`:'<span style="color:var(--text2)">—</span>'}</td>
-        <td>${lines.length} item(s)</td>
+        <td style="font-family:var(--mono);font-size:12px;color:var(--accent2)">${i.OCNumber||'\u2014'}</td>
+        <td>${lines.length} ítem(s)</td>
         <td>${fmt(i.NeedBy)}</td>
         <td>${fmt(i.CreatedAt)}</td>
         <td class="text-muted" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escH(i.Justification).substring(0,60)}</td>
@@ -1173,19 +1115,22 @@ function renderList(approvalsMode=false) {
       <div style="overflow-x:auto">
       <table>
         <thead><tr>
-          <th>N° Req.</th><th>Departamento</th><th>Solicitante</th><th>Urgencia</th><th>Estado</th><th>OC</th><th>Items</th><th>Fecha necesaria</th><th>Creada</th><th>Justificacion</th><th></th>
+          <th>N° Req.</th><th>Departamento</th><th>Solicitante</th><th>Urgencia</th><th>Estado</th><th>Ítems</th><th>Fecha necesaria</th><th>Creada</th><th>Justificación</th><th></th>
         </tr></thead>
         <tbody id="list-tbody">${rows}</tbody>
       </table>
       </div>`;
     wrap.classList.remove('hidden');
     wrap.querySelectorAll('.req-row').forEach(r=>{
-      r.style.cursor='pointer';
-      ['click','dblclick'].forEach(evt=>r.addEventListener(evt,e=>{
-        if (e.target.closest('button')) return;
+      r.addEventListener('dblclick',()=>{
         const item = allItems.find(i=>i._id===r.dataset.id);
         if (item) { renderDetail(item); showView('detail'); }
-      }));
+      });
+      r.addEventListener('click',e=>{
+        if (e.target.closest('button')) return;
+        wrap.querySelectorAll('.req-row').forEach(x=>x.style.background='');
+        r.style.background='var(--bg3)';
+      });
     });
     wrap.querySelectorAll('.btn-edit-row').forEach(b=>{
       b.addEventListener('click',e=>{
@@ -1199,11 +1144,11 @@ function renderList(approvalsMode=false) {
         e.stopPropagation();
         const item = allItems.find(i=>i._id===b.dataset.id);
         if (!item) return;
-        if (!confirm(`¿Eliminar la requisicion ${item.Title}? Esta accion no se puede deshacer.`)) return;
+        if (!confirm(`¿Eliminar la requisición ${item.Title}? Esta acción no se puede deshacer.`)) return;
         b.disabled=true; b.textContent='…';
         try {
           await deleteItem(item._id);
-          toast(`Requisicion ${item.Title} eliminada`,'info');
+          toast(`Requisición ${item.Title} eliminada`,'info');
           await doLoad();
         } catch(err) {
           toast('Error al eliminar: '+err.message,'error');
@@ -1221,13 +1166,6 @@ function renderList(approvalsMode=false) {
   });
 
   document.getElementById('btn-refresh-list').addEventListener('click', doLoad);
-  document.getElementById('btn-clear-search').addEventListener('click', ()=>{
-    document.getElementById('flt-q').value = '';
-    renderTable(approvalsMode);
-  });
-  document.getElementById('flt-q').addEventListener('keydown', (e)=>{
-    if (e.key === 'Enter') renderTable(approvalsMode);
-  });
   document.getElementById('btn-export-csv').addEventListener('click',()=>{
     const items = getFiltered(approvalsMode);
     const rows = items.map(i=>({
@@ -1264,14 +1202,14 @@ function renderForm(item) {
   container.innerHTML = `
     <div class="section-header">
       <div>
-        <div class="section-title">${isEdit?'Editar Requisicion':'Nueva Requisicion'}</div>
+        <div class="section-title">${isEdit?'Editar Requisición':'Nueva Requisición'}</div>
         ${isEdit && userRole==='admin' && item?.Status!==S.DRAFT ? `<div style="background:rgba(232,160,32,.12);border:1px solid rgba(232,160,32,.4);border-radius:4px;padding:8px 14px;margin-top:8px;font-size:12px;color:var(--accent)">⚠ Editando como Administrador — estado actual: <strong>${escH(item.Status)}</strong></div>` : ''}
         ${item?`<div class="section-sub"><span class="num">${escH(item.Title)}</span></div>`:''}
       </div>
       <div class="ml-auto d-flex">
         <button class="btn btn-secondary" id="btn-cancel-form">Cancelar</button>
         <button class="btn btn-secondary" id="btn-save-draft">💾 Guardar borrador</button>
-        <button class="btn btn-primary" id="btn-send-req">📤 Enviar para aprobacion</button>
+        <button class="btn btn-primary" id="btn-send-req">📤 Enviar para aprobación</button>
       </div>
     </div>
 
@@ -1288,7 +1226,7 @@ function renderForm(item) {
           <select id="f-urgency">
             <option ${item?.Urgency==='Normal'||!item?'selected':''}>Normal</option>
             <option ${item?.Urgency==='Alta'?'selected':''}>Alta</option>
-            <option ${item?.Urgency==='Critica'?'selected':''}>Critica</option>
+            <option ${item?.Urgency==='Crítica'?'selected':''}>Crítica</option>
           </select>
         </div>
         <div class="form-group">
@@ -1308,7 +1246,7 @@ function renderForm(item) {
           <input type="text" id="f-cc" value="${escH(item?.CostCenter||'')}"/>
         </div>
         <div class="form-group span2">
-          <label>Justificacion *</label>
+          <label>Justificación *</label>
           <textarea id="f-just" rows="3" required>${escH(item?.Justification||'')}</textarea>
         </div>
         <div class="form-group">
@@ -1319,23 +1257,23 @@ function renderForm(item) {
           <label>Fecha necesaria (opcional)</label>
           <input type="date" id="f-needby" value="${item?.NeedBy?item.NeedBy.slice(0,10):''}"/>
         </div>
-        ${(userRole==='admin'||userRole==='approver')?`${(userRole==='admin'||userRole==='approver')?`${(userRole==='admin'||userRole==='approver')?`<div class="form-group span2" style="display:flex;align-items:center;gap:12px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px">
+        <div class="form-group span2" style="display:flex;align-items:center;gap:12px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px">
           <input type="checkbox" id="f-req-ger" style="width:auto;margin:0" ${item?.RequiereGerencia?'checked':''}/>
           <div>
-            <label style="margin:0;text-transform:none;font-size:13px;color:var(--text0);font-weight:500">Requiere aprobacion de Gerencia (Raul Lopez)</label>
-            <div style="font-size:11px;color:var(--text2);margin-top:2px">Marca esta opcion para requisiciones de mayor envergadura o monto</div>`:''}`:''}`:''}
+            <label style="margin:0;text-transform:none;font-size:13px;color:var(--text0);font-weight:500">Requiere aprobación de Gerencia (Raúl López)</label>
+            <div style="font-size:11px;color:var(--text2);margin-top:2px">Marcá esta opción para requisiciones de mayor envergadura o monto</div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- ITEMS -->
+    <!-- ÍTEMS -->
     <div class="form-section">
-      <div class="form-section-title">Items de la Requisicion</div>
+      <div class="form-section-title">Ítems de la Requisición</div>
       <div class="items-table-wrap">
         <table class="items-table" id="items-tbl">
           <thead><tr>
-            <th style="width:35%">Descripcion *</th>
+            <th style="width:35%">Descripción *</th>
             <th style="width:8%">Cant.</th>
             <th style="width:8%">Unidad</th>
             <th style="width:8%">Moneda</th>
@@ -1347,7 +1285,7 @@ function renderForm(item) {
           <tbody id="items-body"></tbody>
         </table>
       </div>
-      <button class="btn btn-secondary btn-sm" id="btn-add-item" style="margin-top:8px">+ Agregar item</button>
+      <button class="btn btn-secondary btn-sm" id="btn-add-item" style="margin-top:8px">+ Agregar ítem</button>
       <div id="items-total" style="text-align:right;font-family:var(--mono);font-size:13px;margin-top:8px;color:var(--text2)"></div>
     </div>
 
@@ -1356,14 +1294,14 @@ function renderForm(item) {
       <div class="form-section-title">Adjuntos</div>
       <div id="attach-existing" class="attach-list mb-3"></div>
       <div class="form-group">
-        <label>Agregar archivos (PDF, Word, Excel, imagenes)</label>
+        <label>Agregar archivos (PDF, Word, Excel, imágenes)</label>
         <input type="file" id="f-files" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif" style="padding:6px"/>
       </div>
       <div id="attach-upload-status" style="font-size:12px;color:var(--text2)"></div>
     </div>
   `;
 
-  // ITEMS — fuente unica de verdad: el array `lines`
+  // ÍTEMS — fuente única de verdad: el array `lines`
   let lines = parseLines(item?.LinesJSON||'[]');
   if (!lines.length) lines.push({desc:'',qty:1,unit:'UN',currency:'ARS',price:'',link:'',obs:''});
 
@@ -1390,7 +1328,7 @@ function renderForm(item) {
     if (!tbody) return;
     tbody.innerHTML = lines.map((l,i)=>`
       <tr>
-        <td><input type="text" class="il-desc" value="${escH(l.desc||'')}" placeholder="Descripcion del item"/></td>
+        <td><input type="text" class="il-desc" value="${escH(l.desc||'')}" placeholder="Descripción del ítem"/></td>
         <td><input type="number" class="il-qty" value="${escH(String(l.qty||1))}" min="0.01" step="any" style="width:60px"/></td>
         <td><input type="text" class="il-unit" value="${escH(l.unit||'UN')}" style="width:50px"/></td>
         <td><select class="il-cur">
@@ -1460,11 +1398,11 @@ function renderForm(item) {
     const mail   = document.getElementById('f-reqmail').value.trim();
     const just   = document.getElementById('f-just').value.trim();
     const lines  = getLines().filter(l=>l.desc.trim());
-    if (!dept) { toast('Selecciona un departamento','error'); return null; }
-    if (!name) { toast('Ingresa nombre del solicitante','error'); return null; }
-    if (!mail) { toast('Ingresa mail del solicitante','error'); return null; }
-    if (!just) { toast('Ingresa la justificacion','error'); return null; }
-    if (!lines.length) { toast('Agrega al menos un item con descripcion','error'); return null; }
+    if (!dept) { toast('Seleccioná un departamento','error'); return null; }
+    if (!name) { toast('Ingresá nombre del solicitante','error'); return null; }
+    if (!mail) { toast('Ingresá mail del solicitante','error'); return null; }
+    if (!just) { toast('Ingresá la justificación','error'); return null; }
+    if (!lines.length) { toast('Agregá al menos un ítem con descripción','error'); return null; }
     return {dept,name,mail,just,lines};
   }
 
@@ -1528,23 +1466,23 @@ function renderForm(item) {
         const created = await createItem(fields);
         if (send) {
           const fullItem = mapItem({...fields, id: created.id||Date.now().toString()});
-          await notificar(fullItem,'📋 Nueva requisicion enviada para aprobacion','',[ROLES_APPROVER[0], ROLES_ADMIN[0]]);
+          await notificar(fullItem,'📋 Nueva requisición enviada para aprobación','',[ROLES_APPROVER[0], ROLES_ADMIN[0]]);
         }
-        toast(`Requisicion ${reqNum} ${send?'enviada':'guardada'} correctamente.`,'success');
+        toast(`Requisición ${reqNum} ${send?'enviada':'guardada'} correctamente.`,'success');
       } else {
         await updateItem(item._id, fields);
         if (send && item.Status===S.DRAFT) {
           const fullItem = mapItem({...item, ...fields});
-          await notificar(fullItem,'📋 Requisicion enviada para aprobacion','',[ROLES_APPROVER[0], ROLES_ADMIN[0]]);
+          await notificar(fullItem,'📋 Requisición enviada para aprobación','',[ROLES_APPROVER[0], ROLES_ADMIN[0]]);
         }
-        toast(`Requisicion ${reqNum} actualizada.`,'success');
+        toast(`Requisición ${reqNum} actualizada.`,'success');
       }
       renderList(false);
     } catch(e) {
       toast('Error al guardar: '+e.message,'error');
     } finally {
       btn.disabled = false;
-      btn.textContent = send ? '📤 Enviar para aprobacion' : '💾 Guardar borrador';
+      btn.textContent = send ? '📤 Enviar para aprobación' : '💾 Guardar borrador';
     }
   }
 
@@ -1555,7 +1493,7 @@ function renderForm(item) {
 }
 
 // ================================================================
-// VISTA: DETALLE / APROBACION
+// VISTA: DETALLE / APROBACIÓN
 // ================================================================
 function renderDetail(item) {
   showView('detail');
@@ -1592,7 +1530,7 @@ function renderDetail(item) {
   // History
   const history = [];
   if (item.CreatedAt)   history.push({when:item.CreatedAt,   what:`Creada como Borrador`});
-  if (item.SubmittedAt) history.push({when:item.SubmittedAt, what:'Enviada para aprobacion N1'});
+  if (item.SubmittedAt) history.push({when:item.SubmittedAt, what:'Enviada para aprobación N1'});
   if (item.Lvl1At)      history.push({when:item.Lvl1At,      what:`${item.Status===S.REJ1?'Rechazada':'Aprobada'} N1 por ${item.Lvl1By}${item.Lvl1Note?' — '+item.Lvl1Note:''}`});
   if (item.Lvl2At)      history.push({when:item.Lvl2At,      what:`${item.Status===S.REJ2?'Rechazada':'Aprobada'} N2 por ${item.Lvl2By}${item.Lvl2Note?' — '+item.Lvl2Note:''}`});
   if (item.GerAt)       history.push({when:item.GerAt,       what:`${item.Status===S.REJGER?'Rechazada':'Aprobada'} por Gerencia (${item.GerBy})${item.GerNote?' — '+item.GerNote:''}`});
@@ -1655,7 +1593,7 @@ function renderDetail(item) {
             <div class="detail-row"><span class="detail-label">Enviada:</span><span class="detail-value">${fmtDT(item.SubmittedAt)}</span></div>
           </div>
           <div class="req-detail-section">
-            <h4>Justificacion</h4>
+            <h4>Justificación</h4>
             <div style="font-size:13px;color:var(--text1);line-height:1.6">${escH(item.Justification)}</div>
           </div>
         </div>
@@ -1676,10 +1614,10 @@ function renderDetail(item) {
       <div>
         <div class="form-section">
           <div class="req-detail-section">
-            <h4>Items (${lines.length})</h4>
+            <h4>Ítems (${lines.length})</h4>
             <div style="overflow-x:auto">
             <table class="items-table">
-              <thead><tr><th>Descripcion</th><th>Cant.</th><th>Unidad</th><th>Moneda</th><th>Precio est.</th><th>Ref.</th><th>Obs.</th></tr></thead>
+              <thead><tr><th>Descripción</th><th>Cant.</th><th>Unidad</th><th>Moneda</th><th>Precio est.</th><th>Ref.</th><th>Obs.</th></tr></thead>
               <tbody>${linesHtml}</tbody>
             </table>
             </div>
@@ -1714,7 +1652,7 @@ function renderDetail(item) {
   document.getElementById('btn-back-detail').addEventListener('click',()=>renderList(false));
   document.getElementById('btn-print-req').addEventListener('click',()=>imprimirRequisicion(item));
 
-  // Duplicar requisicion
+  // Duplicar requisición
   document.getElementById('btn-dup-req').addEventListener('click',()=>{
     const clone = {
       ...item,
@@ -1737,7 +1675,7 @@ function renderDetail(item) {
   function renderComments() {
     const el = document.getElementById('comments-list');
     if (!el) return;
-    if (!comments.length) { el.innerHTML='<div class="text-muted" style="font-size:12px">Sin comentarios aun</div>'; return; }
+    if (!comments.length) { el.innerHTML='<div class="text-muted" style="font-size:12px">Sin comentarios aún</div>'; return; }
     el.innerHTML = comments.map(c=>`
       <div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px">
         <div style="color:var(--text2);min-width:130px;font-family:var(--mono);font-size:11px">${fmtDT(c.at)}</div>
@@ -1776,8 +1714,8 @@ function renderDetail(item) {
       approvalModal('Aprobar — Nivel 1', async(note)=>{
         const updated = {...item, Status:S.APP1, Lvl1At:isoNow(), Lvl1By:currentUser.username, Lvl1Note:note};
         await doAction(item, {Status:S.APP1, Lvl1At:isoNow(), Lvl1By:currentUser.username, Lvl1Note:note});
-        await notificar(updated,'Aprobada Nivel 1 — Pendiente aprobacion final',note,[ROLES_ADMIN[0], item.RequesterMail]);
-        toast('Aprobado Nivel 1 — notificacion enviada','success');
+        await notificar(updated,'Aprobada Nivel 1 — Pendiente aprobación final',note,[ROLES_ADMIN[0], item.RequesterMail]);
+        toast('Aprobado Nivel 1 — notificación enviada','success');
         renderList(false);
       });
     });
@@ -1786,7 +1724,7 @@ function renderDetail(item) {
         const updated = {...item, Status:S.REJ1, Lvl1At:isoNow(), Lvl1By:currentUser.username, Lvl1Note:note};
         await doAction(item, {Status:S.REJ1, Lvl1At:isoNow(), Lvl1By:currentUser.username, Lvl1Note:note});
         await notificar(updated,'Rechazada Nivel 1',note,[item.RequesterMail]);
-        toast('Rechazado Nivel 1 — notificacion enviada','error');
+        toast('Rechazado Nivel 1 — notificación enviada','error');
         renderList(false);
       });
     });
@@ -1796,8 +1734,8 @@ function renderDetail(item) {
       const needsGer = item.RequiereGerencia;
       const title = needsGer ? 'Aprobar N2 → enviar a Gerencia' : 'Aprobar N2 → listo para OC';
       const hint = needsGer
-        ? '<div style="background:rgba(212,160,23,.1);border:1px solid rgba(212,160,23,.3);border-radius:4px;padding:8px 12px;font-size:12px;color:var(--yellow);margin-bottom:12px">Esta requisicion requiere aprobacion de Gerencia (Raul Lopez)</div>'
-        : '<div style="background:rgba(46,168,107,.1);border:1px solid rgba(46,168,107,.3);border-radius:4px;padding:8px 12px;font-size:12px;color:var(--green);margin-bottom:12px">Esta requisicion NO requiere aprobacion de Gerencia — pasara directamente a disponible para OC</div>';
+        ? '<div style="background:rgba(212,160,23,.1);border:1px solid rgba(212,160,23,.3);border-radius:4px;padding:8px 12px;font-size:12px;color:var(--yellow);margin-bottom:12px">Esta requisición requiere aprobación de Gerencia (Raúl López)</div>'
+        : '<div style="background:rgba(46,168,107,.1);border:1px solid rgba(46,168,107,.3);border-radius:4px;padding:8px 12px;font-size:12px;color:var(--green);margin-bottom:12px">Esta requisición NO requiere aprobación de Gerencia — pasará directamente a disponible para OC</div>';
       showModal(`${hint}<div class="form-group"><label>Nota (opcional)</label><textarea id="approval-note" rows="3"></textarea></div>`,
         title, [{label:'Confirmar', cls:'btn-primary', cb:async()=>{
           const note = document.getElementById('approval-note').value.trim();
@@ -1805,13 +1743,13 @@ function renderDetail(item) {
             const fields = {Status:S.APP2, Lvl2At:isoNow(), Lvl2By:currentUser.username, Lvl2Note:note};
             await doAction(item, fields);
             const updated = {...item, ...fields};
-            await notificar(updated,'✅ Aprobada N2 — Pendiente aprobacion Gerencia',note,[ROLES_GERENTE[0], item.RequesterMail]);
-            toast('Enviado a Gerencia para aprobacion','success');
+            await notificar(updated,'✅ Aprobada N2 — Pendiente aprobación Gerencia',note,[ROLES_GERENTE[0], item.RequesterMail]);
+            toast('Enviado a Gerencia para aprobación','success');
           } else {
             const fields = {Status:S.APP2NOGER, Lvl2At:isoNow(), Lvl2By:currentUser.username, Lvl2Note:note};
             await doAction(item, fields);
             const updated = {...item, ...fields};
-            await notificar(updated,'✅ Aprobada — Lista para asignacion de OC',note,[ROLES_APPROVER[0], item.RequesterMail]);
+            await notificar(updated,'✅ Aprobada — Lista para asignación de OC',note,[ROLES_APPROVER[0], item.RequesterMail]);
             toast('Aprobado N2 — lista para OC','success');
           }
           renderList(false);
@@ -1852,14 +1790,14 @@ function renderDetail(item) {
         const date  = document.getElementById('oc-date').value;
         const buyer = document.getElementById('oc-buyer').value.trim();
         const obs   = document.getElementById('oc-obs').value.trim();
-        if (!num||!buyer) { toast('Completa N° OC y Comprador','error'); return; }
+        if (!num||!buyer) { toast('Completá N° OC y Comprador','error'); return; }
         const fields = {Status:S.OC, OCNumber:num, OCDate:date, Buyer:buyer,
           Lvl2At:item.Lvl2At||isoNow(), Lvl2By:item.Lvl2By||currentUser.username,
           Lvl2Note:obs||item.Lvl2Note||''};
         await doAction(item, fields);
         const updated = {...item, ...fields};
         await notificar(updated,`🛒 OC Asignada: ${num}`,`Comprador: ${buyer}${obs?' — '+obs:''}. Fecha: ${fmt(date)}`,[item.RequesterMail, ...(item.RequesterMail!==ROLES_APPROVER[0]?[ROLES_APPROVER[0]]:[])]);
-        toast('OC asignada — notificacion enviada','success');
+        toast('OC asignada — notificación enviada','success');
         renderList(false);
       }},{label:'Cancelar',cls:'btn-secondary'}]);
     });
@@ -1872,17 +1810,17 @@ function renderDetail(item) {
           <span>${f.nombre}</span>
         </label>`).join('');
       showModal(`
-        <div style="font-size:12px;color:var(--text2);margin-bottom:16px">Al aprobar, se enviara un mail de aprobacion gerencial a los destinatarios que elijas. Tambien podes corregir la cuenta contable.</div>
+        <div style="font-size:12px;color:var(--text2);margin-bottom:16px">Al aprobar, se enviará un mail de aprobación gerencial a los destinatarios que elijas. También podés corregir la cuenta contable.</div>
         <div class="form-group mb-3">
-          <label>Correccion Cuenta Contable (GL) — actual: <span style="font-family:var(--mono);color:var(--accent)">${escH(item.GLAccount||'—')}</span></label>
+          <label>Corrección Cuenta Contable (GL) — actual: <span style="font-family:var(--mono);color:var(--accent)">${escH(item.GLAccount||'—')}</span></label>
           <input type="text" id="ger-gl" value="${escH(item.GLAccount||'')}" placeholder="Dejar igual o corregir…"/>
         </div>
         <div class="form-group mb-3">
-          <label>Nota / Comentario de aprobacion (aparece en el mail)</label>
-          <textarea id="ger-note" rows="3" placeholder="Ej: Aprobado. Validar cotizacion con proveedor antes de emitir OC."></textarea>
+          <label>Nota / Comentario de aprobación (aparece en el mail)</label>
+          <textarea id="ger-note" rows="3" placeholder="Ej: Aprobado. Validar cotización con proveedor antes de emitir OC."></textarea>
         </div>
         <div class="form-group mb-3">
-          <label>Enviar notificacion a Finanzas</label>
+          <label>Enviar notificación a Finanzas</label>
           ${sugOptions}
         </div>
         <div class="form-group">
@@ -1896,7 +1834,7 @@ function renderDetail(item) {
           const checked = [...document.querySelectorAll('.fin-check:checked')].map(c=>c.value);
           const extra   = (document.getElementById('ger-extra').value||'').split(',').map(s=>s.trim()).filter(s=>s.includes('@'));
           const todos   = [...new Set([...checked, ...extra, item.RequesterMail])];
-          if (!checked.length && !extra.length) { toast('Selecciona al menos un destinatario de Finanzas','error'); return; }
+          if (!checked.length && !extra.length) { toast('Seleccioná al menos un destinatario de Finanzas','error'); return; }
           const fields = {
             Status: S.APPGER,
             GerAt: isoNow(), GerBy: currentUser.username, GerNote: note,
@@ -1924,7 +1862,7 @@ function renderDetail(item) {
   }
   if (canApproveFin) {
     document.getElementById('btn-appfin').addEventListener('click',()=>{
-      approvalModal('Confirmar aprobacion de Finanzas', async(note)=>{
+      approvalModal('Confirmar aprobación de Finanzas', async(note)=>{
         const fields = {Status:S.APPFIN, FinAt:isoNow(), FinBy:currentUser.username, FinNote:note};
         await doAction(item, fields);
         const destStr = item.FinDestinatarios||'';
@@ -1946,9 +1884,9 @@ function renderDetail(item) {
   }
   if (canReopen) {
     document.getElementById('btn-reopen').addEventListener('click',async()=>{
-      if (!confirm('¿Reabrir esta requisicion como Borrador?')) return;
+      if (!confirm('¿Reabrir esta requisición como Borrador?')) return;
       await doAction(item, {Status:S.DRAFT});
-      toast('Requisicion reabierta como Borrador','info');
+      toast('Requisición reabierta como Borrador','info');
       renderList(false);
     });
   }
@@ -1989,7 +1927,7 @@ function showModal(bodyHtml, title, buttons=[]) {
 }
 
 // ================================================================
-// VISTA: FINANZAS — Cristina, Diego, Maria + Admin
+// VISTA: FINANZAS — Cristina, Diego, María + Admin
 // ================================================================
 function renderFinanzasView() {
   showView('finanzas');
@@ -2001,7 +1939,7 @@ function renderFinanzasView() {
     <div class="section-header">
       <div>
         <div class="section-title">Vista Finanzas</div>
-        <div class="section-sub">Analisis por cuenta contable y moneda — requisiciones aprobadas por Gerencia</div>
+        <div class="section-sub">Análisis por cuenta contable y moneda — requisiciones aprobadas por Gerencia</div>
       </div>
       <div class="ml-auto d-flex">
         <button class="btn btn-secondary btn-sm" id="fin-refresh">↻ Actualizar</button>
@@ -2011,7 +1949,7 @@ function renderFinanzasView() {
     <!-- Filtros de fecha -->
     <div class="card" style="padding:14px 20px;margin-bottom:16px">
       <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-        <div style="font-size:13px;font-weight:600;color:var(--text1);min-width:80px">Periodo:</div>
+        <div style="font-size:13px;font-weight:600;color:var(--text1);min-width:80px">Período:</div>
         <div style="display:flex;align-items:center;gap:8px;flex:1;flex-wrap:wrap">
           <label style="font-size:12px;color:var(--text2);text-transform:none;font-weight:400;margin:0">Desde</label>
           <input type="date" id="fin-desde" value="${primerDiaMes}" style="width:150px;margin:0"/>
@@ -2056,7 +1994,7 @@ function renderFinanzasView() {
     renderContent(allData, filtroDesde, filtroHasta);
   }
 
-  // Calcula totales por moneda de los items de una lista de requisiciones
+  // Calcula totales por moneda de los ítems de una lista de requisiciones
   function calcTotales(items) {
     const t = {ARS:0, USD:0, EUR:0};
     items.forEach(item=>{
@@ -2086,7 +2024,7 @@ function renderFinanzasView() {
   }
 
   function renderContent(all, desde, hasta) {
-    // Filtrar por fecha de creacion
+    // Filtrar por fecha de creación
     let filtrados = all.filter(i=>[S.APPGER,S.APPFIN,S.REJFIN,S.OC].includes(i.Status));
     if (desde) filtrados = filtrados.filter(i=>(i.CreatedAt||i.SubmittedAt||'').slice(0,10)>=desde);
     if (hasta) filtrados = filtrados.filter(i=>(i.CreatedAt||i.SubmittedAt||'').slice(0,10)<=hasta);
@@ -2121,7 +2059,7 @@ function renderFinanzasView() {
 
     // Tabla de requisiciones con columnas por moneda
     function reqTable(items, showApproval=false) {
-      if (!items.length) return `<div class="empty-state" style="padding:20px"><div class="empty-state-icon">📭</div>Sin requisiciones en este periodo</div>`;
+      if (!items.length) return `<div class="empty-state" style="padding:20px"><div class="empty-state-icon">📭</div>Sin requisiciones en este período</div>`;
       return `<div style="overflow-x:auto"><table>
         <thead><tr>
           <th>N° Req.</th><th>Dpto</th><th>Solicitante</th><th>Cuenta GL</th><th>Urg.</th>
@@ -2129,7 +2067,7 @@ function renderFinanzasView() {
           <th style="text-align:right">USD</th>
           <th style="text-align:right">EUR</th>
           <th style="text-align:right;color:var(--accent)">Equiv. ARS</th>
-          ${showApproval?'<th>Aprobo Finanzas</th>':'<th>Nota Gerencia</th>'}
+          ${showApproval?'<th>Aprobó Finanzas</th>':'<th>Nota Gerencia</th>'}
           <th></th>
         </tr></thead>
         <tbody>${items.map(i=>{
@@ -2153,7 +2091,7 @@ function renderFinanzasView() {
                 ? (i.FinBy?i.FinBy.split('@')[0]+'<br/>'+fmtDT(i.FinAt):'—')
                 : escH((i.GerNote||'—').substring(0,60))}
             </td>
-            <td><button class="btn btn-primary btn-xs fin-detail-btn" data-id="${i._id}" style="white-space:nowrap">Ver / Aprobar →</button></td>
+            <td><button class="btn btn-info btn-xs fin-detail-btn" data-id="${i._id}">Ver →</button></td>
           </tr>`;
         }).join('')}
         <!-- Fila de totales -->
@@ -2190,7 +2128,7 @@ function renderFinanzasView() {
             ${!totPend.ARS&&!totPend.USD&&!totPend.EUR?`<div class="kpi-value">—</div>`:''}
           </div>
         </div>
-        <div class="kpi"><div class="kpi-label">Aprobadas (periodo)</div><div class="kpi-value text-green">${approved.length}</div></div>
+        <div class="kpi"><div class="kpi-label">Aprobadas (período)</div><div class="kpi-value text-green">${approved.length}</div></div>
         <div class="kpi"><div class="kpi-label">Comprometido aprobado</div>
           <div style="margin-top:4px">
             ${totAppr.ARS>0?`<div style="font-size:13px;font-family:var(--mono)">ARS $${fmt2(totAppr.ARS)}</div>`:''}
@@ -2203,12 +2141,12 @@ function renderFinanzasView() {
       </div>
 
       ${pending.length?`<div style="background:rgba(212,160,23,.08);border:1px solid rgba(212,160,23,.3);border-radius:4px;padding:10px 16px;margin-bottom:16px;font-size:13px;color:var(--yellow)">
-        ⏳ <strong>${pending.length}</strong> requisicion(es) esperando aprobacion de Finanzas
+        ⏳ <strong>${pending.length}</strong> requisición(es) esperando aprobación de Finanzas
       </div>`:''}
 
       <!-- Pendientes -->
       <div class="card mb-4">
-        <div class="section-title" style="font-size:14px;margin-bottom:14px">🔔 Pendientes de Aprobacion Finanzas</div>
+        <div class="section-title" style="font-size:14px;margin-bottom:14px">🔔 Pendientes de Aprobación Finanzas</div>
         ${reqTable(pending, false)}
       </div>
 
@@ -2252,21 +2190,22 @@ function renderFinanzasView() {
     `;
     dc.classList.remove('hidden');
 
-    dc.querySelectorAll('.fin-detail-btn,.fin-row').forEach(el=>{
-      el.addEventListener('click',(e)=>{
-        if (e.target.tagName==='BUTTON' && !e.target.classList.contains('fin-detail-btn')) return;
-        const id = el.dataset.id || el.closest('[data-id]')?.dataset.id;
-        const found = allData.find(i=>i._id===id);
-        if (found) { renderDetail(found); showView('detail'); setTimeout(()=>{
-          const approveBtn = document.getElementById('btn-approve-fin');
-          if (approveBtn) approveBtn.scrollIntoView({behavior:'smooth',block:'center'});
-        },200); }
+    dc.querySelectorAll('.fin-detail-btn').forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        const found = allData.find(i=>i._id===btn.dataset.id);
+        if (found) { renderDetail(found); showView('detail'); }
+      });
+    });
+    dc.querySelectorAll('tr[data-fin-id]').forEach(row=>{
+      row.addEventListener('dblclick',()=>{
+        const found=allData.find(i=>i._id===row.dataset.finId);
+        if(found){renderDetail(found);showView('detail');}
       });
     });
     dc.querySelectorAll('tr[data-fin-id]').forEach(row=>{
       row.addEventListener('dblclick',()=>{
         const found = allData.find(i=>i._id===row.dataset.finId);
-        if (found) { renderDetail(found); showView('detail'); }
+        if(found){renderDetail(found);showView('detail');}
       });
     });
   }
@@ -2282,7 +2221,7 @@ function renderFinanzasView() {
     const rows = [];
     // Encabezado con metadatos del reporte
     rows.push({
-      Numero:'REPORTE FINANZAS', Departamento:`Periodo: ${desde||'inicio'} al ${hasta||'hoy'}`,
+      Numero:'REPORTE FINANZAS', Departamento:`Período: ${desde||'inicio'} al ${hasta||'hoy'}`,
       Solicitante:'', Estado:'', CuentaGL:'',CentroCosto:'',
       TotalARS:'',TotalUSD:'',TotalEUR:'',
       TC_USD_Venta:usdV||'', TC_EUR_Venta:eurV||'',
@@ -2314,7 +2253,7 @@ function renderFinanzasView() {
           Moneda:        l.currency||'ARS',
           PrecioUnit:    l.price,
           TotalLinea:    (l.qty||0)*(l.price||0),
-          GLCorregido:   idx===0&&item.GLCorregido?'SI':'',
+          GLCorregido:   idx===0&&item.GLCorregido?'SÍ':'',
           NotaGerencia:  idx===0?item.GerNote||'':'',
           AprobadoGer:   idx===0?item.GerBy||'':'',
           FechaGer:      idx===0?fmtDT(item.GerAt):'',
@@ -2354,7 +2293,7 @@ function renderFinanzasView() {
 }
 
 // ================================================================
-// VISTA: GERENCIA — Raul Lopez + Admin
+// VISTA: GERENCIA — Raúl López + Admin
 // ================================================================
 function renderGerenteView() {
   showView('gerente');
@@ -2363,7 +2302,7 @@ function renderGerenteView() {
     <div class="section-header">
       <div>
         <div class="section-title">Reporte Ejecutivo — Gerencia General</div>
-        <div class="section-sub">Requisiciones que requieren aprobacion de Gerencia y resumen ejecutivo</div>
+        <div class="section-sub">Requisiciones que requieren aprobación de Gerencia y resumen ejecutivo</div>
       </div>
       <div class="ml-auto d-flex">
         <button class="btn btn-secondary btn-sm" id="ger-refresh">↻ Actualizar</button>
@@ -2389,12 +2328,12 @@ function renderGerenteView() {
     const pendGer  = all.filter(i=>i.Status===S.APP2);
     const appGer   = all.filter(i=>i.Status===S.APPGER||i.Status===S.OC);
     const rejGer   = all.filter(i=>i.Status===S.REJGER);
-    const criticas = all.filter(i=>i.Urgency==='Critica'&&i.Status===S.APP2);
+    const criticas = all.filter(i=>i.Urgency==='Crítica'&&i.Status===S.APP2);
 
     function miniTable(items, emptyMsg) {
       if (!items.length) return `<div class="empty-state" style="padding:24px"><div class="empty-state-icon">📭</div>${emptyMsg}</div>`;
       return `<div style="overflow-x:auto"><table>
-        <thead><tr><th>N° Req.</th><th>Departamento</th><th>Solicitante</th><th>Urgencia</th><th>Items</th><th>Total estimado</th><th>Fecha necesaria</th><th>Justificacion</th><th></th></tr></thead>
+        <thead><tr><th>N° Req.</th><th>Departamento</th><th>Solicitante</th><th>Urgencia</th><th>Ítems</th><th>Total estimado</th><th>Fecha necesaria</th><th>Justificación</th><th></th></tr></thead>
         <tbody>${items.map(i=>{
           const lines = parseLines(i.LinesJSON);
           const totals = {};
@@ -2411,7 +2350,7 @@ function renderGerenteView() {
             <td class="money" style="font-size:12px">${totalStr}</td>
             <td>${fmt(i.NeedBy)}</td>
             <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text2);font-size:12px">${escH(i.Justification).substring(0,80)}</td>
-            <td><button class="btn btn-primary btn-xs ger-detail-btn" data-id="${i._id}" style="white-space:nowrap">Ver / Aprobar →</button></td>
+            <td><button class="btn btn-info btn-xs ger-detail-btn" data-id="${i._id}">Ver detalle</button></td>
           </tr>`;
         }).join('')}</tbody>
       </table></div>`;
@@ -2421,25 +2360,25 @@ function renderGerenteView() {
     dc.innerHTML = `
       <!-- KPIs Gerencia -->
       <div class="kpi-grid" style="margin-bottom:24px">
-        <div class="kpi"><div class="kpi-label">Pendientes mi aprobacion</div><div class="kpi-value text-yellow">${pendGer.length}</div></div>
-        <div class="kpi"><div class="kpi-label">Criticas pendientes</div><div class="kpi-value text-red">${criticas.length}</div></div>
+        <div class="kpi"><div class="kpi-label">Pendientes mi aprobación</div><div class="kpi-value text-yellow">${pendGer.length}</div></div>
+        <div class="kpi"><div class="kpi-label">Críticas pendientes</div><div class="kpi-value text-red">${criticas.length}</div></div>
         <div class="kpi"><div class="kpi-label">Aprobadas por Gerencia</div><div class="kpi-value text-green">${appGer.length}</div></div>
         <div class="kpi"><div class="kpi-label">Rechazadas por Gerencia</div><div class="kpi-value">${rejGer.length}</div></div>
       </div>
 
       <!-- Pendientes -->
       ${pendGer.length?`<div style="background:rgba(212,160,23,.08);border:1px solid rgba(212,160,23,.3);border-radius:4px;padding:10px 16px;margin-bottom:16px;font-size:13px;color:var(--yellow)">
-        ⏳ Hay <strong>${pendGer.length}</strong> requisicion(es) esperando su aprobacion
-        ${criticas.length?` — <strong>${criticas.length} CRITICA(S)</strong>`:''}</div>`:''}
+        ⏳ Hay <strong>${pendGer.length}</strong> requisición(es) esperando su aprobación
+        ${criticas.length?` — <strong>${criticas.length} CRÍTICA(S)</strong>`:''}</div>`:''}
 
       <div class="card mb-4">
-        <div class="section-title" style="font-size:14px;margin-bottom:14px">🔔 Pendientes de Aprobacion Gerencia</div>
-        ${miniTable(pendGer,'No hay requisiciones pendientes de su aprobacion')}
+        <div class="section-title" style="font-size:14px;margin-bottom:14px">🔔 Pendientes de Aprobación Gerencia</div>
+        ${miniTable(pendGer,'No hay requisiciones pendientes de su aprobación')}
       </div>
 
       <div class="card mb-4">
         <div class="section-title" style="font-size:14px;margin-bottom:14px">✅ Aprobadas por Gerencia (con o sin OC)</div>
-        ${miniTable(appGer,'Sin requisiciones aprobadas aun')}
+        ${miniTable(appGer,'Sin requisiciones aprobadas aún')}
       </div>
 
       ${rejGer.length?`<div class="card mb-4">
@@ -2451,10 +2390,10 @@ function renderGerenteView() {
 
     // Row clicks → detail
     dc.querySelectorAll('.ger-row,.ger-detail-btn').forEach(el=>{
-      ['click','dblclick'].forEach(evt=>el.addEventListener(evt, ()=>{
+      ['click','dblclick'].forEach(evt=>el.addEventListener(evt,()=>{
         const id = el.dataset.id;
         const found = all.find(i=>i._id===id);
-        if (found) { renderDetail(found); showView('detail'); }
+        if(found){renderDetail(found);showView('detail');}
       }));
     });
   }
@@ -2484,7 +2423,7 @@ function renderDashboard() {
   const container = document.getElementById('view-dashboard');
   container.innerHTML = `
     <div class="section-header">
-      <div><div class="section-title">Panel de Analisis</div><div class="section-sub">Solo visible para administradores</div></div>
+      <div><div class="section-title">Panel de Análisis</div><div class="section-sub">Solo visible para administradores</div></div>
       <div class="ml-auto d-flex">
         <button class="btn btn-secondary btn-sm" id="dash-refresh">↻ Actualizar</button>
         <button class="btn btn-secondary btn-sm" id="dash-export">⬇ CSV completo</button>
@@ -2501,7 +2440,7 @@ function renderDashboard() {
     s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js';
     s.onload = cb;
     s.onerror = () => {
-      // CDN bloqueado — mostrar igual sin graficos
+      // CDN bloqueado — mostrar igual sin gráficos
       window.Chart = null;
       cb();
     };
@@ -2516,7 +2455,7 @@ function renderDashboard() {
         await loadItems();
         renderDashContent();
       } catch(e) {
-        toast('Error cargando analisis: '+e.message,'error');
+        toast('Error cargando análisis: '+e.message,'error');
       } finally {
         document.getElementById('dash-loading').classList.add('hidden');
       }
@@ -2532,7 +2471,7 @@ function renderDashboard() {
     const app2     = items.filter(i=>i.Status===S.APP2).length;
     const rejected = items.filter(i=>i.Status===S.REJ1||i.Status===S.REJ2).length;
     const mine     = items.filter(i=>i.RequesterMail===currentUser.username).length;
-    const criticas = items.filter(i=>i.Urgency==='Critica'&&(i.Status===S.SENT||i.Status===S.APP1)).length;
+    const criticas = items.filter(i=>i.Urgency==='Crítica'&&(i.Status===S.SENT||i.Status===S.APP1)).length;
 
     // By status
     const byStatus = {};
@@ -2571,7 +2510,7 @@ function renderDashboard() {
         <div class="kpi"><div class="kpi-label">Aprobadas s/OC</div><div class="kpi-value text-green">${app2}</div></div>
         <div class="kpi"><div class="kpi-label">Con OC Asignada</div><div class="kpi-value text-accent">${withOC}</div></div>
         <div class="kpi"><div class="kpi-label">Rechazadas</div><div class="kpi-value text-red">${rejected}</div></div>
-        <div class="kpi"><div class="kpi-label">Criticas Pendientes</div><div class="kpi-value text-red">${criticas}</div><div class="kpi-sub">requieren atencion</div></div>
+        <div class="kpi"><div class="kpi-label">Críticas Pendientes</div><div class="kpi-value text-red">${criticas}</div><div class="kpi-sub">requieren atención</div></div>
         <div class="kpi"><div class="kpi-label">Mis Requisiciones</div><div class="kpi-value">${mine}</div></div>
       </div>
       <!-- Charts -->
@@ -2585,7 +2524,7 @@ function renderDashboard() {
           <div class="chart-wrap"><canvas id="ch-dept"></canvas></div>
         </div>
         <div class="chart-card" style="grid-column:1/-1">
-          <div class="chart-title">Evolucion Mensual</div>
+          <div class="chart-title">Evolución Mensual</div>
           <div class="chart-wrap"><canvas id="ch-month"></canvas></div>
         </div>
       </div>
@@ -2714,7 +2653,7 @@ function renderDashboard() {
     } else {
       ['ch-status','ch-dept','ch-month'].forEach(id=>{
         const el = document.getElementById(id);
-        if (el && el.parentElement) el.parentElement.innerHTML = '<div style="color:var(--text2);font-size:12px;padding:20px;text-align:center">Graficos no disponibles (red bloqueo Chart.js)<br/>Los datos de la tabla siguen disponibles.</div>';
+        if (el && el.parentElement) el.parentElement.innerHTML = '<div style="color:var(--text2);font-size:12px;padding:20px;text-align:center">Gráficos no disponibles (red bloqueó Chart.js)<br/>Los datos de la tabla siguen disponibles.</div>';
       });
     }
   }
@@ -2774,35 +2713,33 @@ function renderInit() {
   const container = document.getElementById('view-init');
   const cfg = getCfg();
   const isConfigured = !!(cfg.ghToken && cfg.ghRepo);
-
   container.innerHTML = `
     <div class="section-header">
-      <div><div class="section-title">Inicializacion del Sistema</div>
-      <div class="section-sub">Configuracion del almacenamiento compartido via GitHub</div></div>
+      <div>
+        <div class="section-title">Inicializacion del Sistema</div>
+        <div class="section-sub">Almacenamiento compartido via GitHub</div>
+      </div>
     </div>
-
     ${isConfigured
       ? `<div style="background:rgba(46,168,107,.1);border:1px solid rgba(46,168,107,.3);border-radius:4px;padding:10px 16px;margin-bottom:16px;font-size:13px;color:var(--green)">
-          checkmark Configurado correctamente — Repo: <strong>${escH(cfg.ghRepo)}</strong>
-         </div>`
+           Conectado correctamente &mdash; Repo: <strong>${escH(cfg.ghRepo)}</strong></div>`
       : `<div style="background:rgba(232,160,32,.1);border:1px solid rgba(232,160,23,.3);border-radius:4px;padding:10px 16px;margin-bottom:16px;font-size:13px;color:var(--accent)">
-          Completa el Paso 1 para configurar el almacenamiento.
-         </div>`}
-
-    <div class="card mb-4" style="max-width:760px">
+           Completa el Paso 1 para configurar el almacenamiento.</div>`}
+    <div class="card mb-4" style="max-width:700px">
       <div class="section-title" style="font-size:14px;margin-bottom:12px">
-        Paso 1 — Conectar repositorio GitHub <span style="font-size:11px;font-weight:400;color:var(--text2)">(solo vos, una vez)</span>
+        Paso 1 &mdash; Conectar repositorio GitHub
+        <span style="font-size:11px;font-weight:400;color:var(--text2)">(solo vos, una vez)</span>
       </div>
       <p style="font-size:13px;color:var(--text1);margin-bottom:16px">
-        1. Crea un repositorio <strong>privado</strong> en tu cuenta de GitHub (ej: <code style="background:var(--bg3);padding:2px 6px;border-radius:3px">metagal-requisiciones-db</code>)<br/>
-        2. Ve a <strong>GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)</strong><br/>
-        3. Genera un token con scope <strong>repo</strong> (acceso completo a repos privados)<br/>
-        4. Pega el token y el nombre del repo abajo:
+        1. Crea un repo <strong>privado</strong> en tu cuenta de GitHub<br/>
+        2. Settings &rarr; Developer settings &rarr; Personal access tokens &rarr; Tokens (classic)<br/>
+        3. Genera un token con scope <strong>repo</strong><br/>
+        4. Completa los campos abajo:
       </p>
-      <div style="display:grid;gap:12px;max-width:500px">
+      <div style="display:grid;gap:12px;max-width:480px">
         <div>
           <label style="font-size:12px;color:var(--text2);text-transform:uppercase;font-weight:600">Repo (usuario/nombre)</label>
-          <input type="text" id="gh-repo" placeholder="ej: svalenzuela/metagal-req-db" value="${escH(cfg.ghRepo||'')}" style="margin-top:4px"/>
+          <input type="text" id="gh-repo" placeholder="svalenzuela/metagal-req-db" value="${escH(cfg.ghRepo||'')}" style="margin-top:4px"/>
         </div>
         <div>
           <label style="font-size:12px;color:var(--text2);text-transform:uppercase;font-weight:600">Personal Access Token</label>
@@ -2815,31 +2752,26 @@ function renderInit() {
       </div>
       <div id="init-log" class="init-result mt-4 hidden"></div>
     </div>
-
-    <div class="card" style="max-width:760px">
-      <div class="section-title" style="font-size:14px;margin-bottom:10px">Paso 2 — Activar otros usuarios</div>
+    <div class="card" style="max-width:700px">
+      <div class="section-title" style="font-size:14px;margin-bottom:10px">Paso 2 &mdash; Activar usuarios</div>
       ${isConfigured ? `
         <p style="font-size:13px;color:var(--text1);margin-bottom:12px">
-          Manda este link a Nicolas, Raul, Cristina, Diego y Maria. Solo lo abren una vez.
+          Manda este link a <strong>todos</strong>: Nicolas, Raul, Cristina, Diego, Maria y cualquier solicitante. Solo lo abren una vez.
         </p>
-        <div style="background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:12px;word-break:break-all;font-size:11px;font-family:var(--mono);color:var(--accent2)" id="activation-url">
-          ${generateActivationUrl(cfg)}
-        </div>
+        <div style="background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:12px;word-break:break-all;font-size:11px;font-family:var(--mono);color:var(--accent2)" id="activation-url">${generateActivationUrl(cfg)}</div>
         <div style="display:flex;gap:8px;margin-top:10px">
           <button class="btn btn-primary btn-sm" id="btn-copy-url">Copiar link</button>
           <button class="btn btn-secondary btn-sm" id="btn-open-url">Abrir en nueva pestana</button>
-        </div>
-        <p style="font-size:11px;color:var(--text2);margin-top:10px">Cada vez que regeneres la configuracion, debes mandar el link nuevo a todos.</p>
-      ` : `<div style="color:var(--text2);font-size:13px">Primero completa el Paso 1.</div>`}
+        </div>` : '<div style="color:var(--text2);font-size:13px">Primero completa el Paso 1.</div>'}
     </div>
   `;
 
-  async function log(msg, cls='init-info') {
+  const addLog = (msg, cls) => {
     const el = document.getElementById('init-log');
+    if (!el) return;
     el.classList.remove('hidden');
-    el.innerHTML += `<div class="${cls}">${escH(msg)}</div>`;
-    el.scrollTop = el.scrollHeight;
-  }
+    el.innerHTML += '<div class="'+(cls||'init-info')+'">'+escH(msg)+'</div>';
+  };
 
   document.getElementById('btn-run-init').addEventListener('click', async () => {
     const btn = document.getElementById('btn-run-init');
@@ -2848,36 +2780,31 @@ function renderInit() {
     if (!ghToken || !ghRepo) { toast('Ingresa el repo y el token','error'); return; }
     btn.disabled = true;
     document.getElementById('init-log').innerHTML = '';
-    await log('Verificando acceso al repositorio GitHub...');
+    addLog('Verificando acceso al repositorio...');
     try {
       await setupGitHubStorage(ghToken, ghRepo);
-      await log(`OK — Conectado a ${ghRepo}`, 'init-ok');
+      addLog('OK \u2014 Conectado a ' + ghRepo, 'init-ok');
       const d = await readDB();
-      await log(`Base de datos OK — ${d.length} requisicion(es)`, 'init-ok');
-      await log('Configuracion guardada. Genera el link del Paso 2 y mandalo a los demas.', 'init-ok');
-      setTimeout(()=>renderInit(), 600);
+      addLog('Base de datos OK \u2014 ' + d.length + ' requisicion(es)', 'init-ok');
+      setTimeout(()=>renderInit(), 800);
     } catch(e) {
-      await log('Error: ' + e.message, 'init-err');
+      addLog('Error: ' + e.message, 'init-err');
     } finally { btn.disabled = false; }
   });
 
   document.getElementById('btn-check-status').addEventListener('click', async () => {
-    document.getElementById('init-log').innerHTML = '';
-    document.getElementById('init-log').classList.remove('hidden');
+    const el = document.getElementById('init-log');
+    el.classList.remove('hidden');
+    el.innerHTML = '<div class="init-info">Verificando...</div>';
     try {
-      const cfg = getCfg();
-      if (!cfg.ghToken || !cfg.ghRepo) { document.getElementById('init-log').innerHTML = '<div class="init-err">No configurado</div>'; return; }
-      document.getElementById('init-log').innerHTML = '<div class="init-info">Verificando...</div>';
       const d = await readDB();
-      document.getElementById('init-log').innerHTML = `<div class="init-ok">OK — ${d.length} requisicion(es) en ${escH(cfg.ghRepo)}</div>`;
-    } catch(e) {
-      document.getElementById('init-log').innerHTML = `<div class="init-err">Error: ${escH(e.message)}</div>`;
-    }
+      el.innerHTML = '<div class="init-ok">OK \u2014 '+d.length+' requisicion(es) en '+escH(getCfg().ghRepo||'?')+'</div>';
+    } catch(e) { el.innerHTML = '<div class="init-err">Error: '+escH(e.message)+'</div>'; }
   });
 
   document.getElementById('btn-copy-url')?.addEventListener('click', () => {
     navigator.clipboard.writeText(document.getElementById('activation-url').textContent.trim());
-    toast('Link copiado','success');
+    toast('Link copiado', 'success');
   });
   document.getElementById('btn-open-url')?.addEventListener('click', () => {
     window.open(document.getElementById('activation-url').textContent.trim(), '_blank');
@@ -2887,9 +2814,9 @@ function renderInit() {
 function generateActivationUrl(cfg) {
   const payload = JSON.stringify({ ghToken: cfg.ghToken, ghRepo: cfg.ghRepo });
   const encoded = encodeURIComponent(btoa(unescape(encodeURIComponent(payload))));
-  const base = window.location.href.split('?')[0].split('#')[0];
-  return `${base}?activar=${encoded}`;
+  return window.location.href.split('?')[0].split('#')[0] + '?activar=' + encoded;
 }
+
 
 // ================================================================
 // BOOTSTRAP
@@ -2898,7 +2825,7 @@ async function bootstrap() {
   try {
     document.getElementById('footer-year').textContent = new Date().getFullYear();
 
-    // Procesar link de activacion (?activar=BASE64)
+    // Procesar link de activación (?activar=BASE64)
     const params = new URLSearchParams(window.location.search);
     if (params.get('activar')) {
       try {
@@ -2910,20 +2837,20 @@ async function bootstrap() {
           showLoginScreen();
           const errEl = document.getElementById('login-err');
           errEl.style.cssText = 'color:#2ea86b;background:rgba(46,168,107,.1);border:1px solid rgba(46,168,107,.3);border-radius:4px;padding:10px 14px;margin-top:12px;display:block';
-          errEl.textContent = '\u2714 Activacion exitosa! Ya podes iniciar sesion.';
+          errEl.textContent = '✔ Activacion exitosa! Ya podes iniciar sesion.';
           errEl.classList.remove('hidden');
           return;
         }
-      } catch(e) { console.warn('Link de activacion invalido:', e); }
+      } catch(e) { console.warn('Link invalido:', e); }
     }
 
     if (window.location.protocol === 'file:') {
       showLoginScreen();
       document.getElementById('login-err').textContent =
-        '⚠ El archivo esta abierto desde tu computadora. Abrilo desde la URL de GitHub Pages (https://...).';
+        '⚠ El archivo está abierto desde tu computadora. Abrilo desde la URL de GitHub Pages (https://...).';
       document.getElementById('login-err').classList.remove('hidden');
       document.getElementById('btn-login').disabled = true;
-      document.getElementById('btn-login').textContent = 'Abri la URL de GitHub Pages';
+      document.getElementById('btn-login').textContent = 'Abrí la URL de GitHub Pages';
       return;
     }
 
@@ -2941,7 +2868,7 @@ async function bootstrap() {
     showLoginScreen();
     const errEl = document.getElementById('login-err');
     if (errEl) {
-      errEl.textContent = 'Error al iniciar: ' + (e.message||'desconocido') + '. Recarga la pagina.';
+      errEl.textContent = 'Error al iniciar: ' + (e.message||'desconocido') + '. Recargá la página.';
       errEl.classList.remove('hidden');
     }
   }
@@ -2962,9 +2889,9 @@ function showLoginScreen() {
       const res = await msalInstance.loginPopup({scopes:GRAPH_SCOPES});
       await initApp(res.account);
     } catch(e) {
-      errEl.textContent = 'Error: ' + (e.message||'No se pudo iniciar sesion') + '. Verifica que los popups esten permitidos para este sitio.';
+      errEl.textContent = 'Error: ' + (e.message||'No se pudo iniciar sesión') + '. Verificá que los popups estén permitidos para este sitio.';
       errEl.classList.remove('hidden');
-      newBtn.disabled=false; newBtn.textContent='🔑 Iniciar sesion con Microsoft 365';
+      newBtn.disabled=false; newBtn.textContent='🔑 Iniciar sesión con Microsoft 365';
     }
   });
 }
@@ -2999,9 +2926,9 @@ async function initApp(account) {
 
   buildNav();
   fetchTC();
-  // Avisar si el storage no esta configurado y no es admin
+  // Avisar si el storage no está configurado y no es admin
   if (!getCfg().ghToken && userRole !== 'admin') {
-    toast('⚠ Tu cuenta aun no esta activada. Pedile a Santiago el link de activacion.', 'error');
+    toast('⚠ Tu cuenta aún no está activada. Pedile a Santiago el link de activación.', 'error');
   }
   if (userRole==='gerente') {
     renderGerenteView(); showView('gerente');
