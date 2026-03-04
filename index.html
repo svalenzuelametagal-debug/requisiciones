@@ -2897,32 +2897,47 @@ function showLoginScreen() {
 
     async function tryLogin(attempt) {
       try {
-        // Si MSAL quedo trabado, limpiar estado antes de reintentar
         if (attempt > 1) {
           try { await msalInstance.handleRedirectPromise(); } catch(_){}
           sessionStorage.removeItem('msal.interaction.status');
-          await new Promise(r=>setTimeout(r,500));
+          await new Promise(r=>setTimeout(r,600));
         }
         const res = await msalInstance.loginPopup({scopes:GRAPH_SCOPES});
         await initApp(res.account);
       } catch(e) {
-        const msg = e.message || '';
-        // interaction_in_progress: reintentar automaticamente hasta 3 veces
+        const msg = (e.message||'').toLowerCase();
+        const code = (e.errorCode||'').toLowerCase();
+
+        // Usuario cerro la ventana — simplemente dejar reintentar, sin mensaje de error
+        if (code==='user_cancelled' || msg.includes('user_cancel') || msg.includes('ventana cerrada') || msg.includes('closed')) {
+          newBtn.disabled=false;
+          newBtn.textContent='🔑 Iniciar sesión con Microsoft 365';
+          return;
+        }
+        // MSAL trabado — limpiar y reintentar automaticamente
         if ((msg.includes('interaction_in_progress') || msg.includes('popup_window_error')) && attempt < 3) {
-          newBtn.textContent = 'Reintentando (' + attempt + '/3)…';
+          newBtn.textContent='Reintentando…';
           await new Promise(r=>setTimeout(r,800));
           return tryLogin(attempt + 1);
         }
-        // Error de popup bloqueado
-        if (msg.includes('popup') || msg.includes('block')) {
-          errEl.innerHTML = '⚠️ El navegador bloqueó la ventana emergente.<br>Hacé clic en el ícono 🔒 de la barra de direcciones y permitir popups para este sitio, luego intentá de nuevo.';
+        // Popup bloqueado por el navegador — ofrecer redirect
+        if (msg.includes('popup') || msg.includes('block') || code.includes('popup')) {
+          errEl.innerHTML = '⚠️ El navegador bloqueó el popup de Microsoft.<br><b>Opción 1:</b> Hacé clic en el ícono de la barra de direcciones y permitir popups para este sitio.<br><b>Opción 2:</b> <a href="#" id="lnk-redirect" style="color:var(--accent)">Iniciar sesión sin popup</a>';
+          errEl.classList.remove('hidden');
+          const lnk = document.getElementById('lnk-redirect');
+          if (lnk) lnk.addEventListener('click', async(ev)=>{
+            ev.preventDefault();
+            await msalInstance.loginRedirect({scopes:GRAPH_SCOPES});
+          });
         } else if (msg.includes('interaction_in_progress')) {
-          errEl.innerHTML = '⚠️ Sesión anterior no cerró bien. <b>Recargá la página</b> e intentá de nuevo.';
+          errEl.innerHTML = '⚠️ Sesión anterior pendiente. <b>Recargá la página</b> e intentá de nuevo.';
+          errEl.classList.remove('hidden');
         } else {
-          errEl.textContent = 'Error al iniciar sesión: ' + msg;
+          errEl.textContent = 'Error al iniciar sesión: ' + (e.message||e.errorCode||'Desconocido');
+          errEl.classList.remove('hidden');
         }
-        errEl.classList.remove('hidden');
-        newBtn.disabled=false; newBtn.textContent='🔑 Iniciar sesión con Microsoft 365';
+        newBtn.disabled=false;
+        newBtn.textContent='🔑 Iniciar sesión con Microsoft 365';
       }
     }
 
