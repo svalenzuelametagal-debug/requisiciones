@@ -3004,22 +3004,34 @@ function showLoginScreen() {
     const errEl = document.getElementById('login-err');
     errEl.classList.add('hidden');
 
-    // Usar redirect — mas confiable que popup, no depende de ventanas emergentes
-    try {
-      await msalInstance.loginRedirect({scopes:GRAPH_SCOPES});
-      // loginRedirect navega a Microsoft y vuelve — el resultado se maneja en bootstrap()
-    } catch(e) {
-      const msg = (e.message||'').toLowerCase();
-      if (msg.includes('interaction_in_progress')) {
-        sessionStorage.removeItem('msal.interaction.status');
-        errEl.textContent = 'Sesion anterior pendiente. Recarga la pagina e intenta de nuevo.';
-      } else {
-        errEl.textContent = 'Error al iniciar sesion: ' + (e.message||'desconocido');
+    async function tryLogin(attempt) {
+      try {
+        if (attempt > 1) {
+          localStorage.removeItem('msal.interaction.status');
+          await new Promise(r=>setTimeout(r,600));
+        }
+        const res = await msalInstance.loginPopup({scopes:GRAPH_SCOPES});
+        await initApp(res.account);
+      } catch(e) {
+        const msg = (e.message||'').toLowerCase();
+        const code = (e.errorCode||'').toLowerCase();
+        if (code==='user_cancelled' || msg.includes('user_cancel') || msg.includes('closed')) {
+          newBtn.disabled=false;
+          newBtn.textContent='🔑 Iniciar sesion con Microsoft 365';
+          return;
+        }
+        if ((msg.includes('interaction_in_progress')||msg.includes('popup_window_error')) && attempt < 3) {
+          newBtn.textContent='Reintentando…';
+          await new Promise(r=>setTimeout(r,800));
+          return tryLogin(attempt+1);
+        }
+        errEl.textContent = 'Error: ' + (e.message||e.errorCode||'No se pudo iniciar sesion');
+        errEl.classList.remove('hidden');
+        newBtn.disabled=false;
+        newBtn.textContent='🔑 Iniciar sesion con Microsoft 365';
       }
-      errEl.classList.remove('hidden');
-      newBtn.disabled=false;
-      newBtn.textContent='🔑 Iniciar sesion con Microsoft 365';
     }
+    await tryLogin(1);
   });
 }
 
