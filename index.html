@@ -41,7 +41,9 @@ const msal = {
       this._save(d); return {accessToken:d.access_token};
     }
     async loginPopup({scopes}) { return this._popup(scopes); }
+    async loginRedirect({scopes}) { return this._popup(scopes); }
     async acquireTokenPopup({scopes}) { return this._popup(scopes); }
+    async acquireTokenRedirect({scopes}) { return this._popup(scopes); }
     async logoutPopup() {
       localStorage.removeItem(this._sk+'_acc');
       localStorage.removeItem(this._sk+'_tok');
@@ -2928,16 +2930,6 @@ function stopNotifPolling() {
 async function bootstrap() {
   try {
     document.getElementById('footer-year').textContent = new Date().getFullYear();
-
-    // Manejar respuesta de loginRedirect (cuando Microsoft vuelve a la pagina)
-    const redirectResult = await msalInstance.handleRedirectPromise().catch(()=>null);
-    if (redirectResult && redirectResult.account) {
-      const cfg = getCfg();
-      if (cfg.ghToken && cfg.ghRepo) {
-        await initApp(redirectResult.account);
-        return;
-      }
-    }
 
     // Procesar link de activación (?activar=BASE64)
     const params = new URLSearchParams(window.location.search);
