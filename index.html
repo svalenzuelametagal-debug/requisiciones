@@ -571,7 +571,7 @@ async function readDB() {
     throw new Error('GitHub ' + res.status + ': ' + (e.message||'error leyendo datos'));
   }
   const data = await res.json();
-  return JSON.parse(atob(data.content.replace(/\n/g,'')));
+  return JSON.parse(decodeURIComponent(escape(atob(data.content.replace(/\n/g,'')))));
 }
 
 async function writeDB(data) {
