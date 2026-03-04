@@ -2885,14 +2885,39 @@ function showLoginScreen() {
     newBtn.disabled=true; newBtn.textContent='Conectando…';
     const errEl = document.getElementById('login-err');
     errEl.classList.add('hidden');
-    try {
-      const res = await msalInstance.loginPopup({scopes:GRAPH_SCOPES});
-      await initApp(res.account);
-    } catch(e) {
-      errEl.textContent = 'Error: ' + (e.message||'No se pudo iniciar sesión') + '. Verificá que los popups estén permitidos para este sitio.';
-      errEl.classList.remove('hidden');
-      newBtn.disabled=false; newBtn.textContent='🔑 Iniciar sesión con Microsoft 365';
+
+    async function tryLogin(attempt) {
+      try {
+        // Si MSAL quedo trabado, limpiar estado antes de reintentar
+        if (attempt > 1) {
+          try { await msalInstance.handleRedirectPromise(); } catch(_){}
+          sessionStorage.removeItem('msal.interaction.status');
+          await new Promise(r=>setTimeout(r,500));
+        }
+        const res = await msalInstance.loginPopup({scopes:GRAPH_SCOPES});
+        await initApp(res.account);
+      } catch(e) {
+        const msg = e.message || '';
+        // interaction_in_progress: reintentar automaticamente hasta 3 veces
+        if ((msg.includes('interaction_in_progress') || msg.includes('popup_window_error')) && attempt < 3) {
+          newBtn.textContent = 'Reintentando (' + attempt + '/3)…';
+          await new Promise(r=>setTimeout(r,800));
+          return tryLogin(attempt + 1);
+        }
+        // Error de popup bloqueado
+        if (msg.includes('popup') || msg.includes('block')) {
+          errEl.innerHTML = '⚠️ El navegador bloqueó la ventana emergente.<br>Hacé clic en el ícono 🔒 de la barra de direcciones y permitir popups para este sitio, luego intentá de nuevo.';
+        } else if (msg.includes('interaction_in_progress')) {
+          errEl.innerHTML = '⚠️ Sesión anterior no cerró bien. <b>Recargá la página</b> e intentá de nuevo.';
+        } else {
+          errEl.textContent = 'Error al iniciar sesión: ' + msg;
+        }
+        errEl.classList.remove('hidden');
+        newBtn.disabled=false; newBtn.textContent='🔑 Iniciar sesión con Microsoft 365';
+      }
     }
+
+    await tryLogin(1);
   });
 }
 
