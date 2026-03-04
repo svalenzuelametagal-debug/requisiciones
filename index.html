@@ -860,25 +860,32 @@ function getUrgencyBadge(u) {
   return 'badge-normal';
 }
 
-// Solo para busquedas — no modifica datos mostrados
+// Para busquedas sin acento
 function normalizeStr(s) {
   if (!s) return '';
   try { return String(s).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase(); }
   catch(e) { return String(s).toLowerCase(); }
 }
 
+// Corrige texto que viene descompuesto de Microsoft (NFD -> NFC)
+function fixEncoding(s) {
+  if (!s) return '';
+  try { return String(s).normalize('NFC'); }
+  catch(e) { return String(s); }
+}
+
 function mapItem(raw) {
   return {
     _id:          raw.id || raw._id || '',
     Title:        raw.Title||'',
-    Dept:         raw.Dept||'',
-    RequesterName:raw.RequesterName||'',
+    Dept:         fixEncoding(raw.Dept||''),
+    RequesterName:fixEncoding(raw.RequesterName||''),
     RequesterMail:raw.RequesterMail||'',
     GLAccount:    raw.GLAccount||'',
     CostCenter:   raw.CostCenter||'',
-    Urgency:      raw.Urgency||'Normal',
-    Justification:raw.Justification||'',
-    Vendor:       raw.Vendor||'',
+    Urgency:      fixEncoding(raw.Urgency||'Normal'),
+    Justification:fixEncoding(raw.Justification||''),
+    Vendor:       fixEncoding(raw.Vendor||''),
     NeedBy:       raw.NeedBy||'',
     Status:       raw.Status||S.DRAFT,
     LinesJSON:    raw.LinesJSON||'[]',
@@ -886,12 +893,12 @@ function mapItem(raw) {
     CommentsJSON:   raw.CommentsJSON||'[]',
     GerAt:          raw.GerAt||'',
     GerBy:          raw.GerBy||'',
-    GerNote:        raw.GerNote||'',
+    GerNote:        fixEncoding(raw.GerNote||''),
     GLCorregido:    raw.GLCorregido||false,
     FinDestinatarios:raw.FinDestinatarios||'',
     FinAt:          raw.FinAt||'',
     FinBy:          raw.FinBy||'',
-    FinNote:        raw.FinNote||'',
+    FinNote:        fixEncoding(raw.FinNote||''),
     RequiereGerencia: raw.RequiereGerencia||false,
     SubmittedAt:  raw.SubmittedAt||'',
     Lvl1At:       raw.Lvl1At||'',
@@ -1448,7 +1455,7 @@ function renderForm(item) {
       const fields = {
         Title:           reqNum,
         Dept:            v.dept,
-        RequesterName:   v.name,
+        RequesterName:   fixEncoding(v.name||''),
         RequesterMail:   v.mail,
         GLAccount:       document.getElementById('f-gl').value.trim(),
         CostCenter:      document.getElementById('f-cc').value.trim(),
