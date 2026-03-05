@@ -1,0 +1,36 @@
+{
+  "name": "Metagal Requisiciones",
+  "short_name": "Metagal Req",
+  "description": "Sistema de gestión de requisiciones de compra — Metagal Argentina",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0d0f11",
+  "theme_color": "#e8a020",
+  "launch_handler": {
+    "client_mode": "focus-existing"
+  },
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' rx='24' fill='%23e8a020'/><text x='96' y='130' font-size='110' text-anchor='middle' fill='%23000'>📋</text></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='64' fill='%23e8a020'/><text x='256' y='350' font-size='300' text-anchor='middle' fill='%23000'>📋</text></svg>",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Nueva Requisición",
+      "short_name": "Nueva",
+      "url": "./index.html#nueva",
+      "description": "Crear una nueva requisición"
+    }
+  ],
+  "categories": ["business", "productivity"]
+}
