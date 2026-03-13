@@ -657,10 +657,6 @@ async function graphReq(method, url, body = null) {
   return null;
 }
 
-async function deleteItem(itemId) {
-  const data = await readDB();
-  await writeDB(data.filter(i => i.id !== itemId));
-}
 
 // ================================================================
 // EMAIL VIA GRAPH — Mail.Send delegado (sin admin consent)
