@@ -486,7 +486,7 @@ const S = {
   APP2:     'Autorizada · Pendiente Gerencia',
   APP2NOGER:'Autorizada · Lista para OC',
   REJGER:   'No autorizada por Gerencia',
-  APPGER:   'Aprobada Gerencia · Pendiente Finanzas',
+  APPGER:   'Aprobada por Gerencia',
   REJFIN:   'Observada por Finanzas',
   APPFIN:   'OK Financiero',
   OC:       'OC Asignada',
@@ -502,6 +502,17 @@ const STATUS_BADGE = {
   [S.APP2NOGER]:'badge-app1',
   [S.REJGER]:   'badge-rej2',
   [S.APPGER]:   'badge-app1',
+  // Fallbacks para datos guardados con strings viejos (antes del renombrado):
+  'Enviada (Pendiente Nivel 1)':          'badge-sent',
+  'Aprobada Nivel 1 (Pendiente Nivel 2)': 'badge-app1',
+  'Rechazada Nivel 1':                    'badge-rej1',
+  'Rechazada Nivel 2':                    'badge-rej2',
+  'Aprobada N2 (Pendiente Gerencia)':     'badge-app1',
+  'Aprobada N2 (Pendiente OC)':           'badge-app1',
+  'Rechazada por Gerencia':               'badge-rej2',
+  'Aprobada Gerencia (Pendiente Finanzas)':'badge-app1',
+  'Rechazada por Finanzas':               'badge-rej2',
+  'Aprobada por Finanzas':                'badge-app2',
   [S.REJFIN]:   'badge-rej2',
   [S.APPFIN]:   'badge-app2',
   [S.OC]:       'badge-oc',
@@ -677,7 +688,7 @@ function buildMailHTML(item, accion, nota) {
   const lines = parseLines(item.LinesJSON);
   const attachments = parseAttachments(item.AttachmentsJSON);
   const APP_URL = 'https://svalenzuelametagal-debug.github.io/requisiciones/';
-  const colorEstado = {'Borrador':'#6e7e92','Pendiente revisión':'#3a8fd4','Devuelta por Compras':'#d94040','Revisada · En gestión':'#d4a017','No autorizada':'#d94040','Autorizada · Pendiente Gerencia':'#d4a017','Autorizada · Lista para OC':'#2ea86b','No autorizada por Gerencia':'#d94040','Aprobada Gerencia · Pendiente Finanzas':'#d4a017','Observada por Finanzas':'#d94040','OK Financiero':'#2ea86b','OC Emitida':'#e8a020'}[item.Status]||'#444';
+  const colorEstado = {'Borrador':'#6e7e92','Pendiente revisión':'#3a8fd4','Devuelta por Compras':'#d94040','Revisada · En gestión':'#d4a017','No autorizada':'#d94040','Autorizada · Pendiente Gerencia':'#d4a017','Autorizada · Lista para OC':'#2ea86b','No autorizada por Gerencia':'#d94040','Aprobada por Gerencia':'#d4a017','Observada por Finanzas':'#d94040','OK Financiero':'#2ea86b','OC Emitida':'#e8a020'}[item.Status]||'#444';
   const filas = lines.map(l=>`<tr>
     <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:13px">${l.desc||''}</td>
     <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:13px;text-align:center">${l.qty||''} ${l.unit||''}</td>
@@ -907,7 +918,7 @@ function _normalizeStatus(s) {
     'Aprobada N2 (Pendiente Gerencia)':        'Autorizada · Pendiente Gerencia',
     'Aprobada N2 (Pendiente OC)':              'Autorizada · Lista para OC',
     'Rechazada por Gerencia':                  'No autorizada por Gerencia',
-    'Aprobada Gerencia (Pendiente Finanzas)':  'Aprobada Gerencia · Pendiente Finanzas',
+    'Aprobada Gerencia (Pendiente Finanzas)':  'Aprobada por Gerencia',
     'Rechazada por Finanzas':                  'Observada por Finanzas',
     'Aprobada por Finanzas':                   'OK Financiero',
   };
@@ -1155,7 +1166,7 @@ function renderList(approvalsMode=false) {
         <td>${escH(i.Dept)}</td>
         <td>${escH(i.RequesterName)}</td>
         <td><span class="badge ${ub}">${escH(i.Urgency)}</span></td>
-        <td><span class="badge ${bc}">${escH(i.Status)}</span></td>
+        <td><span class="badge ${bc}">${escH(_normalizeStatus(i.Status))}</span></td>
         <td style="font-family:var(--mono);font-size:12px;color:var(--accent2)">${i.OCNumber||'\u2014'}</td>
         <td>${lines.length} ítem(s)</td>
         <td>${fmt(i.NeedBy)}</td>
@@ -1584,7 +1595,8 @@ function renderDetail(item) {
   const canApproveN2  = userRole==='admin' && item.Status===S.APP1;
   const canApproveGer = (userRole==='gerente'||userRole==='admin') && item.Status===S.APP2;
   const canApproveFin = (userRole==='finanzas'||userRole==='admin') && item.Status===S.APPGER;
-  const canAssignOC   = (userRole==='admin'||userRole==='approver') && (item.Status===S.APPFIN||item.Status===S.APP2NOGER);
+  const _ocStatuses   = [S.APPFIN, S.APP2NOGER, 'Aprobada N2 (Pendiente OC)', 'Aprobada por Finanzas'];
+  const canAssignOC   = (userRole==='admin'||userRole==='approver') && _ocStatuses.includes(item.Status);
   const canReopen     = userRole==='admin' && [S.REJ1,S.REJ2,S.REJGER,S.REJFIN].includes(item.Status);
   const canCorrect    = [S.REJ1,S.REJ2,S.REJGER,S.REJFIN].includes(item.Status) && item.RequesterMail===currentUser?.username;
 
@@ -1646,7 +1658,7 @@ function renderDetail(item) {
   container.innerHTML = `
     <div class="section-header">
       <div>
-        <div class="section-title"><span class="num">${escH(item.Title)}</span> &nbsp;<span class="badge ${bc}">${escH(item.Status)}</span></div>
+        <div class="section-title"><span class="num">${escH(item.Title)}</span> &nbsp;<span class="badge ${bc}">${escH(_normalizeStatus(item.Status))}</span></div>
         <div class="section-sub">Departamento: ${escH(item.Dept)} &nbsp;·&nbsp; Urgencia: <span class="badge ${ub}">${escH(item.Urgency)}</span>${item.RequiereGerencia?` &nbsp;·&nbsp; <span class="badge badge-app1">🏢 Requiere Gerencia</span>`:''}</div>
       </div>
       <div class="ml-auto d-flex">
