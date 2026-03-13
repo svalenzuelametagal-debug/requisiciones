@@ -980,10 +980,10 @@ function parseComments(json) {
 
 function canEditDraft(item) {
   if (userRole === 'admin') return true;
-  // El solicitante puede editar su requisición si está en borrador O rechazada
   const isOwner = item.RequesterMail === currentUser?.username;
+  const st = _normalizeStatus(item.Status);
   const editableStatuses = [S.DRAFT, S.REJ1, S.REJ2, S.REJGER, S.REJFIN];
-  return isOwner && editableStatuses.includes(item.Status);
+  return isOwner && editableStatuses.includes(st);
 }
 
 function exportCSV(rows, filename) {
@@ -1583,6 +1583,9 @@ function renderForm(item) {
 // VISTA: DETALLE / APROBACIÓN
 // ================================================================
 function renderDetail(item) {
+  // Normalizar siempre al entrar, independientemente del origen del item
+  item = { ...item, Status: _normalizeStatus(item.Status) };
+
   showView('detail');
   const container = document.getElementById('view-detail');
   const lines = parseLines(item.LinesJSON);
@@ -1595,8 +1598,7 @@ function renderDetail(item) {
   const canApproveN2  = userRole==='admin' && item.Status===S.APP1;
   const canApproveGer = (userRole==='gerente'||userRole==='admin') && item.Status===S.APP2;
   const canApproveFin = (userRole==='finanzas'||userRole==='admin') && item.Status===S.APPGER;
-  const _ocStatuses   = [S.APPFIN, S.APP2NOGER, 'Aprobada N2 (Pendiente OC)', 'Aprobada por Finanzas'];
-  const canAssignOC   = (userRole==='admin'||userRole==='approver') && _ocStatuses.includes(item.Status);
+  const canAssignOC   = (userRole==='admin'||userRole==='approver') && [S.APPFIN, S.APP2NOGER].includes(item.Status);
   const canReopen     = userRole==='admin' && [S.REJ1,S.REJ2,S.REJGER,S.REJFIN].includes(item.Status);
   const canCorrect    = [S.REJ1,S.REJ2,S.REJGER,S.REJFIN].includes(item.Status) && item.RequesterMail===currentUser?.username;
 
