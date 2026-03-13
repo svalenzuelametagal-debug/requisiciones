@@ -479,16 +479,16 @@ DEPARTMENTS.forEach(d=>{DEPT_BY_CODE[d.code]=d;DEPT_BY_NAME[d.name]=d;});
 
 const S = {
   DRAFT:    'Borrador',
-  SENT:     'Enviada (Pendiente Nivel 1)',
-  REJ1:     'Rechazada Nivel 1',
-  APP1:     'Aprobada Nivel 1 (Pendiente Nivel 2)',
-  REJ2:     'Rechazada Nivel 2',
-  APP2:     'Aprobada N2 (Pendiente Gerencia)',
-  APP2NOGER:'Aprobada N2 (Pendiente OC)',
-  REJGER:   'Rechazada por Gerencia',
-  APPGER:   'Aprobada Gerencia (Pendiente Finanzas)',
-  REJFIN:   'Rechazada por Finanzas',
-  APPFIN:   'Aprobada por Finanzas',
+  SENT:     'Pendiente revisión',
+  REJ1:     'Devuelta por Compras',
+  APP1:     'Revisada · En gestión',
+  REJ2:     'No autorizada',
+  APP2:     'Autorizada · Pendiente Gerencia',
+  APP2NOGER:'Autorizada · Lista para OC',
+  REJGER:   'No autorizada por Gerencia',
+  APPGER:   'Aprobada Gerencia · Pendiente Finanzas',
+  REJFIN:   'Observada por Finanzas',
+  APPFIN:   'OK Financiero',
   OC:       'OC Asignada',
 };
 
@@ -677,7 +677,7 @@ function buildMailHTML(item, accion, nota) {
   const lines = parseLines(item.LinesJSON);
   const attachments = parseAttachments(item.AttachmentsJSON);
   const APP_URL = 'https://svalenzuelametagal-debug.github.io/requisiciones/';
-  const colorEstado = {'Borrador':'#6e7e92','Enviada (Pendiente Nivel 1)':'#3a8fd4','Rechazada Nivel 1':'#d94040','Aprobada Nivel 1 (Pendiente Nivel 2)':'#d4a017','Rechazada Nivel 2':'#d94040','Aprobada Nivel 2':'#2ea86b','OC Asignada':'#e8a020'}[item.Status]||'#444';
+  const colorEstado = {'Borrador':'#6e7e92','Pendiente revisión':'#3a8fd4','Devuelta por Compras':'#d94040','Revisada · En gestión':'#d4a017','No autorizada':'#d94040','Autorizada · Pendiente Gerencia':'#d4a017','Autorizada · Lista para OC':'#2ea86b','No autorizada por Gerencia':'#d94040','Aprobada Gerencia · Pendiente Finanzas':'#d4a017','Observada por Finanzas':'#d94040','OK Financiero':'#2ea86b','OC Emitida':'#e8a020'}[item.Status]||'#444';
   const filas = lines.map(l=>`<tr>
     <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:13px">${l.desc||''}</td>
     <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:13px;text-align:center">${l.qty||''} ${l.unit||''}</td>
@@ -922,6 +922,8 @@ function mapItem(raw) {
     FinBy:          raw.FinBy||'',
     FinNote:        fixEncoding(raw.FinNote||''),
     RequiereGerencia: raw.RequiereGerencia||false,
+    SelectedVendor:   raw.SelectedVendor||'',
+    VendorCriteria:   raw.VendorCriteria||'',
     SubmittedAt:  raw.SubmittedAt||'',
     Lvl1At:       raw.Lvl1At||'',
     Lvl1By:       raw.Lvl1By||'',
@@ -948,8 +950,11 @@ function parseComments(json) {
 }
 
 function canEditDraft(item) {
-  if (userRole === 'admin') return true; // admin edita cualquier cosa
-  return item.Status === S.DRAFT && item.RequesterMail === currentUser?.username;
+  if (userRole === 'admin') return true;
+  // El solicitante puede editar su requisición si está en borrador O rechazada
+  const isOwner = item.RequesterMail === currentUser?.username;
+  const editableStatuses = [S.DRAFT, S.REJ1, S.REJ2, S.REJGER, S.REJFIN];
+  return isOwner && editableStatuses.includes(item.Status);
 }
 
 function exportCSV(rows, filename) {
@@ -1123,10 +1128,12 @@ function renderList(approvalsMode=false) {
       const ub = getUrgencyBadge(i.Urgency);
       const lines = parseLines(i.LinesJSON);
       const canDel  = userRole==='admin' || ([S.DRAFT,S.SENT].includes(i.Status) && i.RequesterMail===currentUser.username);
-      const canEdit = userRole==='admin' || (i.Status===S.DRAFT && i.RequesterMail===currentUser.username);
+      const editableStatuses = [S.DRAFT, S.REJ1, S.REJ2, S.REJGER, S.REJFIN];
+      const canEdit = userRole==='admin' || (editableStatuses.includes(i.Status) && i.RequesterMail===currentUser.username);
       const isOverdue = i.NeedBy && new Date(i.NeedBy)<new Date() && i.Status!==S.OC && i.Status!==S.DRAFT && i.Status!==S.REJ1 && i.Status!==S.REJ2;
+      const isDraftOld = i.Status===S.DRAFT && i.CreatedAt && ((Date.now()-new Date(i.CreatedAt).getTime())>30*24*60*60*1000);
       return `<tr data-id="${i._id}" class="req-row" style="${isOverdue?'border-left:3px solid var(--orange)':''}">
-        <td style="cursor:pointer"><span class="num">${escH(i.Title)}</span>${isOverdue?` <span style="font-size:10px;color:var(--orange)" title="Fecha necesaria vencida">⏰</span>`:''}${parseComments(i.CommentsJSON||'[]').length?` <span style="font-size:10px;color:var(--accent2)" title="Tiene comentarios">💬${parseComments(i.CommentsJSON||'[]').length}</span>`:''}</td>
+        <td style="cursor:pointer"><span class="num">${escH(i.Title)}</span>${isOverdue?` <span style="font-size:10px;color:var(--orange)" title="Fecha necesaria vencida">⏰</span>`:''}${isDraftOld?` <span style="font-size:10px;color:var(--yellow)" title="Borrador sin enviar hace más de 30 días">⚠ Borrador antiguo</span>`:''}${parseComments(i.CommentsJSON||'[]').length?` <span style="font-size:10px;color:var(--accent2)" title="Tiene comentarios">💬${parseComments(i.CommentsJSON||'[]').length}</span>`:''}</td>
         <td>${escH(i.Dept)}</td>
         <td>${escH(i.RequesterName)}</td>
         <td><span class="badge ${ub}">${escH(i.Urgency)}</span></td>
@@ -1328,8 +1335,8 @@ function renderForm(item) {
       <div class="form-section-title">Adjuntos</div>
       <div id="attach-existing" class="attach-list mb-3"></div>
       <div class="form-group">
-        <label>Agregar archivos (PDF, Word, Excel, imágenes)</label>
-        <input type="file" id="f-files" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif" style="padding:6px"/>
+        <label>Agregar archivos — PDF, Word, Excel, <strong>imágenes</strong> (JPG, PNG, HEIC), videos</label>
+        <input type="file" id="f-files" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.webp,.bmp,.heic,.mp4,.mov" style="padding:6px"/>
       </div>
       <div id="attach-upload-status" style="font-size:12px;color:var(--text2)"></div>
     </div>
@@ -1504,12 +1511,24 @@ function renderForm(item) {
         }
         toast(`Requisición ${reqNum} ${send?'enviada':'guardada'} correctamente.`,'success');
       } else {
-        await updateItem(item._id, fields);
-        if (send && item.Status===S.DRAFT) {
-          const fullItem = mapItem({...item, ...fields});
-          await notificar(fullItem,'📋 Requisición enviada para aprobación','',[ROLES_APPROVER[0], ROLES_ADMIN[0]]);
+        const wasRejected = [S.REJ1,S.REJ2,S.REJGER,S.REJFIN].includes(item.Status);
+        if (send && wasRejected) {
+          // Limpiar campos de aprobación anterior y reenviar
+          fields.Status = S.SENT;
+          fields.SubmittedAt = fields.SubmittedAt || isoNow();
+          fields.Lvl1At=''; fields.Lvl1By=''; fields.Lvl1Note='';
+          fields.Lvl2At=''; fields.Lvl2By=''; fields.Lvl2Note='';
+          fields.GerAt=''; fields.GerBy=''; fields.GerNote='';
+          fields.FinAt=''; fields.FinBy=''; fields.FinNote='';
+          fields.SelectedVendor=''; fields.VendorCriteria='';
         }
-        toast(`Requisición ${reqNum} actualizada.`,'success');
+        await updateItem(item._id, fields);
+        if (send && (item.Status===S.DRAFT || wasRejected)) {
+          const fullItem = mapItem({...item, ...fields});
+          const msg = wasRejected ? '📋 Requisición corregida y reenviada para aprobación' : '📋 Requisición enviada para aprobación';
+          await notificar(fullItem, msg, '', [ROLES_APPROVER[0], ROLES_ADMIN[0]]);
+        }
+        toast(`Requisición ${reqNum} ${send?'reenviada':'guardada'} correctamente.`,'success');
       }
       renderList(false);
     } catch(e) {
@@ -1549,6 +1568,7 @@ function renderDetail(item) {
   const canApproveFin = (userRole==='finanzas'||userRole==='admin') && item.Status===S.APPGER;
   const canAssignOC   = (userRole==='admin'||userRole==='approver') && (item.Status===S.APPFIN||item.Status===S.APP2NOGER);
   const canReopen     = userRole==='admin' && [S.REJ1,S.REJ2,S.REJGER,S.REJFIN].includes(item.Status);
+  const canCorrect    = [S.REJ1,S.REJ2,S.REJGER,S.REJFIN].includes(item.Status) && item.RequesterMail===currentUser?.username;
 
   // Line items table
   const linesHtml = lines.map(l=>`
@@ -1570,9 +1590,9 @@ function renderDetail(item) {
   const history = [];
   if (item.CreatedAt)   history.push({when:item.CreatedAt,   what:`Creada como Borrador`});
   if (item.SubmittedAt) history.push({when:item.SubmittedAt, what:'Enviada para aprobación N1'});
-  if (item.Lvl1At)      history.push({when:item.Lvl1At,      what:`${item.Status===S.REJ1?'Rechazada':'Aprobada'} N1 por ${item.Lvl1By}${item.Lvl1Note?' — '+item.Lvl1Note:''}`});
-  if (item.Lvl2At)      history.push({when:item.Lvl2At,      what:`${item.Status===S.REJ2?'Rechazada':'Aprobada'} N2 por ${item.Lvl2By}${item.Lvl2Note?' — '+item.Lvl2Note:''}`});
-  if (item.GerAt)       history.push({when:item.GerAt,       what:`${item.Status===S.REJGER?'Rechazada':'Aprobada'} por Gerencia (${item.GerBy})${item.GerNote?' — '+item.GerNote:''}`});
+  if (item.Lvl1At)      history.push({when:item.Lvl1At,      what:`${item.Status===S.REJ1?'Devuelta al solicitante':'Revisada y elevada'} por ${item.Lvl1By}${item.Lvl1Note?' — '+item.Lvl1Note:''}`});
+  if (item.Lvl2At)      history.push({when:item.Lvl2At,      what:`${item.Status===S.REJ2?'No autorizada':'Autorizada'} por ${item.Lvl2By}${item.Lvl2Note?' — '+item.Lvl2Note:''}`});
+  if (item.GerAt)       history.push({when:item.GerAt,       what:`${item.Status===S.REJGER?'No aprobada por Gerencia':'Aprobada por Gerencia'} (${item.GerBy})${item.GerNote?' — '+item.GerNote:''}`});
   if (item.FinAt)       history.push({when:item.FinAt,       what:`${item.Status===S.REJFIN?'Rechazada':'Aprobada'} por Finanzas (${item.FinBy})${item.FinNote?' — '+item.FinNote:''}`});
   if (item.OCNumber)    history.push({when:item.OCDate,       what:`OC asignada: ${item.OCNumber} — Comprador: ${item.Buyer}`});
   history.sort((a,b)=>a.when>b.when?1:-1);
@@ -1586,12 +1606,13 @@ function renderDetail(item) {
   let actionBtns = `<button class="btn btn-secondary btn-sm" id="btn-print-req" title="Imprimir / Guardar PDF">🖨 PDF</button>`;
   actionBtns += `<button class="btn btn-secondary btn-sm" id="btn-dup-req" title="Duplicar como nuevo borrador">⧉ Duplicar</button>`;
   if (canEdit) actionBtns += `<button class="btn btn-secondary" id="btn-edit-req">✏ Editar</button>`;
-  if (canApproveN1) actionBtns += `<button class="btn btn-success" id="btn-appn1">✔ Aprobar N1</button><button class="btn btn-danger" id="btn-rejn1">✖ Rechazar N1</button>`;
-  if (canApproveN2) actionBtns += `<button class="btn btn-success" id="btn-appn2">✔ Aprobar N2</button><button class="btn btn-danger" id="btn-rejn2">✖ Rechazar N2</button>`;
+  if (canApproveN1) actionBtns += `<button class="btn btn-success" id="btn-appn1">✔ Revisar y elevar</button><button class="btn btn-danger" id="btn-rejn1">↩ Devolver al solicitante</button>`;
+  if (canApproveN2) actionBtns += `<button class="btn btn-success" id="btn-appn2">✔ Autorizar</button><button class="btn btn-danger" id="btn-rejn2">✖ No autorizar</button>`;
   if (canAssignOC)  actionBtns += `<button class="btn btn-info" id="btn-assign-oc">📄 Asignar OC</button>`;
-  if (canApproveGer)actionBtns += `<button class="btn btn-success" id="btn-appger">✔ Aprobar Gerencia</button><button class="btn btn-danger" id="btn-rejger">✖ Rechazar Gerencia</button>`;
-  if (canApproveFin)actionBtns += `<button class="btn btn-success" id="btn-appfin">✔ Aprobar Finanzas</button><button class="btn btn-danger" id="btn-rejfin">✖ Rechazar Finanzas</button>`;
-  if (canReopen)    actionBtns += `<button class="btn btn-secondary" id="btn-reopen">↩ Reabrir a Borrador</button>`;
+  if (canApproveGer)actionBtns += `<button class="btn btn-success" id="btn-appger">✔ Aprobar</button><button class="btn btn-danger" id="btn-rejger">✖ No aprobar</button>`;
+  if (canApproveFin)actionBtns += `<button class="btn btn-success" id="btn-appfin">✔ Dar OK Financiero</button><button class="btn btn-danger" id="btn-rejfin">✖ Observar</button>`;
+  if (canReopen)    actionBtns += `<button class="btn btn-secondary" id="btn-reopen">↩ Reabrir como borrador</button>`;
+  if (canCorrect)   actionBtns += `<button class="btn btn-primary" id="btn-correct">✏ Corregir y reenviar</button>`;
 
   // OC section
   const ocHtml = item.OCNumber ? `
@@ -1627,6 +1648,8 @@ function renderDetail(item) {
             <div class="detail-row"><span class="detail-label">Cuenta GL:</span><span class="detail-value">${escH(item.GLAccount)||'—'}${item.GLCorregido?` <span style="font-size:11px;color:var(--yellow);background:rgba(212,160,23,.15);padding:1px 6px;border-radius:10px">corregido por Gerencia</span>`:''}</span></div>
             <div class="detail-row"><span class="detail-label">Centro de Costo:</span><span class="detail-value">${escH(item.CostCenter)||'—'}</span></div>
             <div class="detail-row"><span class="detail-label">Proveedor sugerido:</span><span class="detail-value">${escH(item.Vendor)||'—'}</span></div>
+              ${item.SelectedVendor?`<div class="detail-row"><span class="detail-label" style="color:var(--green)">✔ Proveedor seleccionado:</span><span class="detail-value" style="color:var(--green);font-weight:600">${escH(item.SelectedVendor)}</span></div>`:''}
+              ${item.VendorCriteria?`<div class="detail-row"><span class="detail-label">Criterio de selección:</span><span class="detail-value">${escH(item.VendorCriteria)}</span></div>`:''}
             <div class="detail-row"><span class="detail-label">Fecha necesaria:</span><span class="detail-value">${fmt(item.NeedBy)}</span></div>
             <div class="detail-row"><span class="detail-label">Creada:</span><span class="detail-value">${fmtDT(item.CreatedAt)}</span></div>
             <div class="detail-row"><span class="detail-label">Enviada:</span><span class="detail-value">${fmtDT(item.SubmittedAt)}</span></div>
@@ -1641,9 +1664,9 @@ function renderDetail(item) {
         <div class="form-section">
           <div class="req-detail-section">
             <h4>Aprobaciones</h4>
-            ${item.Lvl1At?`<div class="detail-row"><span class="detail-label">Nivel 1 por:</span><span class="detail-value">${escH(item.Lvl1By)} — ${fmtDT(item.Lvl1At)}</span></div>
+            ${item.Lvl1At?`<div class="detail-row"><span class="detail-label">Revisado por (Compras):</span><span class="detail-value">${escH(item.Lvl1By)} — ${fmtDT(item.Lvl1At)}</span></div>
             ${item.Lvl1Note?`<div class="detail-row"><span class="detail-label">Nota N1:</span><span class="detail-value">${escH(item.Lvl1Note)}</span></div>`:''}`:'' }
-            ${item.Lvl2At?`<div class="detail-row"><span class="detail-label">Nivel 2 por:</span><span class="detail-value">${escH(item.Lvl2By)} — ${fmtDT(item.Lvl2At)}</span></div>
+            ${item.Lvl2At?`<div class="detail-row"><span class="detail-label">Autorizado por:</span><span class="detail-value">${escH(item.Lvl2By)} — ${fmtDT(item.Lvl2At)}</span></div>
             ${item.Lvl2Note?`<div class="detail-row"><span class="detail-label">Nota N2:</span><span class="detail-value">${escH(item.Lvl2Note)}</span></div>`:''}`:'' }
           </div>
         </div>`:'' }
@@ -1750,20 +1773,20 @@ function renderDetail(item) {
 
   if (canApproveN1) {
     document.getElementById('btn-appn1').addEventListener('click',()=>{
-      approvalModal('Aprobar — Nivel 1', async(note)=>{
+      approvalModal('Revisar y elevar — Compras', async(note)=>{
         const updated = {...item, Status:S.APP1, Lvl1At:isoNow(), Lvl1By:currentUser.username, Lvl1Note:note};
         await doAction(item, {Status:S.APP1, Lvl1At:isoNow(), Lvl1By:currentUser.username, Lvl1Note:note});
-        await notificar(updated,'Aprobada Nivel 1 — Pendiente aprobación final',note,[ROLES_ADMIN[0], item.RequesterMail]);
-        toast('Aprobado Nivel 1 — notificación enviada','success');
+        await notificar(updated,'✅ Revisada por Compras — Pendiente autorización',note,[ROLES_ADMIN[0], item.RequesterMail]);
+        toast('Elevada a autorización — notificación enviada','success');
         renderList(false);
       });
     });
     document.getElementById('btn-rejn1').addEventListener('click',()=>{
-      approvalModal('Rechazar — Nivel 1', async(note)=>{
+      approvalModal('Devolver al solicitante', async(note)=>{
         const updated = {...item, Status:S.REJ1, Lvl1At:isoNow(), Lvl1By:currentUser.username, Lvl1Note:note};
         await doAction(item, {Status:S.REJ1, Lvl1At:isoNow(), Lvl1By:currentUser.username, Lvl1Note:note});
-        await notificar(updated,'Rechazada Nivel 1',note,[item.RequesterMail]);
-        toast('Rechazado Nivel 1 — notificación enviada','error');
+        await notificar(updated,'↩ Devuelta al solicitante por Compras',note,[item.RequesterMail]);
+        toast('Devuelta al solicitante — notificación enviada','error');
         renderList(false);
       });
     });
@@ -1771,35 +1794,48 @@ function renderDetail(item) {
   if (canApproveN2) {
     document.getElementById('btn-appn2').addEventListener('click',()=>{
       const needsGer = item.RequiereGerencia;
-      const title = needsGer ? 'Aprobar N2 → enviar a Gerencia' : 'Aprobar N2 → listo para OC';
+      const title = needsGer ? 'Autorizar y enviar a Gerencia' : 'Autorizar — lista para OC';
       const hint = needsGer
-        ? '<div style="background:rgba(212,160,23,.1);border:1px solid rgba(212,160,23,.3);border-radius:4px;padding:8px 12px;font-size:12px;color:var(--yellow);margin-bottom:12px">Esta requisición requiere aprobación de Gerencia (Raúl López)</div>'
-        : '<div style="background:rgba(46,168,107,.1);border:1px solid rgba(46,168,107,.3);border-radius:4px;padding:8px 12px;font-size:12px;color:var(--green);margin-bottom:12px">Esta requisición NO requiere aprobación de Gerencia — pasará directamente a disponible para OC</div>';
-      showModal(`${hint}<div class="form-group"><label>Nota (opcional)</label><textarea id="approval-note" rows="3"></textarea></div>`,
+        ? '<div style="background:rgba(212,160,23,.1);border:1px solid rgba(212,160,23,.3);border-radius:4px;padding:8px 12px;font-size:12px;color:var(--yellow);margin-bottom:12px">⚠ Esta requisición requiere aprobación de Gerencia (Raúl López) antes de poder asignarse a un proveedor.</div>'
+        : '<div style="background:rgba(46,168,107,.1);border:1px solid rgba(46,168,107,.3);border-radius:4px;padding:8px 12px;font-size:12px;color:var(--green);margin-bottom:12px">✔ Esta requisición no requiere intervención de Gerencia y pasará directamente al estado <strong>Lista para OC</strong>.</div>';
+      showModal(`${hint}
+        <div class="form-group">
+          <label style="color:var(--accent)">Proveedor seleccionado *</label>
+          <input type="text" id="n2-proveedor" placeholder="Ej: Resisten S.A." style="border-color:var(--accent)"/>
+        </div>
+        <div class="form-group">
+          <label style="color:var(--accent)">Criterio de selección</label>
+          <input type="text" id="n2-criterio" placeholder="Ej: Mejor precio, plazo de entrega, condición de pago…"/>
+        </div>
+        <div class="form-group"><label>Nota adicional (opcional)</label><textarea id="approval-note" rows="2"></textarea></div>`,
         title, [{label:'Confirmar', cls:'btn-primary', cb:async()=>{
-          const note = document.getElementById('approval-note').value.trim();
+          const prov = document.getElementById('n2-proveedor').value.trim();
+          if (!prov) { toast('Ingresá el proveedor seleccionado','error'); return; }
+          const criterio = document.getElementById('n2-criterio').value.trim();
+          const noteBase = document.getElementById('approval-note').value.trim();
+          const note = [prov?'Proveedor: '+prov:'', criterio?'Criterio: '+criterio:'', noteBase].filter(Boolean).join(' | ');
           if (needsGer) {
-            const fields = {Status:S.APP2, Lvl2At:isoNow(), Lvl2By:currentUser.username, Lvl2Note:note};
+            const fields = {Status:S.APP2, Lvl2At:isoNow(), Lvl2By:currentUser.username, Lvl2Note:note, SelectedVendor:prov, VendorCriteria:criterio};
             await doAction(item, fields);
             const updated = {...item, ...fields};
-            await notificar(updated,'✅ Aprobada N2 — Pendiente aprobación Gerencia',note,[ROLES_GERENTE[0], item.RequesterMail]);
-            toast('Enviado a Gerencia para aprobación','success');
+            await notificar(updated,'✅ Autorizada — Pendiente aprobación Gerencia',note,[ROLES_GERENTE[0], item.RequesterMail]);
+            toast('Autorizada — enviada a Gerencia para aprobación','success');
           } else {
-            const fields = {Status:S.APP2NOGER, Lvl2At:isoNow(), Lvl2By:currentUser.username, Lvl2Note:note};
+            const fields = {Status:S.APP2NOGER, Lvl2At:isoNow(), Lvl2By:currentUser.username, Lvl2Note:note, SelectedVendor:prov, VendorCriteria:criterio};
             await doAction(item, fields);
             const updated = {...item, ...fields};
-            await notificar(updated,'✅ Aprobada — Lista para asignación de OC',note,[ROLES_APPROVER[0], item.RequesterMail]);
-            toast('Aprobado N2 — lista para OC','success');
+            await notificar(updated,'✅ Autorizada — Lista para asignación de OC',note,[ROLES_APPROVER[0], item.RequesterMail]);
+            toast('Autorizada — lista para asignación de OC','success');
           }
           renderList(false);
         }},{label:'Cancelar',cls:'btn-secondary'}]);
     });
     document.getElementById('btn-rejn2').addEventListener('click',()=>{
-      approvalModal('Rechazar — Nivel 2', async(note)=>{
+      approvalModal('No autorizar — Compras', async(note)=>{
         const fields = {Status:S.REJ2, Lvl2At:isoNow(), Lvl2By:currentUser.username, Lvl2Note:note};
         await doAction(item, fields);
-        await notificar({...item,...fields},'Rechazada Nivel 2',note,[item.RequesterMail]);
-        toast('Rechazado N2','error');
+        await notificar({...item,...fields},'↩ No autorizada — revisá los comentarios',note,[item.RequesterMail]);
+        toast('No autorizada — notificación enviada al solicitante','error');
         renderList(false);
       });
     });
@@ -1890,33 +1926,33 @@ function renderDetail(item) {
       ]);
     });
     document.getElementById('btn-rejger').addEventListener('click',()=>{
-      approvalModal('Rechazar — Gerencia General', async(note)=>{
+      approvalModal('No aprobar — Gerencia', async(note)=>{
         const fields = {Status:S.REJGER, GerAt:isoNow(), GerBy:currentUser.username, GerNote:note};
         await doAction(item, fields);
         await notificar({...item,...fields},'Rechazada por Gerencia',note,[item.RequesterMail, ROLES_ADMIN[0]]);
-        toast('Rechazado por Gerencia','error');
+        toast('No aprobada por Gerencia — notificación enviada','error');
         renderList(false);
       });
     });
   }
   if (canApproveFin) {
     document.getElementById('btn-appfin').addEventListener('click',()=>{
-      approvalModal('Confirmar aprobación de Finanzas', async(note)=>{
+      approvalModal('Dar OK Financiero — Finanzas', async(note)=>{
         const fields = {Status:S.APPFIN, FinAt:isoNow(), FinBy:currentUser.username, FinNote:note};
         await doAction(item, fields);
         const destStr = item.FinDestinatarios||'';
         const dest = [...new Set([ROLES_APPROVER[0], ROLES_ADMIN[0], item.RequesterMail, ...destStr.split(',').filter(Boolean)])];
         await notificar({...item,...fields},'✅ Aprobada Finanzas — Lista para OC',note,dest);
-        toast('Aprobado por Finanzas — lista para OC','success');
+        toast('OK Financiero otorgado — lista para OC','success');
         renderList(false);
       });
     });
     document.getElementById('btn-rejfin').addEventListener('click',()=>{
-      approvalModal('Rechazar — Finanzas', async(note)=>{
+      approvalModal('Observar — Finanzas', async(note)=>{
         const fields = {Status:S.REJFIN, FinAt:isoNow(), FinBy:currentUser.username, FinNote:note};
         await doAction(item, fields);
         await notificar({...item,...fields},'Rechazada por Finanzas',note,[item.RequesterMail, ROLES_ADMIN[0]]);
-        toast('Rechazado por Finanzas','error');
+        toast('Observación registrada — notificación enviada','error');
         renderList(false);
       });
     });
@@ -1925,8 +1961,25 @@ function renderDetail(item) {
     document.getElementById('btn-reopen').addEventListener('click',async()=>{
       if (!confirm('¿Reabrir esta requisición como Borrador?')) return;
       await doAction(item, {Status:S.DRAFT});
-      toast('Requisición reabierta como Borrador','info');
+      toast('Requisición reabierta como borrador','info');
       renderList(false);
+    });
+  }
+
+  if (canCorrect) {
+    document.getElementById('btn-correct').addEventListener('click',()=>{
+      const clone = {
+        ...item,
+        _id: item._id,
+        Status: S.DRAFT,
+        Lvl1At:'', Lvl1By:'', Lvl1Note:'',
+        Lvl2At:'', Lvl2By:'', Lvl2Note:'',
+        GerAt:'', GerBy:'', GerNote:'',
+        FinAt:'', FinBy:'', FinNote:'',
+        SubmittedAt:'', UpdatedAt:'',
+      };
+      toast('Abriendo para corrección…','info');
+      renderForm(clone);
     });
   }
 }
@@ -2906,15 +2959,15 @@ async function checkForUpdates() {
         newCount++;
       }
       // Notificar al aprobador cuando hay nuevas pendientes
-      if (isApprover && item.Status==='Enviada') {
+      if (isApprover && item.Status===S.SENT) {
         sendNotif('Nueva requisicion pendiente', item.Title + ' — ' + (item.RequesterName||''), 'new-'+item.id);
         newCount++;
       }
-      if (isGerente && item.Status==='Aprobada N2 (Pendiente Gerencia)') {
+      if (isGerente && item.Status===S.APP2) {
         sendNotif('Requisicion pendiente de Gerencia', item.Title, 'ger-'+item.id);
         newCount++;
       }
-      if (isFin && (item.Status==='Aprobada Gerencia (Pendiente Finanzas)'||item.Status==='Aprobada N2 (Pendiente Finanzas)')) {
+      if (isFin && (item.Status===S.APPGER||item.Status===S.APP2NOGER)) {
         sendNotif('Requisicion pendiente en Finanzas', item.Title, 'fin-'+item.id);
         newCount++;
       }
