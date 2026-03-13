@@ -1218,6 +1218,7 @@ function renderList(approvalsMode=false) {
 // VISTA: FORMULARIO (crear/editar)
 // ================================================================
 function renderForm(item) {
+  try {
   showView('form');
   const isEdit = !!item;
   const container = document.getElementById('view-form');
@@ -1523,6 +1524,11 @@ function renderForm(item) {
   document.getElementById('btn-send-req').addEventListener('click',()=>saveReq(true));
 
   renderItems();
+  } catch(err) {
+    const container = document.getElementById('view-form');
+    if (container) container.innerHTML = '<div style="color:#f87171;background:#1a1f25;border:1px solid #d94040;border-radius:6px;padding:24px;margin:20px;font-family:monospace;font-size:13px"><strong>ERROR en renderForm:</strong><br/>' + err.message + '<br/><br/>' + (err.stack||'').replace(/\n/g,'<br/>') + '</div>';
+    console.error('renderForm crash:', err);
+  }
 }
 
 // ================================================================
