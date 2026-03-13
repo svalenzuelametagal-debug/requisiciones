@@ -1234,6 +1234,14 @@ function renderForm(item) {
   const existingLines = parseLines(item?.LinesJSON||'[]');
   if (!existingLines.length) existingLines.push({desc:'',qty:1,unit:'UN',currency:'ARS',price:'',link:'',obs:''});
 
+  const _gerChecked = item && item.RequiereGerencia ? ' checked' : '';
+  const gerenciaBlock = (ROLE==='admin'||ROLE==='approver')
+    ? '<div class="form-group span2" style="display:flex;align-items:center;gap:12px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px">'
+      + '<input type="checkbox" id="f-req-ger" style="width:auto;margin:0"' + _gerChecked + '/>'
+      + '<div><label style="margin:0;text-transform:none;font-size:13px;color:var(--text0);font-weight:500">Requiere aprobación de Gerencia (Raül López)</label>'
+      + '<div style="font-size:11px;color:var(--text2);margin-top:2px">Marcá esta opción para requisiciones de mayor envergadura o monto</div></div></div>'
+    : '<input type="hidden" id="f-req-ger" value="false"/>';
+
   container.innerHTML = `
     <div class="section-header">
       <div>
@@ -1292,13 +1300,7 @@ function renderForm(item) {
           <label>Fecha necesaria (opcional)</label>
           <input type="date" id="f-needby" value="${item?.NeedBy?item.NeedBy.slice(0,10):''}"/>
         </div>
-        ${(ROLE==='admin'||ROLE==='approver')?`<div class="form-group span2" style="display:flex;align-items:center;gap:12px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px">
-          <input type="checkbox" id="f-req-ger" style="width:auto;margin:0" ${item?.RequiereGerencia?'checked':''}/>
-          <div>
-            <label style="margin:0;text-transform:none;font-size:13px;color:var(--text0);font-weight:500">Requiere aprobación de Gerencia (Raúl López)</label>
-            <div style="font-size:11px;color:var(--text2);margin-top:2px">Marcá esta opción para requisiciones de mayor envergadura o monto</div>
-          </div>
-        </div>`:'<input type="hidden" id="f-req-ger" value="false"/>'}
+        ${gerenciaBlock}
       </div>
     </div>
 
