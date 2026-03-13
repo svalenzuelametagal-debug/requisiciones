@@ -896,6 +896,24 @@ function fixEncoding(s) {
   catch(e) { return String(s); }
 }
 
+function _normalizeStatus(s) {
+  // Mapeo de strings legacy (guardados en GitHub antes del renombrado) a los nuevos
+  const LEGACY = {
+    'Enviada (Pendiente Nivel 1)':             'Pendiente revisión',
+    'Enviada':                                 'Pendiente revisión',
+    'Rechazada Nivel 1':                       'Devuelta por Compras',
+    'Aprobada Nivel 1 (Pendiente Nivel 2)':    'Revisada · En gestión',
+    'Rechazada Nivel 2':                       'No autorizada',
+    'Aprobada N2 (Pendiente Gerencia)':        'Autorizada · Pendiente Gerencia',
+    'Aprobada N2 (Pendiente OC)':              'Autorizada · Lista para OC',
+    'Rechazada por Gerencia':                  'No autorizada por Gerencia',
+    'Aprobada Gerencia (Pendiente Finanzas)':  'Aprobada Gerencia · Pendiente Finanzas',
+    'Rechazada por Finanzas':                  'Observada por Finanzas',
+    'Aprobada por Finanzas':                   'OK Financiero',
+  };
+  return LEGACY[s] || s;
+}
+
 function mapItem(raw) {
   return {
     _id:          raw.id || raw._id || '',
@@ -909,7 +927,7 @@ function mapItem(raw) {
     Justification:fixEncoding(raw.Justification||''),
     Vendor:       fixEncoding(raw.Vendor||''),
     NeedBy:       raw.NeedBy||'',
-    Status:       raw.Status||S.DRAFT,
+    Status:       _normalizeStatus(raw.Status)||S.DRAFT,
     LinesJSON:    raw.LinesJSON||'[]',
     AttachmentsJSON:raw.AttachmentsJSON||'[]',
     CommentsJSON:   raw.CommentsJSON||'[]',
@@ -1589,11 +1607,11 @@ function renderDetail(item) {
   // History
   const history = [];
   if (item.CreatedAt)   history.push({when:item.CreatedAt,   what:`Creada como Borrador`});
-  if (item.SubmittedAt) history.push({when:item.SubmittedAt, what:'Enviada para aprobación N1'});
+  if (item.SubmittedAt) history.push({when:item.SubmittedAt, what:'Enviada a Compras para revisión'});
   if (item.Lvl1At)      history.push({when:item.Lvl1At,      what:`${item.Status===S.REJ1?'Devuelta al solicitante':'Revisada y elevada'} por ${item.Lvl1By}${item.Lvl1Note?' — '+item.Lvl1Note:''}`});
   if (item.Lvl2At)      history.push({when:item.Lvl2At,      what:`${item.Status===S.REJ2?'No autorizada':'Autorizada'} por ${item.Lvl2By}${item.Lvl2Note?' — '+item.Lvl2Note:''}`});
   if (item.GerAt)       history.push({when:item.GerAt,       what:`${item.Status===S.REJGER?'No aprobada por Gerencia':'Aprobada por Gerencia'} (${item.GerBy})${item.GerNote?' — '+item.GerNote:''}`});
-  if (item.FinAt)       history.push({when:item.FinAt,       what:`${item.Status===S.REJFIN?'Rechazada':'Aprobada'} por Finanzas (${item.FinBy})${item.FinNote?' — '+item.FinNote:''}`});
+  if (item.FinAt)       history.push({when:item.FinAt,       what:`${item.Status===S.REJFIN?'Observada':'OK Financiero otorgado'} por Finanzas — ${item.FinBy}${item.FinNote?' — '+item.FinNote:''}`});
   if (item.OCNumber)    history.push({when:item.OCDate,       what:`OC asignada: ${item.OCNumber} — Comprador: ${item.Buyer}`});
   history.sort((a,b)=>a.when>b.when?1:-1);
   const historyHtml = history.map(h=>`
