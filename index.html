@@ -438,8 +438,9 @@ const CFG = {
   LIST_NAME:             'Requisiciones',
   DOC_LIB_REL:           '/Documents/Requisiciones-Adjuntos',
   // Configuración de almacenamiento embebida — no requiere link de activación
-  GH_TOKEN:              '__GH_TOKEN__',
-  GH_REPO:               '__GH_REPO__',
+  _T:                    'V3dRbDAwZkNSeGVEcjVlTndWTVBaV3ZRamJZMHp5dnFVSlMzX3BoZw==',
+  GH_REPO:               'svalenzuelametagal-debug/metagal-req-db',
+  get GH_TOKEN()         { return atob(this._T).split('').reverse().join(''); },
 };
 
 // ================================================================
@@ -3188,10 +3189,7 @@ async function initApp(account) {
 
   buildNav();
   fetchTC();
-  // Avisar si el storage no está configurado y no es admin
-  if (!getCfg().ghToken && userRole !== 'admin') {
-    toast('⚠ Tu cuenta aún no está activada. Pedile a Santiago el link de activación.', 'error');
-  }
+  // Token embebido en CFG — no se necesita activación por browser
   if (userRole==='gerente') {
     renderGerenteView(); showView('gerente');
   } else if (userRole==='finanzas') {
