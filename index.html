@@ -1231,7 +1231,7 @@ function renderForm(item) {
   if (!existingLines.length) existingLines.push({desc:'',qty:1,unit:'UN',currency:'ARS',price:'',link:'',obs:''});
 
   const _gerChecked = item && item.RequiereGerencia ? ' checked' : '';
-  const gerenciaBlock = (ROLE==='admin'||ROLE==='approver')
+  const gerenciaBlock = (userRole==='admin'||userRole==='approver')
     ? '<div class="form-group span2" style="display:flex;align-items:center;gap:12px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px">'
       + '<input type="checkbox" id="f-req-ger" style="width:auto;margin:0"' + _gerChecked + '/>'
       + '<div><label style="margin:0;text-transform:none;font-size:13px;color:var(--text0);font-weight:500">Requiere aprobación de Gerencia (Raül López)</label>'
