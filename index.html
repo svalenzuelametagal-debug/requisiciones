@@ -437,6 +437,9 @@ const CFG = {
   SITE_PATH:             '/personal/svalenzuela_metagal_com_ar',
   LIST_NAME:             'Requisiciones',
   DOC_LIB_REL:           '/Documents/Requisiciones-Adjuntos',
+  // Configuración de almacenamiento embebida — no requiere link de activación
+  GH_TOKEN:              '__GH_TOKEN__',
+  GH_REPO:               '__GH_REPO__',
 };
 
 // ================================================================
@@ -568,7 +571,17 @@ async function getToken() {
 const DB_GITHUB_FILE = 'requisiciones.json';
 
 function getCfg() {
-  try { return JSON.parse(localStorage.getItem('mgal_cfg')||'{}'); } catch(e) { return {}; }
+  try {
+    const stored = JSON.parse(localStorage.getItem('mgal_cfg')||'{}');
+    // Si no hay token guardado, usar el embebido en CFG (funciona en cualquier browser)
+    if (!stored.ghToken && CFG.GH_TOKEN && !CFG.GH_TOKEN.startsWith('__')) {
+      stored.ghToken = CFG.GH_TOKEN;
+    }
+    if (!stored.ghRepo && CFG.GH_REPO && !CFG.GH_REPO.startsWith('__')) {
+      stored.ghRepo = CFG.GH_REPO;
+    }
+    return stored;
+  } catch(e) { return {}; }
 }
 function saveCfg(obj) {
   localStorage.setItem('mgal_cfg', JSON.stringify({...getCfg(),...obj}));
@@ -1282,10 +1295,10 @@ function renderForm(item) {
         ${isEdit && userRole==='admin' && item?.Status!==S.DRAFT ? `<div style="background:rgba(232,160,32,.12);border:1px solid rgba(232,160,32,.4);border-radius:4px;padding:8px 14px;margin-top:8px;font-size:12px;color:var(--accent)">⚠ Editando como Administrador — estado actual: <strong>${escH(item.Status)}</strong></div>` : ''}
         ${item?`<div class="section-sub"><span class="num">${escH(item.Title)}</span></div>`:''}
       </div>
-      <div class="ml-auto d-flex">
-        <button class="btn btn-secondary" id="btn-cancel-form">Cancelar</button>
-        <button class="btn btn-secondary" id="btn-save-draft">💾 Guardar borrador</button>
-        <button class="btn btn-primary" id="btn-send-req">📤 Enviar para aprobación</button>
+      <div class="ml-auto d-flex" style="opacity:0;pointer-events:none;user-select:none" aria-hidden="true">
+        <button class="btn btn-secondary" id="btn-cancel-form" tabindex="-1">Cancelar</button>
+        <button class="btn btn-secondary" id="btn-save-draft" tabindex="-1">💾 Guardar borrador</button>
+        <button class="btn btn-primary" id="btn-send-req" tabindex="-1">📤 Enviar para aprobación</button>
       </div>
     </div>
 
