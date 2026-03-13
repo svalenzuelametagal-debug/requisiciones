@@ -1369,6 +1369,15 @@ function renderForm(item) {
       </div>
       <div id="attach-upload-status" style="font-size:12px;color:var(--text2)"></div>
     </div>
+
+    <!-- ACCIONES PIE -->
+    <div class="form-section" style="background:transparent;border:none;padding-top:0">
+      <div style="display:flex;justify-content:flex-end;gap:10px;padding:12px 0 4px">
+        <button class="btn btn-secondary" id="btn-cancel-form-b">Cancelar</button>
+        <button class="btn btn-secondary" id="btn-save-draft-b">💾 Guardar borrador</button>
+        <button class="btn btn-primary" id="btn-send-req-b" style="min-width:190px">📤 Enviar para aprobación</button>
+      </div>
+    </div>
   `;
 
   // ÍTEMS — fuente única de verdad: el array `lines`
@@ -1565,11 +1574,17 @@ function renderForm(item) {
     } finally {
       btn.disabled = false;
       btn.textContent = send ? '📤 Enviar para aprobación' : '💾 Guardar borrador';
+      const btnB = send ? document.getElementById('btn-send-req-b') : document.getElementById('btn-save-draft-b');
+      if (btnB) btnB.textContent = btn.textContent;
     }
   }
 
   document.getElementById('btn-save-draft').addEventListener('click',()=>saveReq(false));
   document.getElementById('btn-send-req').addEventListener('click',()=>saveReq(true));
+  // Botones del pie — misma lógica
+  document.getElementById('btn-cancel-form-b')?.addEventListener('click',()=>{ if (!confirm('¿Cancelar? Se perderán los cambios no guardados.')) return; renderList(false); });
+  document.getElementById('btn-save-draft-b')?.addEventListener('click',()=>saveReq(false));
+  document.getElementById('btn-send-req-b')?.addEventListener('click',()=>saveReq(true));
 
   renderItems();
   } catch(err) {
@@ -1638,8 +1653,8 @@ function renderDetail(item) {
   let actionBtns = `<button class="btn btn-secondary btn-sm" id="btn-print-req" title="Imprimir / Guardar PDF">🖨 PDF</button>`;
   actionBtns += `<button class="btn btn-secondary btn-sm" id="btn-dup-req" title="Duplicar como nuevo borrador">⧉ Duplicar</button>`;
   if (canEdit) actionBtns += `<button class="btn btn-secondary" id="btn-edit-req">✏ Editar</button>`;
-  if (canApproveN1) actionBtns += `<button class="btn btn-success" id="btn-appn1">✔ Revisar y elevar</button><button class="btn btn-danger" id="btn-rejn1">↩ Devolver al solicitante</button>`;
-  if (canApproveN2) actionBtns += `<button class="btn btn-success" id="btn-appn2">✔ Autorizar</button><button class="btn btn-danger" id="btn-rejn2">✖ No autorizar</button>`;
+  if (canApproveN1) actionBtns += `<button class="btn btn-success" id="btn-appn1">✔ Dar visto bueno</button><button class="btn btn-danger" id="btn-rejn1">↩ Devolver al solicitante</button>`;
+  if (canApproveN2) actionBtns += `<button class="btn btn-success" id="btn-appn2">✔ Autorizar compra</button><button class="btn btn-danger" id="btn-rejn2">✖ No autorizar</button>`;
   if (canAssignOC)  actionBtns += `<button class="btn btn-info" id="btn-assign-oc">📄 Asignar OC</button>`;
   if (canApproveGer)actionBtns += `<button class="btn btn-success" id="btn-appger">✔ Aprobar</button><button class="btn btn-danger" id="btn-rejger">✖ No aprobar</button>`;
   if (canApproveFin)actionBtns += `<button class="btn btn-success" id="btn-appfin">✔ Dar OK Financiero</button><button class="btn btn-danger" id="btn-rejfin">✖ Observar</button>`;
@@ -1805,7 +1820,7 @@ function renderDetail(item) {
 
   if (canApproveN1) {
     document.getElementById('btn-appn1').addEventListener('click',()=>{
-      approvalModal('Revisar y elevar — Compras', async(note)=>{
+      approvalModal('Dar visto bueno — Compras', async(note)=>{
         const updated = {...item, Status:S.APP1, Lvl1At:isoNow(), Lvl1By:currentUser.username, Lvl1Note:note};
         await doAction(item, {Status:S.APP1, Lvl1At:isoNow(), Lvl1By:currentUser.username, Lvl1Note:note});
         await notificar(updated,'✅ Revisada por Compras — Pendiente autorización',note,[ROLES_ADMIN[0], item.RequesterMail]);
