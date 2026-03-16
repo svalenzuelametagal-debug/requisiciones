@@ -2,6 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <meta name="theme-color" content="#e8a020"/>
 <meta name="mobile-web-app-capable" content="yes"/>
@@ -5582,6 +5583,33 @@ function renderReport() {
     </div>
   `;
 
+  function showRptDrill(type, value) {
+    if (!window.rptItems) return;
+    const filtered = type==='dept'
+      ? window.rptItems.filter(i=>i.Dept===value)
+      : window.rptItems.filter(i=>(i.SelectedVendor||i.Vendor||'')=== value);
+    if (!filtered.length) return;
+    const n2 = n => Number(n||0).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2});
+    const rows = filtered.map(i=>`
+      <tr style="border-bottom:1px solid #EEF0F5;cursor:pointer" onclick="renderDetail(window.rptItems.find(x=>x.Title==='${escH(i.Title)}'))">
+        <td style="padding:8px;font-size:11px;font-weight:700;color:#E8311A;font-family:monospace">${escH(i.Title)}</td>
+        <td style="padding:8px;font-size:11px">${escH(type==='dept'?(i.SelectedVendor||i.Vendor||'—'):i.Dept)}</td>
+        <td style="padding:8px;font-size:11px">${escH(i.RequesterName)}</td>
+        <td style="padding:8px"><span style="font-size:10px;background:${i.Status===S.OC?'#E8FAF3':'#EFF6FF'};color:${i.Status===S.OC?'#0DB87B':'#2B7EFF'};padding:2px 8px;border-radius:10px;font-weight:700">${escH(i.Status)}</span></td>
+        <td style="padding:8px;font-size:11px;font-family:monospace">${escH(i.OCNumber||'—')}</td>
+        <td style="padding:8px;font-size:11px;color:#9AA5C0">${(i.CreatedAt||'').slice(0,10)}</td>
+      </tr>`).join('');
+    showModal(`
+      <div style="font-size:12px;color:#9AA5C0;margin-bottom:12px">${filtered.length} requisición${filtered.length!==1?'es':''} · Hacé clic en una fila para ver el detalle completo</div>
+      <div style="overflow-x:auto;max-height:400px;overflow-y:auto">
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr>${['N° Req',type==='dept'?'Proveedor':'Departamento','Solicitante','Estado','N° OC','Creada'].map(h=>`<th style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#9AA5C0;padding:7px 8px;border-bottom:2px solid #EEF0F5;text-align:left;background:#fff;position:sticky;top:0">${h}</th>`).join('')}</tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    `, type==='dept' ? '📁 '+value : '🏭 '+value, [{label:'Cerrar',cls:'btn-secondary'}]);
+  }
+
   async function load() {
     try {
       const rawItems = await readDB();
@@ -5678,6 +5706,7 @@ function renderReport() {
 
     // ── RENDER ────────────────────────────────────────────
     const content = document.getElementById('rpt-content');
+    window.rptItems = items; // para drill-down desde tabla
     content.innerHTML = `
       <!-- KPI GRID -->
       <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:22px">
@@ -5760,7 +5789,7 @@ function renderReport() {
           ${deptsSorted.map(([dept,data],i)=>{
             const pct = Math.round(data.count/items.length*100);
             const colors=['#E8311A','#F59E0B','#2B7EFF','#0DB87B','#7C3AED','#F59E0B','#9AA5C0','#9AA5C0','#9AA5C0','#9AA5C0'];
-            return `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #EEF0F5">
+            return `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #EEF0F5;cursor:pointer;border-radius:6px" onmouseenter="this.style.background='#F4F6FA'" onmouseleave="this.style.background=''" ondblclick="showRptDrill('dept','${escH(dept||'')}')">
               <div style="font-size:10px;font-weight:800;color:#9AA5C0;min-width:18px">${i+1}</div>
               <div style="flex:1">
                 <div style="font-size:12px;font-weight:700;color:#1A1F36">${escH(dept||'—')}</div>
@@ -5784,7 +5813,7 @@ function renderReport() {
             const maxEquiv = provsSorted[0][1].equiv||1;
             const pct = Math.round(data.equiv/maxEquiv*100);
             const colors=['#E8311A','#F59E0B','#2B7EFF','#0DB87B','#7C3AED','#F59E0B','#9AA5C0','#9AA5C0','#9AA5C0','#9AA5C0'];
-            return `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #EEF0F5">
+            return `<div ondblclick="showRptDrill('prov','${escH(prov)}')" style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #EEF0F5;cursor:pointer;border-radius:6px;transition:background .12s" onmouseenter="this.style.background='#F4F6FA'" onmouseleave="this.style.background=''">
               <div style="font-size:10px;font-weight:800;color:#9AA5C0;min-width:18px">${i+1}</div>
               <div style="flex:1">
                 <div style="font-size:12px;font-weight:700;color:#1A1F36">${escH(prov)}</div>
@@ -5818,7 +5847,7 @@ function renderReport() {
               ${aprobadas.sort((a,b)=>(b.Lvl2At||'').localeCompare(a.Lvl2At||'')).map((i,idx)=>{
                 const t=calcARS(i);
                 const tcSrc=i.TCusd?'🔒':'~';
-                return `<tr style="background:${idx%2?'#F8F9FB':'#fff'}">
+                return `<tr style="background:${idx%2?'#F8F9FB':'#fff'};cursor:pointer" onmouseenter="this.style.background='#EFF6FF'" onmouseleave="this.style.background=''" ondblclick="(function(){var found=rptItems&&rptItems.find(x=>x.Title==='${i.Title}');if(found)renderDetail(found);})()">
                   <td style="padding:7px 8px;font-size:11px;font-weight:700;color:#E8311A;font-family:monospace">${escH(i.Title)}</td>
                   <td style="padding:7px 8px;font-size:11px;color:#3D4461">${escH(i.Dept)}</td>
                   <td style="padding:7px 8px;font-size:11px;color:#3D4461">${escH(i.RequesterName)}</td>
@@ -5849,17 +5878,8 @@ function renderReport() {
     document.getElementById('rpt-loading').style.display='none';
     document.getElementById('rpt-content').style.display='block';
 
-    // ── CHARTS ────────────────────────────────────────────
-    function loadChartJSForReport(cb) {
-      if (window.Chart) { cb(); return; }
-      const s = document.createElement('script');
-      s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js';
-      s.onload = cb;
-      s.onerror = () => { window.Chart = null; cb(); };
-      document.head.appendChild(s);
-    }
-
-    loadChartJSForReport(() => {
+    // ── CHARTS — usar requestAnimationFrame para garantizar que el DOM esté visible ──
+    requestAnimationFrame(() => setTimeout(() => {
       if (!window.Chart) return;
       // Evolución mensual
       const monthCtx = document.getElementById('rpt-chart-month')?.getContext('2d');
@@ -5890,7 +5910,7 @@ function renderReport() {
           options:{responsive:true,maintainAspectRatio:false,cutout:'70%',plugins:{legend:{display:false}}}
         });
       }
-    }); // fin loadChartJSForReport
+    }, 50)); // fin requestAnimationFrame/setTimeout
   }
 
   function kpiCard(ico,label,value,sub,acColor,bgColor) {
