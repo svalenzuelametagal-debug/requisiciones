@@ -1488,7 +1488,7 @@ function renderForm(item) {
   const existAtt = parseAttachments(item?.AttachmentsJSON||'[]');
   if (existAtt.length) {
     document.getElementById('attach-existing').innerHTML = existAtt.map(a=>`
-      <div class="attach-item">📎 <a href="${escH(a.webUrl)}" target="_blank">${escH(a.name)}</a></div>
+      <div class="attach-item">📎 <a href="${escH(toRawUrl(a.webUrl))}" target="_blank">${escH(a.name)}</a></div>
     `).join('');
   }
 
