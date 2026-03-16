@@ -597,8 +597,44 @@ function githubHeaders(token) {
 
 
 function toRawUrl(url) {
+  // Kept for compatibility — actual opening handled by openAttachment
   if (!url) return '#';
-  return url.replace(/^https:\/\/github\.com\/([^\/]+)\/([^\/]+)\/blob\/([^\/]+)\/(.+)$/, 'https://raw.githubusercontent.com/$1/$2/$3/$4');
+  return url;
+}
+
+async function openAttachment(url, filename) {
+  if (!url || url === '#') return;
+  try {
+    // Extract path from github.com or raw.githubusercontent.com URL
+    let apiUrl;
+    const blobMatch = url.match(/^https:\/\/github\.com\/([^/]+)\/([^/]+)\/blob\/([^/]+)\/(.+)$/);
+    const rawMatch  = url.match(/^https:\/\/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\/(.+)$/);
+    const match = blobMatch || rawMatch;
+    if (match) {
+      apiUrl = 'https://api.github.com/repos/' + match[1] + '/' + match[2] + '/contents/' + match[4];
+    } else {
+      window.open(url, '_blank'); return;
+    }
+    const cfg = getCfg();
+    const res = await fetch(apiUrl, { headers: { Authorization: 'token ' + cfg.ghToken, Accept: 'application/vnd.github.v3+json' } });
+    if (!res.ok) throw new Error('GitHub ' + res.status);
+    const data = await res.json();
+    const b64 = data.content.replace(/\n/g, '');
+    const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+    const ext = (filename || '').split('.').pop().toLowerCase();
+    const mimeMap = { pdf:'application/pdf', png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg',
+      gif:'image/gif', webp:'image/webp', heic:'image/heic', bmp:'image/bmp',
+      mp4:'video/mp4', mov:'video/quicktime', xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      xls:'application/vnd.ms-excel', doc:'application/msword',
+      docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
+    const mime = mimeMap[ext] || 'application/octet-stream';
+    const blob = new Blob([bytes], { type: mime });
+    const blobUrl = URL.createObjectURL(blob);
+    window.open(blobUrl, '_blank');
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+  } catch(e) {
+    toast('Error abriendo adjunto: ' + e.message, 'error');
+  }
 }
 
 async function readDB() {
@@ -726,7 +762,7 @@ function buildMailHTML(item, accion, nota) {
     <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:13px;text-align:right">${l.currency||'ARS'} ${l.price?Number(l.price).toLocaleString('es-AR',{minimumFractionDigits:2}):'—'}</td>
     <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:12px;color:#888">${l.obs||'—'}</td>
   </tr>`).join('');
-  const adjHtml = attachments.length ? attachments.map(a=>`<a href="${toRawUrl(a.webUrl)}" target="_blank" style="color:#3a8fd4;font-size:12px;display:block;margin-bottom:4px">📎 ${a.name}</a>`).join('') : '<span style="color:#aaa;font-size:12px">Sin adjuntos</span>';
+  const adjHtml = attachments.length ? attachments.map(a=>`<a href="#" onclick="openAttachment(${JSON.stringify(a.webUrl)},${JSON.stringify(a.name)});return false;" style="color:#3a8fd4;font-size:12px;display:block;margin-bottom:4px">📎 ${a.name}</a>`).join('') : '<span style="color:#aaa;font-size:12px">Sin adjuntos</span>';
   return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,sans-serif">
   <div style="max-width:660px;margin:24px auto;background:#fff;border-radius:6px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.1)">
     <div style="background:#1a1f25;padding:20px 28px"><div style="color:#e8a020;font-size:20px;font-weight:700">Metagal Argentina</div><div style="color:#6e7e92;font-size:11px;text-transform:uppercase;letter-spacing:.1em;margin-top:3px">Requisiciones de Compra</div></div>
@@ -1686,7 +1722,7 @@ function renderDetail(item) {
     </tr>`).join('');
 
   const attachHtml = attachments.length
-    ? attachments.map(a=>`<div class="attach-item">📎 <a href="${escH(toRawUrl(a.webUrl))}" target="_blank">${escH(a.name)}</a></div>`).join('')
+    ? attachments.map(a=>`<div class="attach-item">📎 <a href="#" onclick="openAttachment(${JSON.stringify(a.webUrl)},${JSON.stringify(a.name)});return false;" style="cursor:pointer">${escH(a.name)}</a></div>`).join('')
     : '<div class="text-muted" style="font-size:12px">Sin adjuntos</div>';
 
   // History
