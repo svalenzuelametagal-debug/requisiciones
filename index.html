@@ -849,7 +849,10 @@ async function generateNumber(dept) {
 // ================================================================
 // TIPO DE CAMBIO — BNA Billete + manual override
 // ================================================================
-let tcManual = { usd_compra:null, usd_venta:null, eur_compra:null, eur_venta:null };
+let tcManual = (()=>{
+  try { const s=localStorage.getItem('mgal_tc'); return s?JSON.parse(s):{usd_compra:null,usd_venta:null,eur_compra:null,eur_venta:null}; }
+  catch(e){ return {usd_compra:null,usd_venta:null,eur_compra:null,eur_venta:null}; }
+})();
 
 async function fetchTC() {
   const badge = document.getElementById('tc-badge');
@@ -863,6 +866,7 @@ async function fetchTC() {
       if (d) {
         if (!tcManual.usd_compra) tcManual.usd_compra = d[1] ? Number(d[1]).toFixed(2) : null;
         if (!tcManual.usd_venta)  tcManual.usd_venta  = d[2] ? Number(d[2]).toFixed(2) : null;
+        try { localStorage.setItem('mgal_tc', JSON.stringify(tcManual)); } catch(e){}
       }
     }
   } catch(e) {}
@@ -907,11 +911,13 @@ function showTCEditor() {
       tcManual.usd_venta  = document.getElementById('tc-usd-v').value||null;
       tcManual.eur_compra = document.getElementById('tc-eur-c').value||null;
       tcManual.eur_venta  = document.getElementById('tc-eur-v').value||null;
+      try { localStorage.setItem('mgal_tc', JSON.stringify(tcManual)); } catch(e){}
       updateTCBadge();
       toast('Tipo de cambio actualizado','success');
     }},
     {label:'Actualizar desde BNA', cls:'btn-secondary', cb:()=>{
       tcManual = {usd_compra:null,usd_venta:null,eur_compra:null,eur_venta:null};
+      try { localStorage.removeItem('mgal_tc'); } catch(e){}
       fetchTC();
     }},
     {label:'Cancelar', cls:'btn-secondary'},
@@ -1627,9 +1633,10 @@ function renderForm(item) {
         // Preservar estado si admin/approver edita req activa (no borrador ni rechazada)
         Status: (() => {
           if (isEdit && item && (userRole==='admin'||userRole==='approver')) {
+            const normalizedSt = _normalizeStatus(item.Status);
             const activeStatuses = [S.APP1,S.APP2,S.APP2NOGER,S.APPGER,S.APPFIN,S.OC];
-            if (activeStatuses.includes(_normalizeStatus(item.Status))) {
-              return _normalizeStatus(item.Status); // mantener estado actual
+            if (activeStatuses.includes(normalizedSt)) {
+              return normalizedSt; // mantener estado, no resetear
             }
           }
           return send ? S.SENT : S.DRAFT;
