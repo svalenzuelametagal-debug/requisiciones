@@ -2694,7 +2694,8 @@ function renderDashboard() {
   }
 
   function renderDashContent() {
-    const items = allItems;
+    // Normalizar estados por si acaso vienen con string legacy
+    const items = allItems.map(i => ({...i, Status: _normalizeStatus(i.Status)}));
     const total    = items.length;
     const pendN1   = items.filter(i=>i.Status===S.SENT).length;
     const pendN2   = items.filter(i=>i.Status===S.APP1).length;
