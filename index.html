@@ -615,25 +615,36 @@ async function writeDB(data) {
   const cfg = getCfg();
   if (!cfg.ghToken || !cfg.ghRepo) throw new Error('Sin configuracion.');
   const url = 'https://api.github.com/repos/' + cfg.ghRepo + '/contents/' + DB_GITHUB_FILE;
-  let sha = null;
-  const getRes = await fetch(url, { headers: githubHeaders(cfg.ghToken) });
-  if (getRes.ok) { sha = (await getRes.json()).sha; }
-  else if (getRes.status !== 404) {
-    const e = await getRes.json().catch(()=>({}));
-    throw new Error('GitHub ' + getRes.status + ': ' + (e.message||'error'));
+
+  // Siempre buscar SHA fresco antes de escribir para evitar conflictos 409
+  async function getFreshSha() {
+    const r = await fetch(url, { headers: githubHeaders(cfg.ghToken) });
+    if (r.ok) { const d = await r.json(); return d.sha || null; }
+    if (r.status === 404) return null;
+    const e = await r.json().catch(()=>({}));
+    throw new Error('GitHub ' + r.status + ': ' + (e.message||'error'));
   }
+
   const jsonStr = JSON.stringify(data, null, 2);
   const bytes2 = new TextEncoder().encode(jsonStr);
   let b64str = ''; bytes2.forEach(b => b64str += String.fromCharCode(b));
   const content = btoa(b64str);
-  const body = { message: 'update', content };
-  if (sha) body.sha = sha;
-  const res = await fetch(url, { method:'PUT', headers:githubHeaders(cfg.ghToken), body:JSON.stringify(body) });
-  if (!res.ok) {
+
+  // Reintentar hasta 3 veces en caso de 409 (conflicto de SHA)
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const sha = await getFreshSha();
+    const body = { message: 'update', content };
+    if (sha) body.sha = sha;
+    const res = await fetch(url, { method:'PUT', headers:githubHeaders(cfg.ghToken), body:JSON.stringify(body) });
+    if (res.ok) return res.json();
     const e = await res.json().catch(()=>({}));
+    if (res.status === 409 && attempt < 3) {
+      // SHA desactualizado — esperar un momento y reintentar con SHA fresco
+      await new Promise(r => setTimeout(r, 500 * attempt));
+      continue;
+    }
     throw new Error('GitHub ' + res.status + ': ' + (e.message||'error guardando'));
   }
-  return res.json();
 }
 
 async function setupGitHubStorage(ghToken, ghRepo) {
