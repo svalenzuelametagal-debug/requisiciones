@@ -2699,8 +2699,9 @@ function renderDashboard() {
     const pendN1   = items.filter(i=>i.Status===S.SENT).length;
     const pendN2   = items.filter(i=>i.Status===S.APP1).length;
     const withOC   = items.filter(i=>i.Status===S.OC).length;
-    const app2     = items.filter(i=>i.Status===S.APP2).length;
-    const rejected = items.filter(i=>i.Status===S.REJ1||i.Status===S.REJ2).length;
+    // Aprobadas s/OC = todas las autorizadas que aún no tienen OC emitida
+    const app2     = items.filter(i=>[S.APP2,S.APP2NOGER,S.APPGER,S.APPFIN].includes(i.Status)).length;
+    const rejected = items.filter(i=>[S.REJ1,S.REJ2,S.REJGER,S.REJFIN].includes(i.Status)).length;
     const mine     = items.filter(i=>i.RequesterMail===currentUser.username).length;
     const criticas = items.filter(i=>i.Urgency==='Crítica'&&(i.Status===S.SENT||i.Status===S.APP1)).length;
 
@@ -2736,8 +2737,8 @@ function renderDashboard() {
       <!-- KPIs -->
       <div class="kpi-grid">
         <div class="kpi"><div class="kpi-label">Total Requisiciones</div><div class="kpi-value">${total}</div></div>
-        <div class="kpi"><div class="kpi-label">Pendientes N1</div><div class="kpi-value text-accent">${pendN1}</div></div>
-        <div class="kpi"><div class="kpi-label">Pendientes N2</div><div class="kpi-value text-yellow">${pendN2}</div></div>
+        <div class="kpi"><div class="kpi-label">Pendiente revisión</div><div class="kpi-value text-accent">${pendN1}</div></div>
+        <div class="kpi"><div class="kpi-label">Pendiente autorización</div><div class="kpi-value text-yellow">${pendN2}</div></div>
         <div class="kpi"><div class="kpi-label">Aprobadas s/OC</div><div class="kpi-value text-green">${app2}</div></div>
         <div class="kpi"><div class="kpi-label">Con OC Asignada</div><div class="kpi-value text-accent">${withOC}</div></div>
         <div class="kpi"><div class="kpi-label">Rechazadas</div><div class="kpi-value text-red">${rejected}</div></div>
