@@ -5972,318 +5972,165 @@ async function exportReportHTML() {
   const tcUsd = parseFloat(tcManual.usd_venta)||0;
   const tcEur = parseFloat(tcManual.eur_venta)||0;
   const today = new Date().toISOString().slice(0,10);
-  const hoy = new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'short',year:'numeric'});
+  const hoy   = new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'short',year:'numeric'});
 
-  // Serialize all data needed for the standalone report
-  const dataJson = JSON.stringify(items.map(i=>({
-    Title:i.Title, Dept:i.Dept, RequesterName:i.RequesterName,
-    Status:i.Status, Urgency:i.Urgency,
-    GLAccount:i.GLAccount||'', CostCenter:i.CostCenter||'',
-    SelectedVendor:i.SelectedVendor||'', Vendor:i.Vendor||'',
-    LinesJSON:i.LinesJSON||'[]',
-    TCusd:i.TCusd||null, TCeur:i.TCeur||null, TCDate:i.TCDate||null,
-    OCNumber:i.OCNumber||'', Buyer:i.Buyer||'',
-    CreatedAt:i.CreatedAt||'', SubmittedAt:i.SubmittedAt||'',
-    Lvl2At:i.Lvl2At||'', Lvl2By:i.Lvl2By||'',
-    GerAt:i.GerAt||'', GerBy:i.GerBy||'', GerNote:i.GerNote||'',
-    FinAt:i.FinAt||'', FinBy:i.FinBy||'',
-    Justification:i.Justification||'',
+  const dataJson       = JSON.stringify(items.map(i=>({
+    Title:i.Title,Dept:i.Dept,RequesterName:i.RequesterName,Status:i.Status,Urgency:i.Urgency,
+    GLAccount:i.GLAccount||'',SelectedVendor:i.SelectedVendor||'',Vendor:i.Vendor||'',
+    LinesJSON:i.LinesJSON||'[]',TCusd:i.TCusd||null,TCeur:i.TCeur||null,TCDate:i.TCDate||null,
+    OCNumber:i.OCNumber||'',Buyer:i.Buyer||'',CreatedAt:i.CreatedAt||'',SubmittedAt:i.SubmittedAt||'',
+    Lvl2At:i.Lvl2At||'',Lvl2By:i.Lvl2By||'',GerAt:i.GerAt||'',GerBy:i.GerBy||'',
+    FinAt:i.FinAt||'',FinBy:i.FinBy||'',Justification:i.Justification||'',
   })));
+  const approvedJson   = JSON.stringify([S.APP2,S.APP2NOGER,S.APPGER,S.APPFIN,S.OC]);
+  const pendingJson    = JSON.stringify([S.SENT,S.APP1]);
+  const scJson         = JSON.stringify({
+    [S.DRAFT]:'#C2C7D6',[S.SENT]:'#2B7EFF',[S.APP1]:'#F59E0B',[S.APP2]:'#F59E0B',
+    [S.APP2NOGER]:'#0DB87B',[S.APPGER]:'#7C3AED',[S.APPFIN]:'#06B6D4',[S.OC]:'#1A6B3C',
+    [S.REJ1]:'#E8311A',[S.REJ2]:'#E8311A',[S.REJGER]:'#DC2626',[S.REJFIN]:'#F87171',
+  });
 
-  // Status constants embedded
-  const statusConsts = {
-    DRAFT:'Borrador', SENT:'Pendiente revisión', APP1:'Revisada · En gestión',
-    APP2:'Autorizada · Pendiente Gerencia', APP2NOGER:'Autorizada · Lista para OC',
-    APPGER:'Aprobada por Gerencia', APPFIN:'OK Financiero', OC:'OC Asignada',
-    REJ1:'Devuelta por Compras', REJ2:'No autorizada',
-    REJGER:'No autorizada por Gerencia', REJFIN:'Observada por Finanzas',
-  };
-  const approvedStatuses = [statusConsts.APP2, statusConsts.APP2NOGER, statusConsts.APPGER, statusConsts.APPFIN, statusConsts.OC];
-  const pendingStatuses  = [statusConsts.SENT, statusConsts.APP1];
-
-  const html = `<!DOCTYPE html>
-<html lang="es"><head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Dashboard Compras · Metagal · ${today}</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"><\/script>
-<style>
+  // Build the complete HTML file as a plain string (no template literals in JS section)
+  const parts = [];
+  parts.push('<!DOCTYPE html>');
+  parts.push('<html lang="es"><head>');
+  parts.push('<meta charset="UTF-8">');
+  parts.push('<meta name="viewport" content="width=device-width,initial-scale=1">');
+  parts.push('<title>Dashboard Compras · Metagal · ' + today + '</title>');
+  parts.push('<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"><\/script>');
+  parts.push(`<style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Segoe UI',Arial,sans-serif;background:#F4F6FA;color:#1A1F36;font-size:14px;-webkit-font-smoothing:antialiased}
 .hdr{background:#fff;border-bottom:1px solid #DDE0EA;padding:14px 28px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
-.main{padding:24px 28px 60px}
-.card{background:#fff;border-radius:14px;padding:20px 22px;box-shadow:0 1px 4px rgba(0,0,0,.07),0 4px 16px rgba(0,0,0,.06);border:1px solid #EEF0F5}
-.grid5{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:22px}
-.grid2{display:grid;grid-template-columns:1fr 2fr;gap:16px;margin-bottom:16px}
-.grid1x1{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
-.kpi-ac{position:absolute;top:0;left:0;right:0;height:3px;border-radius:14px 14px 0 0}
-.kpi-ico{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;margin-bottom:10px}
-.kpi-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:#9AA5C0;margin-bottom:5px}
-.kpi-val{font-size:26px;font-weight:800;color:#1A1F36;letter-spacing:-.5px;line-height:1}
-.kpi-sub{font-size:10px;color:#9AA5C0;margin-top:6px}
-.sec-title{font-size:13px;font-weight:800;color:#1A1F36;margin-bottom:4px}
-.sec-sub{font-size:11px;color:#9AA5C0;margin-bottom:14px}
-.bar-row{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #EEF0F5;cursor:pointer;border-radius:6px;padding:6px 4px}
-.bar-row:hover{background:#F4F6FA}
-.mon-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #EEF0F5}
-.drill-row{cursor:pointer} .drill-row:hover{background:#EFF6FF!important}
+.main{padding:24px 28px 60px}.card{background:#fff;border-radius:14px;padding:20px 22px;box-shadow:0 1px 4px rgba(0,0,0,.07),0 4px 16px rgba(0,0,0,.06);border:1px solid #EEF0F5}
+.g5{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:22px}
+.g2{display:grid;grid-template-columns:1fr 2fr;gap:16px;margin-bottom:16px}
+.g11{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+.kac{position:absolute;top:0;left:0;right:0;height:3px;border-radius:14px 14px 0 0}
+.kico{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;margin-bottom:10px}
+.klbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:#9AA5C0;margin-bottom:5px}
+.kval{font-size:26px;font-weight:800;color:#1A1F36;letter-spacing:-.5px;line-height:1}
+.ksub{font-size:10px;color:#9AA5C0;margin-top:6px}
+.st{font-size:13px;font-weight:800;color:#1A1F36;margin-bottom:4px}.ss{font-size:11px;color:#9AA5C0;margin-bottom:14px}
+.br{display:flex;align-items:center;gap:10px;padding:6px 4px;cursor:pointer;border-radius:6px}.br:hover{background:#F4F6FA}
+.mr{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #EEF0F5}
 table{width:100%;border-collapse:collapse}
 th{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#9AA5C0;padding:7px 8px;border-bottom:2px solid #EEF0F5;text-align:left;background:#fff;position:sticky;top:0;white-space:nowrap}
 td{padding:7px 8px;border-bottom:1px solid #EEF0F5;font-size:12px;vertical-align:middle}
+.dr{cursor:pointer}.dr:hover{background:#EFF6FF!important}
 .ov{display:none;position:fixed;inset:0;background:rgba(26,31,54,.5);z-index:1000;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px)}
-.ov.on{display:flex}
-.mod{background:#fff;border-radius:20px;padding:28px 32px;max-width:860px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,.18)}
-.mod-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
-.mod-t{font-size:15px;font-weight:800;color:#1A1F36;flex:1}
-.btn-x{width:30px;height:30px;border-radius:8px;background:#EEF0F5;border:none;cursor:pointer;font-size:14px;color:#9AA5C0;font-weight:700}
-.pk4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
+.ov.on{display:flex}.mod{background:#fff;border-radius:20px;padding:28px 32px;max-width:860px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,.18)}
+.mh{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
+.mt{font-size:15px;font-weight:800;color:#1A1F36;flex:1}
+.mx{width:30px;height:30px;border-radius:8px;background:#EEF0F5;border:none;cursor:pointer;font-size:14px;color:#9AA5C0;font-weight:700}
+.p4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
 .pk{background:#F8F9FB;border-radius:10px;padding:12px 14px;border:1px solid #EEF0F5}
-.pk-l{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#9AA5C0;margin-bottom:4px}
-.pk-v{font-size:18px;font-weight:800;color:#1A1F36}
-@media(max-width:900px){.grid5,.grid2,.grid1x1{grid-template-columns:1fr}.pk4{grid-template-columns:1fr 1fr}}
-</style>
-</head><body>
-<div class="hdr">
-  <div style="display:flex;align-items:center;gap:14px">
-    <div style="font-size:15px;font-weight:800;color:#1A1F36">Dashboard Compras</div>
-    <div style="font-size:10px;font-weight:700;color:#E8311A;background:#fff3f1;padding:3px 10px;border-radius:20px;border:1px solid rgba(232,49,26,.15);font-family:monospace" id="rpt-period"></div>
-  </div>
-  <div style="font-size:11px;color:#9AA5C0">Generado el ${hoy} · Metagal Argentina</div>
-</div>
-<div class="main" id="main-content"></div>
-
-<!-- MODAL -->
-<div class="ov" id="modal" onclick="if(event.target===this)closeModal()">
-  <div class="mod">
-    <div class="mod-h">
-      <div class="mod-t" id="modal-title"></div>
-      <button class="btn-x" onclick="closeModal()">✕</button>
-    </div>
-    <div id="modal-body"></div>
-  </div>
-</div>
-
-<script>
-const ITEMS = ${dataJson};
-const TC_USD = ${tcUsd};
-const TC_EUR = ${tcEur};
-const APPROVED = ${JSON.stringify(approvedStatuses)};
-const PENDING  = ${JSON.stringify(pendingStatuses)};
-const STATUS_COLORS = {
-  '${statusConsts.DRAFT}':'#C2C7D6',
-  '${statusConsts.SENT}':'#2B7EFF',
-  '${statusConsts.APP1}':'#F59E0B',
-  '${statusConsts.APP2}':'#F59E0B',
-  '${statusConsts.APP2NOGER}':'#0DB87B',
-  '${statusConsts.APPGER}':'#7C3AED',
-  '${statusConsts.APPFIN}':'#06B6D4',
-  '${statusConsts.OC}':'#1A6B3C',
-  '${statusConsts.REJ1}':'#E8311A',
-  '${statusConsts.REJ2}':'#E8311A',
-  '${statusConsts.REJGER}':'#DC2626',
-  '${statusConsts.REJFIN}':'#F87171',
-};
-
-function esc(s){const d=document.createElement('div');d.textContent=s||'';return d.innerHTML;}
-function n0(n){return Number(n||0).toLocaleString('es-AR',{maximumFractionDigits:0});}
-function n2(n){return Number(n||0).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2});}
-function fmt(d){return d?(new Date(d)).toLocaleDateString('es-AR'):'—';}
-
-function calcARS(item){
-  let ars=0,usd=0,eur=0;
-  try{JSON.parse(item.LinesJSON||'[]').forEach(l=>{const t=(l.qty||0)*(l.price||0);if(l.currency==='USD')usd+=t;else if(l.currency==='EUR')eur+=t;else ars+=t;});}catch(e){}
-  const tu=parseFloat(item.TCusd)||TC_USD||0;
-  const te=parseFloat(item.TCeur)||TC_EUR||0;
-  return {ars,usd,eur,equiv:ars+usd*tu+eur*te};
+.pkl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#9AA5C0;margin-bottom:4px}
+.pkv{font-size:18px;font-weight:800;color:#1A1F36}
+@media(max-width:900px){.g5,.g2,.g11{grid-template-columns:1fr}.p4{grid-template-columns:1fr 1fr}}
+</style>`);
+  parts.push('</head><body>');
+  parts.push('<div class="hdr"><div style="display:flex;align-items:center;gap:14px"><div style="font-size:15px;font-weight:800;color:#1A1F36">Dashboard Compras</div><div style="font-size:10px;font-weight:700;color:#E8311A;background:#fff3f1;padding:3px 10px;border-radius:20px;border:1px solid rgba(232,49,26,.15);font-family:monospace" id="rpt-period"></div></div><div style="font-size:11px;color:#9AA5C0">Generado el ' + hoy + ' · Metagal Argentina</div></div>');
+  parts.push('<div class="main" id="mc"></div>');
+  parts.push('<div class="ov" id="modal" onclick="if(event.target===this)closeModal()"><div class="mod"><div class="mh"><div class="mt" id="mtitle"></div><button class="mx" onclick="closeModal()">&#x2715;</button></div><div id="mbody"></div></div></div>');
+  // Embed all data and JS — using only double quotes in the script content
+  parts.push('<script>');
+  parts.push('var ITEMS=' + dataJson + ';');
+  parts.push('var TU=' + tcUsd + ',TE=' + tcEur + ';');
+  parts.push('var APR=' + approvedJson + ';');
+  parts.push('var PEN=' + pendingJson + ';');
+  parts.push('var SC=' + scJson + ';');
+  parts.push('var GEN_DATE="' + hoy + '";');
+  // All JS functions — using only double quotes, no template literals
+  const jsFunctions = `
+function e(s){var d=document.createElement("div");d.textContent=s||"";return d.innerHTML;}
+function n0(n){return Number(n||0).toLocaleString("es-AR",{maximumFractionDigits:0});}
+function n2(n){return Number(n||0).toLocaleString("es-AR",{minimumFractionDigits:2,maximumFractionDigits:2});}
+function fmt(d){return d?(new Date(d)).toLocaleDateString("es-AR"):"\u2014";}
+function cARS(item){var a=0,u=0,eu=0;try{JSON.parse(item.LinesJSON||"[]").forEach(function(l){var t=(l.qty||0)*(l.price||0);if(l.currency==="USD")u+=t;else if(l.currency==="EUR")eu+=t;else a+=t;});}catch(x){}var tu=parseFloat(item.TCusd)||TU||0,te=parseFloat(item.TCeur)||TE||0;return {a:a,u:u,eu:eu,eq:a+u*tu+eu*te};}
+function openModal(title,body){document.getElementById("mtitle").textContent=title;document.getElementById("mbody").innerHTML=body;document.getElementById("modal").classList.add("on");document.querySelectorAll("#mbody .dd").forEach(function(r){r.addEventListener("click",function(){showDetail(r.dataset.t);});});}
+function closeModal(){document.getElementById("modal").classList.remove("on");}
+document.addEventListener("keydown",function(ev){if(ev.key==="Escape")closeModal();});
+function showDrill(type,val){
+  var f=type==="dept"?ITEMS.filter(function(i){return i.Dept===val;}):ITEMS.filter(function(i){return (i.SelectedVendor||i.Vendor||"")===val;});
+  var col=type==="dept"?"Proveedor":"Departamento";
+  var rows=f.map(function(i){return "<tr class=\"dd\" data-t=\""+e(i.Title)+"\" style=\"cursor:pointer\"><td style=\"font-weight:700;color:#E8311A;font-family:monospace\">"+e(i.Title)+"</td><td>"+e(type==="dept"?(i.SelectedVendor||i.Vendor||"\u2014"):i.Dept)+"</td><td>"+e(i.RequesterName)+"</td><td><span style=\"font-size:10px;background:#EFF6FF;color:#2B7EFF;padding:2px 8px;border-radius:10px;font-weight:700\">"+e(i.Status)+"</span></td><td style=\"font-family:monospace\">"+e(i.OCNumber||"\u2014")+"</td><td style=\"color:#9AA5C0\">"+(i.CreatedAt?i.CreatedAt.slice(0,10):"\u2014")+"</td></tr>";}).join("");
+  openModal((type==="dept"?"\uD83D\uDCC1 ":"\uD83C\uDFED ")+val,"<p style=\"font-size:12px;color:#9AA5C0;margin-bottom:12px\">"+f.length+" requisici\u00f3n"+(f.length!==1?"es":"")+" \u00b7 Clic en una fila para ver el detalle</p><div style=\"overflow-x:auto;max-height:380px;overflow-y:auto\"><table><thead><tr><th>N Req</th><th>"+col+"</th><th>Solicitante</th><th>Estado</th><th>N OC</th><th>Creada</th></tr></thead><tbody>"+rows+"</tbody></table></div>");
 }
-
-function openModal(title,bodyHtml){
-  document.getElementById('modal-title').textContent=title;
-  document.getElementById('modal-body').innerHTML=bodyHtml;
-  document.getElementById('modal').classList.add('on');
-  // attach row clicks inside modal
-  document.querySelectorAll('#modal-body .drill-detail').forEach(tr=>{
-    tr.addEventListener('click',()=>showDetail(tr.dataset.title));
-  });
-}
-function closeModal(){document.getElementById('modal').classList.remove('on');}
-document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal();});
-
-function showDrill(type, value){
-  const filtered = type==='dept'
-    ? ITEMS.filter(i=>i.Dept===value)
-    : ITEMS.filter(i=>(i.SelectedVendor||i.Vendor||'')=== value);
-  const col = type==='dept'?'Proveedor':'Departamento';
-  const rows = filtered.map(i=>`
-    <tr class="drill-detail" data-title="${esc(i.Title)}" style="cursor:pointer">
-      <td style="font-weight:700;color:#E8311A;font-family:monospace">${esc(i.Title)}</td>
-      <td>${esc(type==='dept'?(i.SelectedVendor||i.Vendor||'—'):i.Dept)}</td>
-      <td>${esc(i.RequesterName)}</td>
-      <td><span style="font-size:10px;background:#EFF6FF;color:#2B7EFF;padding:2px 8px;border-radius:10px;font-weight:700">${esc(i.Status)}</span></td>
-      <td style="font-family:monospace">${esc(i.OCNumber||'—')}</td>
-      <td style="color:#9AA5C0">${i.CreatedAt?i.CreatedAt.slice(0,10):'—'}</td>
-    </tr>`).join('');
-  openModal((type==='dept'?'📁 ':'🏭 ')+value,`
-    <p style="font-size:12px;color:#9AA5C0;margin-bottom:12px">${filtered.length} requisición${filtered.length!==1?'es':''} · Clic en una fila para ver el detalle</p>
-    <div style="overflow-x:auto;max-height:380px;overflow-y:auto">
-      <table><thead><tr>${['N° Req',col,'Solicitante','Estado','N° OC','Creada'].map(h=>'<th>'+h+'</th>').join('')}</tr></thead>
-      <tbody>${rows}</tbody></table>
-    </div>`);
-}
-
 function showDetail(title){
-  const i = ITEMS.find(x=>x.Title===title);
+  var i=ITEMS.find(function(x){return x.Title===title;});
   if(!i)return;
-  let lines=[];try{lines=JSON.parse(i.LinesJSON||'[]');}catch(e){}
-  const t = calcARS(i);
-  const linesHtml = lines.map(l=>`<tr>
-    <td>${esc(l.desc||'')}</td><td style="text-align:right">${l.qty||''}</td>
-    <td>${esc(l.unit||'')}</td><td style="font-weight:700">${esc(l.currency||'ARS')}</td>
-    <td style="text-align:right;font-family:monospace">${n2(l.price||0)}</td>
-    <td style="text-align:right;font-family:monospace;font-weight:700">${n2((l.qty||0)*(l.price||0))}</td>
-  </tr>`).join('');
-  openModal('📋 '+i.Title,`
-    <div class="pk4">
-      <div class="pk"><div class="pk-l">Departamento</div><div class="pk-v" style="font-size:14px">${esc(i.Dept)}</div></div>
-      <div class="pk"><div class="pk-l">Solicitante</div><div class="pk-v" style="font-size:14px">${esc(i.RequesterName)}</div></div>
-      <div class="pk"><div class="pk-l">Estado</div><div class="pk-v" style="font-size:12px;color:${STATUS_COLORS[i.Status]||'#2B7EFF'}">${esc(i.Status)}</div></div>
-      <div class="pk"><div class="pk-l">Urgencia</div><div class="pk-v" style="font-size:14px">${esc(i.Urgency||'Normal')}</div></div>
-    </div>
-    <div class="pk4">
-      <div class="pk"><div class="pk-l">Proveedor</div><div class="pk-v" style="font-size:13px">${esc(i.SelectedVendor||i.Vendor||'—')}</div></div>
-      <div class="pk"><div class="pk-l">Cuenta GL</div><div class="pk-v" style="font-size:13px;font-family:monospace">${esc(i.GLAccount||'—')}</div></div>
-      <div class="pk"><div class="pk-l">N° OC</div><div class="pk-v" style="font-size:13px;color:#7C3AED;font-family:monospace">${esc(i.OCNumber||'—')}</div></div>
-      <div class="pk"><div class="pk-l">TC al autorizar</div><div class="pk-v" style="font-size:13px;font-family:monospace">${i.TCusd?'$'+n0(i.TCusd):'—'}</div></div>
-    </div>
-    ${i.Justification?`<div style="background:#F8F9FB;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:#3D4461"><strong>Justificación:</strong> ${esc(i.Justification)}</div>`:''}
-    <div style="overflow-x:auto;margin-bottom:16px">
-      <table><thead><tr>${['Descripción','Cant.','Unidad','Moneda','Precio unit.','Total'].map(h=>'<th>'+h+'</th>').join('')}</tr></thead>
-      <tbody>${linesHtml}</tbody></table>
-    </div>
-    <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:11px;color:#9AA5C0;border-top:1px solid #EEF0F5;padding-top:12px">
-      <span>Creada: <b style="color:#3D4461">${fmt(i.CreatedAt)}</b></span>
-      ${i.Lvl2By?`<span>Autorizado por: <b style="color:#3D4461">${esc(i.Lvl2By.split('@')[0])}</b> el ${fmt(i.Lvl2At)}</b></span>`:''}
-      ${i.GerBy?`<span>Gerencia: <b style="color:#3D4461">${esc(i.GerBy.split('@')[0])}</b></span>`:''}
-      ${i.FinBy?`<span>Finanzas: <b style="color:#3D4461">${esc(i.FinBy.split('@')[0])}</b></span>`:''}
-    </div>
-    <div style="text-align:right;margin-top:14px;padding-top:10px;border-top:1px solid #EEF0F5">
-      ${t.usd>0?`<span style="font-size:13px;font-weight:700;color:#166534;background:#E8FAF3;padding:4px 10px;border-radius:6px;margin-right:8px">USD ${n2(t.usd)}</span>`:''}
-      ${t.eur>0?`<span style="font-size:13px;font-weight:700;color:#1d4ed8;background:#EFF6FF;padding:4px 10px;border-radius:6px;margin-right:8px">EUR ${n2(t.eur)}</span>`:''}
-      ${t.ars>0?`<span style="font-size:13px;font-weight:700;color:#3D4461;background:#F4F6FA;padding:4px 10px;border-radius:6px;margin-right:8px">ARS $${n2(t.ars)}</span>`:''}
-      ${t.equiv>0?`<span style="font-size:15px;font-weight:800;color:#E8311A;font-family:monospace">≈ $${n0(t.equiv)}</span>`:''}
-    </div>`);
+  var lines=[];try{lines=JSON.parse(i.LinesJSON||"[]");}catch(x){}
+  var t=cARS(i);
+  var lh=lines.map(function(l){return "<tr><td>"+e(l.desc||"")+"</td><td style=\"text-align:right\">"+(l.qty||"")+"</td><td>"+e(l.unit||"")+"</td><td style=\"font-weight:700\">"+e(l.currency||"ARS")+"</td><td style=\"text-align:right;font-family:monospace\">"+n2(l.price||0)+"</td><td style=\"text-align:right;font-family:monospace;font-weight:700\">"+n2((l.qty||0)*(l.price||0))+"</td></tr>";}).join("");
+  var body="<div class=\"p4\"><div class=\"pk\"><div class=\"pkl\">Departamento</div><div class=\"pkv\" style=\"font-size:14px\">"+e(i.Dept)+"</div></div><div class=\"pk\"><div class=\"pkl\">Solicitante</div><div class=\"pkv\" style=\"font-size:14px\">"+e(i.RequesterName)+"</div></div><div class=\"pk\"><div class=\"pkl\">Estado</div><div class=\"pkv\" style=\"font-size:12px;color:"+(SC[i.Status]||"#2B7EFF")+"\">"+ e(i.Status)+"</div></div><div class=\"pk\"><div class=\"pkl\">Urgencia</div><div class=\"pkv\" style=\"font-size:14px\">"+e(i.Urgency||"Normal")+"</div></div></div><div class=\"p4\"><div class=\"pk\"><div class=\"pkl\">Proveedor</div><div class=\"pkv\" style=\"font-size:13px\">"+e(i.SelectedVendor||i.Vendor||"\u2014")+"</div></div><div class=\"pk\"><div class=\"pkl\">Cuenta GL</div><div class=\"pkv\" style=\"font-size:13px;font-family:monospace\">"+e(i.GLAccount||"\u2014")+"</div></div><div class=\"pk\"><div class=\"pkl\">N OC</div><div class=\"pkv\" style=\"font-size:13px;color:#7C3AED;font-family:monospace\">"+e(i.OCNumber||"\u2014")+"</div></div><div class=\"pk\"><div class=\"pkl\">TC al autorizar</div><div class=\"pkv\" style=\"font-size:13px;font-family:monospace\">"+(i.TCusd?"$"+n0(i.TCusd):"\u2014")+"</div></div></div>"+(i.Justification?"<div style=\"background:#F8F9FB;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:#3D4461\"><strong>Justificaci\u00f3n:</strong> "+e(i.Justification)+"</div>":"")+"<div style=\"overflow-x:auto;margin-bottom:16px\"><table><thead><tr><th>Descripci\u00f3n</th><th>Cant.</th><th>Unidad</th><th>Moneda</th><th>Precio unit.</th><th>Total</th></tr></thead><tbody>"+lh+"</tbody></table></div><div style=\"display:flex;gap:16px;flex-wrap:wrap;font-size:11px;color:#9AA5C0;border-top:1px solid #EEF0F5;padding-top:12px\"><span>Creada: <b style=\"color:#3D4461\">"+fmt(i.CreatedAt)+"</b></span>"+(i.Lvl2By?"<span>Autorizado: <b style=\"color:#3D4461\">"+e(i.Lvl2By.split("@")[0])+"</b> el "+fmt(i.Lvl2At)+"</span>":"")+(i.GerBy?"<span>Gerencia: <b style=\"color:#3D4461\">"+e(i.GerBy.split("@")[0])+"</b></span>":"")+(i.FinBy?"<span>Finanzas: <b style=\"color:#3D4461\">"+e(i.FinBy.split("@")[0])+"</b></span>":"")+"</div><div style=\"text-align:right;margin-top:14px;padding-top:10px;border-top:1px solid #EEF0F5\">"+(t.u>0?"<span style=\"font-size:13px;font-weight:700;color:#166534;background:#E8FAF3;padding:4px 10px;border-radius:6px;margin-right:8px\">USD "+n2(t.u)+"</span>":"")+(t.eu>0?"<span style=\"font-size:13px;font-weight:700;color:#1d4ed8;background:#EFF6FF;padding:4px 10px;border-radius:6px;margin-right:8px\">EUR "+n2(t.eu)+"</span>":"")+(t.a>0?"<span style=\"font-size:13px;font-weight:700;color:#3D4461;background:#F4F6FA;padding:4px 10px;border-radius:6px;margin-right:8px\">ARS $"+n2(t.a)+"</span>":"")+(t.eq>0?"<span style=\"font-size:15px;font-weight:800;color:#E8311A;font-family:monospace\">&asymp; $"+n0(t.eq)+"</span>":"")+"</div>";
+  openModal("\uD83D\uDCCB "+i.Title,body);
 }
-
-// ── BUILD REPORT ──────────────────────────────────────
 (function(){
-  const aprobadas = ITEMS.filter(i=>APPROVED.includes(i.Status));
-  const pendientes = ITEMS.filter(i=>PENDING.includes(i.Status));
-  const rechazadas = ITEMS.filter(i=>i.Status&&i.Status.startsWith&&(i.Status.includes('Devuelta')||i.Status.includes('No autori')||i.Status.includes('Observada')));
-  const conOC = ITEMS.filter(i=>i.Status==='OC Asignada');
-  const tasaAprobacion = ITEMS.filter(i=>i.Status!=='Borrador').length ? Math.round(aprobadas.length/ITEMS.filter(i=>i.Status!=='Borrador').length*100) : 0;
+var apr=ITEMS.filter(function(i){return APR.includes(i.Status);});
+var pen=ITEMS.filter(function(i){return PEN.includes(i.Status);});
+var oc=ITEMS.filter(function(i){return i.Status==="OC Asignada";});
+var proc=ITEMS.filter(function(i){return i.Status!=="Borrador";});
+var tasa=proc.length?Math.round(apr.length/proc.length*100):0;
+var teq=apr.reduce(function(s,i){return s+cARS(i).eq;},0);
+var tA=0,tU=0,tE=0;apr.forEach(function(i){var t=cARS(i);tA+=t.a;tU+=t.u;tE+=t.eu;});
+var bSt={};ITEMS.forEach(function(i){bSt[i.Status]=(bSt[i.Status]||0)+1;});
+var bD={};ITEMS.forEach(function(i){if(!bD[i.Dept])bD[i.Dept]={c:0,eq:0};bD[i.Dept].c++;bD[i.Dept].eq+=cARS(i).eq;});
+var dpts=Object.entries(bD).sort(function(a,b){return b[1].eq-a[1].eq;}).slice(0,10);
+var bP={};apr.forEach(function(i){var p=i.SelectedVendor||i.Vendor||"Sin proveedor";if(!bP[p])bP[p]={c:0,eq:0};bP[p].c++;bP[p].eq+=cARS(i).eq;});
+var prvs=Object.entries(bP).filter(function(x){return x[0]!=="Sin proveedor";}).sort(function(a,b){return b[1].eq-a[1].eq;}).slice(0,10);
+var bM={};ITEMS.forEach(function(i){var d=(i.CreatedAt||i.SubmittedAt||"").slice(0,7);if(!d)return;if(!bM[d])bM[d]={c:0,a:0};bM[d].c++;if(APR.includes(i.Status))bM[d].a++;});
+var mths=Object.keys(bM).sort().slice(-12);
+var fechas=ITEMS.map(function(i){return i.CreatedAt||i.SubmittedAt||"";}).filter(Boolean).sort();
+document.getElementById("rpt-period").textContent=fechas.length?fechas[0].slice(0,7)+" \u2192 "+fechas[fechas.length-1].slice(0,7):"";
+var pal=["#E8311A","#F59E0B","#2B7EFF","#0DB87B","#7C3AED","#06B6D4","#1A6B3C","#9AA5C0","#C2C7D6","#F87171"];
+function kpi(ico,lbl,v,sub,ac,bg){return "<div class=\"card\" style=\"position:relative;overflow:hidden\"><div class=\"kac\" style=\"background:"+ac+"\"></div><div class=\"kico\" style=\"background:"+bg+"\">"+ico+"</div><div class=\"klbl\">"+lbl+"</div><div class=\"kval\">"+v+"</div><div class=\"ksub\">"+sub+"</div></div>";}
+function mr(cur,v,tot,col,tc){var p=tot>0?Math.round(v/tot*100):0;return "<div class=\"mr\"><div style=\"font-size:10px;font-weight:800;min-width:30px;color:"+col+"\">"+cur+"</div><div style=\"flex:1;height:6px;background:#EEF0F5;border-radius:3px;overflow:hidden\"><div style=\"height:100%;width:"+p+"%;background:"+col+";border-radius:3px\"></div></div><div style=\"font-family:monospace;font-size:11px;font-weight:700;min-width:80px;text-align:right\">"+(cur==="ARS"?"$"+n0(v):cur==="USD"?"U$S "+n2(v):"\u20ac "+n2(v))+"</div>"+(tc?"<div style=\"font-size:10px;color:#9AA5C0;min-width:50px;text-align:right\">$"+n0(tc)+"/u</div>":"")+"</div>";}
+var DR=dpts.map(function(x,i){var dept=x[0],d=x[1];var p=Math.round(d.c/ITEMS.length*100);return "<div class=\"br\" data-dt=\"dept\" data-dv=\""+e(dept)+"\"><div style=\"font-size:10px;font-weight:800;color:#9AA5C0;min-width:18px\">"+(i+1)+"</div><div style=\"flex:1\"><div style=\"font-size:12px;font-weight:700\">"+e(dept||"\u2014")+"</div><div style=\"height:4px;background:#EEF0F5;border-radius:2px;overflow:hidden;margin-top:3px\"><div style=\"height:100%;width:"+p+"%;background:"+pal[i]+";border-radius:2px\"></div></div></div><div style=\"text-align:right\"><div style=\"font-family:monospace;font-size:12px;font-weight:700\">"+d.c+"</div><div style=\"font-size:10px;color:#9AA5C0\">"+p+"%</div></div></div>";}).join("");
+var PR=prvs.length?prvs.map(function(x,i){var pv=x[0],d=x[1];var p=Math.round(d.eq/(prvs[0][1].eq||1)*100);return "<div class=\"br\" data-dt=\"prov\" data-dv=\""+e(pv)+"\"><div style=\"font-size:10px;font-weight:800;color:#9AA5C0;min-width:18px\">"+(i+1)+"</div><div style=\"flex:1\"><div style=\"font-size:12px;font-weight:700\">"+e(pv)+"</div><div style=\"height:4px;background:#EEF0F5;border-radius:2px;overflow:hidden;margin-top:3px\"><div style=\"height:100%;width:"+p+"%;background:"+pal[i]+";border-radius:2px\"></div></div></div><div style=\"text-align:right\"><div style=\"font-family:monospace;font-size:11px;font-weight:700\">"+(d.eq>0?"$"+n0(d.eq):"\u2014")+"</div><div style=\"font-size:10px;color:#9AA5C0\">"+d.c+" req"+(d.c!==1?"s":"")+"</div></div></div>";}).join(""):"<div style=\"color:#9AA5C0;font-size:12px;padding:20px 0;text-align:center\">Sin proveedores asignados a\u00fan</div>";
+var SL=Object.entries(bSt).sort(function(a,b){return b[1]-a[1];}).map(function(x){return "<div style=\"display:flex;align-items:center;gap:8px;padding:3px 0\"><div style=\"width:10px;height:10px;border-radius:3px;background:"+(SC[x[0]]||"#9AA5C0")+";flex-shrink:0\"></div><div style=\"font-size:11px;color:#3D4461;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap\">"+e(x[0])+"</div><div style=\"font-family:monospace;font-size:11px;font-weight:700\">"+x[1]+"</div></div>";}).join("");
+var UR=["Cr\u00edtica","Alta","Normal"].map(function(urg){var u=pen.filter(function(i){return i.Urgency===urg;});var col=urg==="Cr\u00edtica"?"#E8311A":urg==="Alta"?"#F59E0B":"#0DB87B";var bg=urg==="Cr\u00edtica"?"#fff3f1":urg==="Alta"?"#FFFBEB":"#E8FAF3";return "<div style=\"display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;background:"+bg+";margin-bottom:8px\"><div style=\"font-size:20px\">"+(urg==="Cr\u00edtica"?"\uD83D\uDD34":urg==="Alta"?"\uD83D\uDFE1":"\uD83D\uDFE2")+"</div><div style=\"flex:1\"><div style=\"font-size:12px;font-weight:700\">"+urg+"</div><div style=\"font-size:10px;color:#9AA5C0\">"+u.length+" pendiente"+(u.length!==1?"s":"")+"</div></div><div style=\"font-family:monospace;font-size:22px;font-weight:800;color:"+col+"\">"+u.length+"</div></div>";}).join("");
+var TR=apr.slice().sort(function(a,b){return (b.Lvl2At||"").localeCompare(a.Lvl2At||"");}).map(function(item,idx){var t=cARS(item);var bg=idx%2?"#F8F9FB":"#fff";return "<tr class=\"dr\" data-t=\""+e(item.Title)+"\" style=\"background:"+bg+"\"><td style=\"font-weight:700;color:#E8311A;font-family:monospace\">"+e(item.Title)+"</td><td>"+e(item.Dept)+"</td><td>"+e(item.RequesterName)+"</td><td>"+e(item.SelectedVendor||item.Vendor||"\u2014")+"</td><td style=\"font-family:monospace;font-size:11px\">"+(t.u>0?"USD "+n2(t.u):t.eu>0?"EUR "+n2(t.eu):"ARS "+n2(t.a))+"</td><td style=\"font-family:monospace;font-weight:700;text-align:right\">"+(t.eq>0?"$"+n0(t.eq):"\u2014")+"</td><td style=\"text-align:center;color:#9AA5C0\">"+(item.TCusd?"\uD83D\uDD12":"~")+"</td><td style=\"font-family:monospace;color:#7C3AED\">"+e(item.OCNumber||"\u2014")+"</td><td><span style=\"font-size:10px;background:"+(item.Status==="OC Asignada"?"#E8FAF3":"#EFF6FF")+";color:"+(item.Status==="OC Asignada"?"#0DB87B":"#2B7EFF")+";padding:2px 8px;border-radius:10px;font-weight:700\">"+e(item.Status)+"</span></td></tr>";}).join("");
+var tot=tA+tU*(TU||1)+tE*(TE||1);
+document.getElementById("mc").innerHTML=
+  "<div class=\"g5\">"
+  +kpi("\uD83D\uDCCB","Total Requisiciones",n0(ITEMS.length),"Todas las reqs del sistema","#E8311A","#fff3f1")
+  +kpi("\u2705","Aprobadas",n0(apr.length),tasa+"% tasa de aprobaci\u00f3n","#0DB87B","#E8FAF3")
+  +kpi("\uD83D\uDCC4","Con OC emitida",n0(oc.length),oc.length?Math.round(oc.length/(apr.length||1)*100)+"% de aprobadas":"\u2014","#7C3AED","#F3EEFF")
+  +kpi("\u23F3","Pendientes",n0(pen.length),"En revisi\u00f3n o autorizaci\u00f3n","#F59E0B","#FFFBEB")
+  +kpi("\uD83D\uDCB0","Comprometido aprob.",teq>0?"$"+n0(teq):"Sin TC","Equiv. ARS","#2B7EFF","#EEF5FF")
+  +"</div>"
+  +"<div class=\"g2\"><div class=\"card\"><div class=\"st\">Composici\u00f3n por moneda</div><div class=\"ss\">Requisiciones aprobadas</div>"
+  +mr("ARS",tA,tot,"#2B7EFF")
+  +mr("USD",tU,tot,"#0DB87B",TU)
+  +mr("EUR",tE,tot,"#7C3AED",TE)
+  +(TU?"<div style=\"font-size:10px;color:#9AA5C0;margin-top:10px;border-top:1px solid #EEF0F5;padding-top:8px\">TC USD $"+n0(TU)+(TE?" | EUR $"+n0(TE):"")+' (al exportar)</div>':"<div style=\"font-size:10px;color:#F59E0B;margin-top:8px\">\u26A0 Sin TC cargado</div>")
+  +"</div><div class=\"card\"><div class=\"st\">Evoluci\u00f3n mensual</div><div class=\"ss\">\u00daltimos 12 meses</div><div style=\"position:relative;height:160px\"><canvas id=\"ch1\"></canvas></div></div></div>"
+  +"<div class=\"g11\"><div class=\"card\"><div class=\"st\">Por estado</div><div class=\"ss\">Distribuci\u00f3n actual del flujo</div><div style=\"display:flex;align-items:center;gap:20px\"><div style=\"width:120px;height:120px;flex-shrink:0\"><canvas id=\"ch2\"></canvas></div><div style=\"flex:1\">"+SL+"</div></div></div>"
+  +"<div class=\"card\"><div class=\"st\">Por urgencia \u00b7 Pendientes</div><div class=\"ss\">Reqs activas que requieren atenci\u00f3n</div>"+UR+"</div></div>"
+  +"<div class=\"g11\"><div class=\"card\"><div class=\"st\">Por departamento</div><div class=\"ss\">Doble clic para ver detalle</div>"+DR+"</div>"
+  +"<div class=\"card\"><div class=\"st\">Top proveedores</div><div class=\"ss\">Por equiv. ARS \u00b7 Doble clic para ver detalle</div>"+PR+"</div></div>"
+  +"<div class=\"card\" style=\"margin-bottom:16px\"><div class=\"st\">Requisiciones aprobadas \u2014 detalle</div><div class=\"ss\">"+apr.length+" registros \u00b7 Doble clic para ver el detalle completo</div><div style=\"overflow-x:auto;max-height:350px;overflow-y:auto\"><table><thead><tr><th>N Req</th><th>Departamento</th><th>Solicitante</th><th>Proveedor</th><th>Moneda</th><th>Equiv. ARS</th><th>TC</th><th>N OC</th><th>Estado</th></tr></thead><tbody>"+TR+"</tbody></table></div></div>"
+  +"<div style=\"text-align:center;padding:16px;font-size:11px;color:#9AA5C0;border-top:1px solid #EEF0F5\">Generado el "+GEN_DATE+" \u00b7 Metagal Argentina"+(TU?" \u00b7 TC USD $"+n0(TU):"")+"</div>";
+requestAnimationFrame(function(){setTimeout(function(){
+  var c1=document.getElementById("ch1");
+  if(c1&&window.Chart)new Chart(c1.getContext("2d"),{type:"bar",data:{labels:mths,datasets:[{label:"Creadas",data:mths.map(function(m){return bM[m]?bM[m].c:0;}),backgroundColor:"#E8311A22",borderColor:"#E8311A",borderWidth:2,borderRadius:4},{label:"Aprobadas",data:mths.map(function(m){return bM[m]?bM[m].a:0;}),backgroundColor:"#0DB87B33",borderColor:"#0DB87B",borderWidth:2,borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{font:{size:10},boxWidth:10}}},scales:{y:{beginAtZero:true,grid:{color:"#EEF0F5"},ticks:{font:{size:9}}},x:{grid:{display:false},ticks:{font:{size:9}}}}}});
+  var c2=document.getElementById("ch2");
+  if(c2&&window.Chart){var sl=Object.keys(bSt);new Chart(c2.getContext("2d"),{type:"doughnut",data:{labels:sl,datasets:[{data:sl.map(function(s){return bSt[s];}),backgroundColor:sl.map(function(s){return SC[s]||"#9AA5C0";}),borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,cutout:"70%",plugins:{legend:{display:false}}}});}
+  // Event delegation for drill-down
+  document.querySelectorAll(".br[data-dv]").forEach(function(el){
+    el.addEventListener("dblclick",function(){showDrill(el.dataset.dt,el.dataset.dv);});
+  });
+  document.querySelectorAll(".dr[data-t]").forEach(function(el){
+    el.addEventListener("dblclick",function(){showDetail(el.dataset.t);});
+  });
+},100);});
+})();`;
+  parts.push(jsFunctions);
+  parts.push('<\/script>');
+  parts.push('</body></html>');
 
-  const totalEquiv = aprobadas.reduce((s,i)=>s+calcARS(i).equiv,0);
-  let totalARS2=0,totalUSD2=0,totalEUR2=0;
-  aprobadas.forEach(i=>{const t=calcARS(i);totalARS2+=t.ars;totalUSD2+=t.usd;totalEUR2+=t.eur;});
-
-  const byStatus={};
-  ITEMS.forEach(i=>{byStatus[i.Status]=(byStatus[i.Status]||0)+1;});
-
-  const byDept={};
-  ITEMS.forEach(i=>{if(!byDept[i.Dept])byDept[i.Dept]={count:0,equiv:0};byDept[i.Dept].count++;byDept[i.Dept].equiv+=calcARS(i).equiv;});
-  const depts=Object.entries(byDept).sort((a,b)=>b[1].equiv-a[1].equiv).slice(0,10);
-
-  const byProv={};
-  aprobadas.forEach(i=>{const p=i.SelectedVendor||i.Vendor||'Sin proveedor';if(!byProv[p])byProv[p]={count:0,equiv:0};byProv[p].count++;byProv[p].equiv+=calcARS(i).equiv;});
-  const provs=Object.entries(byProv).filter(x=>x[0]!=='Sin proveedor').sort((a,b)=>b[1].equiv-a[1].equiv).slice(0,10);
-
-  const byMonth={};
-  ITEMS.forEach(i=>{const d=(i.CreatedAt||i.SubmittedAt||'').slice(0,7);if(!d)return;if(!byMonth[d])byMonth[d]={count:0,aprobadas:0};byMonth[d].count++;if(APPROVED.includes(i.Status))byMonth[d].aprobadas++;});
-  const months=Object.keys(byMonth).sort().slice(-12);
-
-  const fechas=ITEMS.map(i=>(i.CreatedAt||i.SubmittedAt||'')).filter(Boolean).sort();
-  const periodo=fechas.length?fechas[0].slice(0,7)+' → '+fechas[fechas.length-1].slice(0,7):'';
-  document.getElementById('rpt-period').textContent=periodo;
-
-  const paleta=['#E8311A','#F59E0B','#2B7EFF','#0DB87B','#7C3AED','#06B6D4','#1A6B3C','#9AA5C0','#C2C7D6','#F87171'];
-
-  function kpi(ico,lbl,val,sub,ac,bg){return `<div class="card" style="position:relative;overflow:hidden"><div class="kpi-ac" style="background:${ac}"></div><div class="kpi-ico" style="background:${bg}">${ico}</div><div class="kpi-lbl">${lbl}</div><div class="kpi-val">${val}</div><div class="kpi-sub">${sub}</div></div>`;}
-  function monRow(cur,val,tot,col,tc){const pct=tot>0?Math.round(val/tot*100):0;return `<div class="mon-row"><div style="font-size:10px;font-weight:800;min-width:30px;color:${col}">${cur}</div><div style="flex:1;height:6px;background:#EEF0F5;border-radius:3px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${col};border-radius:3px"></div></div><div style="font-family:monospace;font-size:11px;font-weight:700;min-width:80px;text-align:right">${cur==='ARS'?'$'+n0(val):cur==='USD'?'U$S '+n2(val):'€ '+n2(val)}</div>${tc?'<div style="font-size:10px;color:#9AA5C0;min-width:50px;text-align:right">$'+n0(tc)+'/u</div>':''}</div>`;}
-
-  document.getElementById('main-content').innerHTML = \`
-    <div class="grid5">
-      \${kpi('📋','Total Requisiciones',n0(ITEMS.length),'Todas las reqs del sistema','#E8311A','#fff3f1')}
-      \${kpi('✅','Aprobadas',n0(aprobadas.length),tasaAprobacion+'% tasa de aprobación','#0DB87B','#E8FAF3')}
-      \${kpi('📄','Con OC emitida',n0(conOC.length),conOC.length?Math.round(conOC.length/aprobadas.length*100)+'% de aprobadas':'—','#7C3AED','#F3EEFF')}
-      \${kpi('⏳','Pendientes',n0(pendientes.length),'En revisión o autorización','#F59E0B','#FFFBEB')}
-      \${kpi('💰','Comprometido aprob.',totalEquiv>0?'$'+n0(totalEquiv):'Sin TC','Equiv. ARS','#2B7EFF','#EEF5FF')}
-    </div>
-    <div class="grid2">
-      <div class="card">
-        <div class="sec-title">Composición por moneda</div>
-        <div class="sec-sub">Requisiciones aprobadas</div>
-        \${monRow('ARS',totalARS2,totalARS2+totalUSD2*(TC_USD||1)+totalEUR2*(TC_EUR||1),'#2B7EFF')}
-        \${monRow('USD',totalUSD2,totalARS2+totalUSD2*(TC_USD||1)+totalEUR2*(TC_EUR||1),'#0DB87B',TC_USD)}
-        \${monRow('EUR',totalEUR2,totalARS2+totalUSD2*(TC_USD||1)+totalEUR2*(TC_EUR||1),'#7C3AED',TC_EUR)}
-        \${TC_USD?'<div style="font-size:10px;color:#9AA5C0;margin-top:10px;border-top:1px solid #EEF0F5;padding-top:8px">TC USD $'+n0(TC_USD)+(TC_EUR?' | EUR $'+n0(TC_EUR):'')+' (al exportar)</div>':'<div style="font-size:10px;color:#F59E0B;margin-top:8px">⚠ Sin TC cargado</div>'}
-      </div>
-      <div class="card">
-        <div class="sec-title">Evolución mensual</div>
-        <div class="sec-sub">Requisiciones creadas (últimos 12 meses)</div>
-        <div style="position:relative;height:160px"><canvas id="ch-month"></canvas></div>
-      </div>
-    </div>
-    <div class="grid1x1">
-      <div class="card">
-        <div class="sec-title">Por estado</div>
-        <div class="sec-sub">Distribución actual del flujo</div>
-        <div style="display:flex;align-items:center;gap:20px">
-          <div style="width:120px;height:120px;flex-shrink:0"><canvas id="ch-status"></canvas></div>
-          <div style="flex:1">\${Object.entries(byStatus).sort((a,b)=>b[1]-a[1]).map(([st,cnt])=>\`<div style="display:flex;align-items:center;gap:8px;padding:3px 0"><div style="width:10px;height:10px;border-radius:3px;background:\${STATUS_COLORS[st]||'#9AA5C0'};flex-shrink:0"></div><div style="font-size:11px;color:#3D4461;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">\${esc(st)}</div><div style="font-family:monospace;font-size:11px;font-weight:700">\${cnt}</div></div>\`).join('')}</div>
-        </div>
-      </div>
-      <div class="card">
-        <div class="sec-title">Por urgencia · Pendientes</div>
-        <div class="sec-sub">Reqs activas que requieren atención</div>
-        \${['Crítica','Alta','Normal'].map(urg=>{const u=pendientes.filter(i=>i.Urgency===urg);const c={Crítica:'#E8311A',Alta:'#F59E0B',Normal:'#0DB87B'}[urg];const bg={Crítica:'#fff3f1',Alta:'#FFFBEB',Normal:'#E8FAF3'}[urg];return '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;background:'+bg+';margin-bottom:8px"><div style="font-size:20px">'+(urg==='Crítica'?'🔴':urg==='Alta'?'🟡':'🟢')+'</div><div style="flex:1"><div style="font-size:12px;font-weight:700">'+urg+'</div><div style="font-size:10px;color:#9AA5C0">'+u.length+' pendiente'+(u.length!==1?'s':'')+'</div></div><div style="font-family:monospace;font-size:22px;font-weight:800;color:'+c+'">'+u.length+'</div></div>';}).join('')}
-      </div>
-    </div>
-    <div class="grid1x1">
-      <div class="card">
-        <div class="sec-title">Por departamento</div><div class="sec-sub">Todas las requisiciones · Doble clic para ver detalle</div>
-        \${depts.map(([dept,data],i)=>{const pct=Math.round(data.count/ITEMS.length*100);return '<div class="bar-row" ondblclick="showDrill(\'dept\',\''+esc(dept)+'\')"><div style="font-size:10px;font-weight:800;color:#9AA5C0;min-width:18px">'+(i+1)+'</div><div style="flex:1"><div style="font-size:12px;font-weight:700">'+esc(dept||'—')+'</div><div style="height:4px;background:#EEF0F5;border-radius:2px;overflow:hidden;margin-top:3px"><div style="height:100%;width:'+pct+'%;background:'+paleta[i]+';border-radius:2px"></div></div></div><div style="text-align:right"><div style="font-family:monospace;font-size:12px;font-weight:700">'+data.count+'</div><div style="font-size:10px;color:#9AA5C0">'+pct+'%</div></div></div>';}).join('')}
-      </div>
-      <div class="card">
-        <div class="sec-title">Top proveedores</div><div class="sec-sub">Por equiv. ARS en aprobadas · Doble clic para ver detalle</div>
-        \${provs.length?provs.map(([prov,data],i)=>{const pct=Math.round(data.equiv/(provs[0][1].equiv||1)*100);return '<div class="bar-row" ondblclick="showDrill(\'prov\',\''+esc(prov)+'\')"><div style="font-size:10px;font-weight:800;color:#9AA5C0;min-width:18px">'+(i+1)+'</div><div style="flex:1"><div style="font-size:12px;font-weight:700">'+esc(prov)+'</div><div style="height:4px;background:#EEF0F5;border-radius:2px;overflow:hidden;margin-top:3px"><div style="height:100%;width:'+pct+'%;background:'+paleta[i]+';border-radius:2px"></div></div></div><div style="text-align:right"><div style="font-family:monospace;font-size:11px;font-weight:700">'+(data.equiv>0?'$'+n0(data.equiv):'—')+'</div><div style="font-size:10px;color:#9AA5C0">'+data.count+' req'+(data.count!==1?'s':'')+'</div></div></div>';}).join(''):'<div style="color:#9AA5C0;font-size:12px;padding:20px 0;text-align:center">Sin proveedores asignados aún</div>'}
-      </div>
-    </div>
-    <div class="card" style="margin-bottom:16px">
-      <div class="sec-title">Requisiciones aprobadas — detalle</div>
-      <div class="sec-sub">\${aprobadas.length} registros · Doble clic en una fila para ver el detalle completo</div>
-      <div style="overflow-x:auto;max-height:350px;overflow-y:auto">
-        <table><thead><tr>\${['N° Req','Departamento','Solicitante','Proveedor','Moneda','Equiv. ARS','TC','OC','Estado'].map(h=>'<th>'+h+'</th>').join('')}</tr></thead>
-        <tbody>\${aprobadas.sort((a,b)=>(b.Lvl2At||'').localeCompare(a.Lvl2At||'')).map((i,idx)=>{const t=calcARS(i);const bg=idx%2?'#F8F9FB':'#fff';return '<tr class="drill-row" data-title="'+esc(i.Title)+'" ondblclick="showDetail(\''+esc(i.Title)+'\')" style="background:'+bg+'"><td style="font-weight:700;color:#E8311A;font-family:monospace">'+esc(i.Title)+'</td><td>'+esc(i.Dept)+'</td><td>'+esc(i.RequesterName)+'</td><td>'+esc(i.SelectedVendor||i.Vendor||'—')+'</td><td style="font-family:monospace;font-size:11px">'+(t.usd>0?'USD '+n2(t.usd):t.eur>0?'EUR '+n2(t.eur):'ARS '+n2(t.ars))+'</td><td style="font-family:monospace;font-weight:700;text-align:right">'+(t.equiv>0?'$'+n0(t.equiv):'—')+'</td><td style="text-align:center;color:#9AA5C0">'+(i.TCusd?'🔒':'~')+'</td><td style="font-family:monospace;color:#7C3AED">'+esc(i.OCNumber||'—')+'</td><td><span style="font-size:10px;background:'+(i.Status==='OC Asignada'?'#E8FAF3':'#EFF6FF')+';color:'+(i.Status==='OC Asignada'?'#0DB87B':'#2B7EFF')+';padding:2px 8px;border-radius:10px;font-weight:700">'+esc(i.Status)+'</span></td></tr>';}).join('')}</tbody>
-        </table>
-      </div>
-    </div>
-    <div style="text-align:center;padding:16px;font-size:11px;color:#9AA5C0;border-top:1px solid #EEF0F5;margin-top:8px">
-      Generado el ${hoy} · Sistema de Requisiciones Metagal Argentina
-      \${TC_USD?' · TC USD $'+n0(TC_USD):''}
-    </div>
-  \`;
-
-  // Charts
-  requestAnimationFrame(()=>setTimeout(()=>{
-    const mCtx=document.getElementById('ch-month')?.getContext('2d');
-    if(mCtx)new Chart(mCtx,{type:'bar',data:{labels:months,datasets:[{label:'Creadas',data:months.map(m=>byMonth[m]?.count||0),backgroundColor:'#E8311A22',borderColor:'#E8311A',borderWidth:2,borderRadius:4},{label:'Aprobadas',data:months.map(m=>byMonth[m]?.aprobadas||0),backgroundColor:'#0DB87B33',borderColor:'#0DB87B',borderWidth:2,borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{font:{size:10},boxWidth:10}}},scales:{y:{beginAtZero:true,grid:{color:'#EEF0F5'},ticks:{font:{size:9}}},x:{grid:{display:false},ticks:{font:{size:9}}}}}});
-    const sCtx=document.getElementById('ch-status')?.getContext('2d');
-    if(sCtx){const sl=Object.keys(byStatus);new Chart(sCtx,{type:'doughnut',data:{labels:sl,datasets:[{data:sl.map(s=>byStatus[s]),backgroundColor:sl.map(s=>STATUS_COLORS[s]||'#9AA5C0'),borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,cutout:'70%',plugins:{legend:{display:false}}}});}
-  },100));
-})();
-<\/script>
-</body></html>`;
-
+  const html = parts.join('\n');
   const blob = new Blob([html], {type:'text/html;charset=utf-8'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
