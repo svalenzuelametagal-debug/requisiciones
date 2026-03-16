@@ -1998,16 +1998,57 @@ function renderDetail(item) {
         <div class="form-group mb-3"><label>N° Orden de Compra *</label><input type="text" id="oc-num" value="${suggestedOC}" placeholder="OC-2025-0001"/></div>
         <div class="form-group mb-3"><label>Fecha OC</label><input type="date" id="oc-date" value="${now}"/></div>
         <div class="form-group mb-3"><label>Comprador *</label><input type="text" id="oc-buyer" value="${currentUser.name||currentUser.username}"/></div>
-        <div class="form-group"><label>Observaciones OC (opcional)</label><textarea id="oc-obs" rows="2" placeholder="Notas adicionales sobre la OC…"></textarea></div>
+        <div class="form-group mb-3"><label>Observaciones OC (opcional)</label><textarea id="oc-obs" rows="2" placeholder="Notas adicionales sobre la OC…"></textarea></div>
+        <div class="form-group">
+          <label>Adjuntar archivo de OC (opcional)</label>
+          <input type="file" id="oc-file" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.webp" style="padding:6px"/>
+          <div id="oc-file-status" style="font-size:11px;color:var(--text2);margin-top:4px"></div>
+        </div>
       `, 'Asignar Orden de Compra', [{label:'Asignar OC', cls:'btn-primary', cb:async()=>{
         const num   = document.getElementById('oc-num').value.trim();
         const date  = document.getElementById('oc-date').value;
         const buyer = document.getElementById('oc-buyer').value.trim();
         const obs   = document.getElementById('oc-obs').value.trim();
         if (!num||!buyer) { toast('Completá N° OC y Comprador','error'); return; }
+
+        // Subir archivo OC si hay uno seleccionado
+        let ocAttach = null;
+        const ocFileInput = document.getElementById('oc-file');
+        const ocFileStatus = document.getElementById('oc-file-status');
+        if (ocFileInput?.files?.length) {
+          const f = ocFileInput.files[0];
+          ocFileStatus.textContent = 'Subiendo archivo OC…';
+          try {
+            const cfg = getCfg();
+            const b64f = await new Promise((res,rej)=>{
+              const rd = new FileReader();
+              rd.onload = ()=>res(rd.result.split(',')[1]);
+              rd.onerror = rej;
+              rd.readAsDataURL(f);
+            });
+            const safeName = f.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+            const path = 'adjuntos/' + item.Title + '/OC_' + Date.now() + '_' + safeName;
+            const rurl = 'https://api.github.com/repos/' + cfg.ghRepo + '/contents/' + path;
+            const body2 = {message: 'OC adjunta: ' + f.name, content: b64f};
+            const rs = await fetch(rurl, {method:'PUT', headers:{Authorization:'token '+cfg.ghToken,'Content-Type':'application/json'}, body:JSON.stringify(body2)});
+            if (!rs.ok) throw new Error('GitHub ' + rs.status);
+            const rd2 = await rs.json();
+            const rawPath = (rd2.content && rd2.content.path) ? rd2.content.path : path;
+            ocAttach = {name: '📄 OC — ' + f.name, webUrl: 'https://raw.githubusercontent.com/' + cfg.ghRepo + '/main/' + rawPath, id: path};
+            ocFileStatus.textContent = '✅ ' + f.name;
+          } catch(e2) {
+            toast('Error subiendo archivo OC: ' + e2.message, 'error');
+          }
+        }
+
+        // Agregar OC a adjuntos existentes
+        const existingAttach = parseAttachments(item.AttachmentsJSON||'[]');
+        if (ocAttach) existingAttach.push(ocAttach);
+
         const fields = {Status:S.OC, OCNumber:num, OCDate:date, Buyer:buyer,
           Lvl2At:item.Lvl2At||isoNow(), Lvl2By:item.Lvl2By||currentUser.username,
-          Lvl2Note:obs||item.Lvl2Note||''};
+          Lvl2Note:obs||item.Lvl2Note||'',
+          AttachmentsJSON: JSON.stringify(existingAttach)};
         await doAction(item, fields);
         const updated = {...item, ...fields};
         await notificar(updated,`🛒 OC Asignada: ${num}`,`Comprador: ${buyer}${obs?' — '+obs:''}. Fecha: ${fmt(date)}`,[item.RequesterMail, ...(item.RequesterMail!==ROLES_APPROVER[0]?[ROLES_APPROVER[0]]:[])]);
