@@ -854,22 +854,64 @@ let tcManual = (()=>{
   catch(e){ return {usd_compra:null,usd_venta:null,eur_compra:null,eur_venta:null}; }
 })();
 
-async function fetchTC() {
+async function fetchTC(force=false) {
   const badge = document.getElementById('tc-badge');
-  badge.textContent = 'TC: actualizando…';
-  try {
-    // BNA API informal (scraping via proxy público)
-    const res = await fetch('https://apis.datos.gob.ar/series/api/series/?ids=168.1_T_CAMBIOR_D_0_0_26:value,168.1_T_CAMBIOR_D_0_0_27:value&last=1&format=json');
-    if (res.ok) {
-      const json = await res.json();
-      const d = json?.data?.[0];
-      if (d) {
-        if (!tcManual.usd_compra) tcManual.usd_compra = d[1] ? Number(d[1]).toFixed(2) : null;
-        if (!tcManual.usd_venta)  tcManual.usd_venta  = d[2] ? Number(d[2]).toFixed(2) : null;
-        try { localStorage.setItem('mgal_tc', JSON.stringify(tcManual)); } catch(e){}
+  if (badge) badge.textContent = 'TC: actualizando…';
+
+  // Verificar si ya tenemos TC del día de hoy — si es así no re-fetchar (salvo force=true)
+  if (!force) {
+    const today = new Date().toISOString().slice(0,10);
+    try {
+      const cached = JSON.parse(localStorage.getItem('mgal_tc')||'{}');
+      if (cached._date === today && cached.usd_venta) {
+        updateTCBadge(); return; // ya tenemos el TC de hoy
       }
-    }
-  } catch(e) {}
+    } catch(e){}
+  }
+
+  // Intentar múltiples fuentes con fallback
+  const sources = [
+    // Fuente 1: dolarapi.com — dólar oficial BNA
+    async () => {
+      const r = await fetch('https://dolarapi.com/v1/dolares/oficial', {signal: AbortSignal.timeout(5000)});
+      if (!r.ok) throw new Error('dolarapi status '+r.status);
+      const d = await r.json();
+      return { usd_compra: Number(d.compra).toFixed(2), usd_venta: Number(d.venta).toFixed(2) };
+    },
+    // Fuente 2: bluelytics — oficial compra/venta
+    async () => {
+      const r = await fetch('https://api.bluelytics.com.ar/v2/latest', {signal: AbortSignal.timeout(5000)});
+      if (!r.ok) throw new Error('bluelytics status '+r.status);
+      const d = await r.json();
+      return { usd_compra: Number(d.oficial.value_buy).toFixed(2), usd_venta: Number(d.oficial.value_sell).toFixed(2) };
+    },
+    // Fuente 3: datos.gob.ar — BCRA series (puede tener delay de 1 día)
+    async () => {
+      const r = await fetch('https://apis.datos.gob.ar/series/api/series/?ids=168.1_T_CAMBIOR_D_0_0_26:value,168.1_T_CAMBIOR_D_0_0_27:value&last=1&format=json', {signal: AbortSignal.timeout(8000)});
+      if (!r.ok) throw new Error('datos.gob status '+r.status);
+      const json = await r.json();
+      const d = json?.data?.[0];
+      if (!d || !d[1]) throw new Error('sin datos');
+      return { usd_compra: Number(d[1]).toFixed(2), usd_venta: Number(d[2]).toFixed(2) };
+    },
+  ];
+
+  let ok = false;
+  for (const src of sources) {
+    try {
+      const result = await src();
+      if (result.usd_venta && Number(result.usd_venta) > 0) {
+        tcManual.usd_compra = result.usd_compra;
+        tcManual.usd_venta  = result.usd_venta;
+        tcManual._date = new Date().toISOString().slice(0,10);
+        try { localStorage.setItem('mgal_tc', JSON.stringify(tcManual)); } catch(e2){}
+        ok = true;
+        break;
+      }
+    } catch(e) { /* probar siguiente fuente */ }
+  }
+
+  if (!ok && badge) badge.textContent = 'TC: sin conexión';
   updateTCBadge();
 }
 
@@ -915,10 +957,10 @@ function showTCEditor() {
       updateTCBadge();
       toast('Tipo de cambio actualizado','success');
     }},
-    {label:'Actualizar desde BNA', cls:'btn-secondary', cb:()=>{
-      tcManual = {usd_compra:null,usd_venta:null,eur_compra:null,eur_venta:null};
-      try { localStorage.removeItem('mgal_tc'); } catch(e){}
-      fetchTC();
+    {label:'↻ Actualizar desde BNA', cls:'btn-secondary', cb:()=>{
+      tcManual._date = null; // forzar re-fetch
+      fetchTC(true);
+      toast('Actualizando tipo de cambio…','info');
     }},
     {label:'Cancelar', cls:'btn-secondary'},
   ]);
