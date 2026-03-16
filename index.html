@@ -799,7 +799,7 @@ function buildMailHTML(item, accion, nota) {
         <tbody>${filas}</tbody>
       </table>
       ${attachments.length?`<div style="font-size:13px;font-weight:700;color:#444;margin-bottom:8px">Adjuntos (${attachments.length})</div><div style="margin-bottom:20px">${adjHtml}</div>`:''}
-      <div style="text-align:center;margin-top:16px"><a href="${APP_URL}" style="display:inline-block;background:#e8a020;color:#000;font-weight:700;padding:12px 28px;border-radius:4px;text-decoration:none;font-size:13px">Ver en el sistema →</a></div>
+      <div style="text-align:center;margin-top:16px"><a href="${APP_URL}?req=${encodeURIComponent(item.Title)}" style="display:inline-block;background:#e8a020;color:#000;font-weight:700;padding:12px 28px;border-radius:4px;text-decoration:none;font-size:13px">Ver requisición ${item.Title} →</a></div>
     </div>
     <div style="background:#f5f5f5;padding:12px 28px;font-size:11px;color:#aaa;text-align:center">Metagal Argentina · Sistema de Requisiciones · Desarrollado por Santiago Valenzuela</div>
   </div></body></html>`;
@@ -3688,6 +3688,21 @@ async function initApp(account) {
 
   buildNav();
   fetchTC();
+
+  // Deep-link: si viene ?req=ID desde el mail, abrir esa requisición
+  const _reqParam = new URLSearchParams(window.location.search).get('req');
+  if (_reqParam) {
+    window.history.replaceState({}, '', window.location.pathname);
+    // Cargar lista y buscar la req
+    const _allItems = await readDB().then(r=>r.map(mapItem)).catch(()=>[]);
+    const _target = _allItems.find(x => x.Title === decodeURIComponent(_reqParam));
+    if (_target) {
+      renderDetail(_target);
+      showView('detail');
+      return;
+    }
+  }
+
   // Token embebido en CFG — no se necesita activación por browser
   if (userRole==='gerente') {
     renderGerenteView(); showView('gerente');
