@@ -5698,10 +5698,15 @@ function renderReport() {
 
     // ── STATUS COLORS ─────────────────────────────────────
     const statusColors = {
-      [S.DRAFT]:'#9AA5C0',[S.SENT]:'#2B7EFF',[S.APP1]:'#F59E0B',
-      [S.APP2]:'#F59E0B',[S.APP2NOGER]:'#0DB87B',[S.APPGER]:'#7C3AED',
-      [S.APPFIN]:'#0DB87B',[S.OC]:'#0DB87B',
-      [S.REJ1]:'#E8311A',[S.REJ2]:'#E8311A',[S.REJGER]:'#E8311A',[S.REJFIN]:'#E8311A',
+      [S.DRAFT]:'#C2C7D6',
+      [S.SENT]:'#2B7EFF',
+      [S.APP1]:'#F59E0B',
+      [S.APP2]:'#F59E0B',
+      [S.APP2NOGER]:'#0DB87B',
+      [S.APPGER]:'#7C3AED',
+      [S.APPFIN]:'#06B6D4',
+      [S.OC]:'#1A6B3C',
+      [S.REJ1]:'#E8311A',[S.REJ2]:'#E8311A',[S.REJGER]:'#DC2626',[S.REJFIN]:'#F87171',
     };
 
     // ── RENDER ────────────────────────────────────────────
@@ -5789,7 +5794,7 @@ function renderReport() {
           ${deptsSorted.map(([dept,data],i)=>{
             const pct = Math.round(data.count/items.length*100);
             const colors=['#E8311A','#F59E0B','#2B7EFF','#0DB87B','#7C3AED','#F59E0B','#9AA5C0','#9AA5C0','#9AA5C0','#9AA5C0'];
-            return `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #EEF0F5;cursor:pointer;border-radius:6px" onmouseenter="this.style.background='#F4F6FA'" onmouseleave="this.style.background=''" ondblclick="showRptDrill('dept','${escH(dept||'')}')">
+            return `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #EEF0F5;cursor:pointer;border-radius:6px" onmouseenter="this.style.background='#F4F6FA'" onmouseleave="this.style.background=''" data-drill-type="dept" data-drill-val="${escH(dept||'')}" class="rpt-drill-card">
               <div style="font-size:10px;font-weight:800;color:#9AA5C0;min-width:18px">${i+1}</div>
               <div style="flex:1">
                 <div style="font-size:12px;font-weight:700;color:#1A1F36">${escH(dept||'—')}</div>
@@ -5813,7 +5818,7 @@ function renderReport() {
             const maxEquiv = provsSorted[0][1].equiv||1;
             const pct = Math.round(data.equiv/maxEquiv*100);
             const colors=['#E8311A','#F59E0B','#2B7EFF','#0DB87B','#7C3AED','#F59E0B','#9AA5C0','#9AA5C0','#9AA5C0','#9AA5C0'];
-            return `<div ondblclick="showRptDrill('prov','${escH(prov)}')" style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #EEF0F5;cursor:pointer;border-radius:6px;transition:background .12s" onmouseenter="this.style.background='#F4F6FA'" onmouseleave="this.style.background=''">
+            return `<div data-drill-type="prov" data-drill-val="${escH(prov)}" class="rpt-drill-card" style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #EEF0F5;cursor:pointer;border-radius:6px;transition:background .12s" onmouseenter="this.style.background='#F4F6FA'" onmouseleave="this.style.background=''">
               <div style="font-size:10px;font-weight:800;color:#9AA5C0;min-width:18px">${i+1}</div>
               <div style="flex:1">
                 <div style="font-size:12px;font-weight:700;color:#1A1F36">${escH(prov)}</div>
@@ -5847,7 +5852,7 @@ function renderReport() {
               ${aprobadas.sort((a,b)=>(b.Lvl2At||'').localeCompare(a.Lvl2At||'')).map((i,idx)=>{
                 const t=calcARS(i);
                 const tcSrc=i.TCusd?'🔒':'~';
-                return `<tr style="background:${idx%2?'#F8F9FB':'#fff'};cursor:pointer" onmouseenter="this.style.background='#EFF6FF'" onmouseleave="this.style.background=''" ondblclick="(function(){var found=rptItems&&rptItems.find(x=>x.Title==='${i.Title}');if(found)renderDetail(found);})()">
+                return `<tr data-req-title="${escH(i.Title)}" class="rpt-drill-row" style="background:${idx%2?'#F8F9FB':'#fff'};cursor:pointer" onmouseenter="this.style.background='#EFF6FF'" onmouseleave="this.style.background='${idx%2?'#F8F9FB':'#fff'}'">
                   <td style="padding:7px 8px;font-size:11px;font-weight:700;color:#E8311A;font-family:monospace">${escH(i.Title)}</td>
                   <td style="padding:7px 8px;font-size:11px;color:#3D4461">${escH(i.Dept)}</td>
                   <td style="padding:7px 8px;font-size:11px;color:#3D4461">${escH(i.RequesterName)}</td>
@@ -5877,6 +5882,24 @@ function renderReport() {
 
     document.getElementById('rpt-loading').style.display='none';
     document.getElementById('rpt-content').style.display='block';
+
+    // Event delegation for drill-down — más robusto que inline handlers
+    setTimeout(()=>{
+      // Doble clic en filas de tabla
+      document.querySelectorAll('.rpt-drill-row').forEach(tr=>{
+        tr.addEventListener('dblclick', ()=>{
+          const title = tr.dataset.reqTitle;
+          const found = window.rptItems && window.rptItems.find(x=>x.Title===title);
+          if (found) { renderDetail(found); showView('detail'); }
+        });
+      });
+      // Doble clic en cards de dept/prov
+      document.querySelectorAll('.rpt-drill-card').forEach(el=>{
+        el.addEventListener('dblclick', ()=>{
+          showRptDrill(el.dataset.drillType, el.dataset.drillVal);
+        });
+      });
+    }, 100);
 
     // ── CHARTS — usar requestAnimationFrame para garantizar que el DOM esté visible ──
     requestAnimationFrame(() => setTimeout(() => {
