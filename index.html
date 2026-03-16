@@ -4718,7 +4718,7 @@ function renderDashboard() {
       <div><div class="section-title">Panel de Análisis</div><div class="section-sub">Solo visible para administradores</div></div>
       <div class="ml-auto d-flex">
         <button class="btn btn-secondary btn-sm" id="dash-refresh">↻ Actualizar</button>
-        <button class="btn btn-secondary btn-sm" id="dash-export">⬇ CSV completo</button>
+        <button class="btn btn-primary btn-sm" id="dash-export">⬇ Exportar valorizado</button>
       </div>
     </div>
     <div id="dash-loading" class="loading-overlay"><div class="loader"></div> Cargando datos…</div>
@@ -4995,8 +4995,216 @@ function renderDashboard() {
 
   document.getElementById('dash-refresh').addEventListener('click', load);
   document.getElementById('dash-export').addEventListener('click',()=>{
-    exportCSV(allItems.map(i=>({Numero:i.Title,Dept:i.Dept,Solicitante:i.RequesterName,Mail:i.RequesterMail,Estado:i.Status,Urgencia:i.Urgency,Creada:fmt(i.CreatedAt),OC:i.OCNumber})),
-      `RequisicionesCompleto_${new Date().toISOString().slice(0,10)}.csv`);
+    // Contar cuántas reqs necesitan TC
+    const needsTC = allItems.filter(i=>{
+      const lines = parseLines(i.LinesJSON);
+      const hasFX = lines.some(l=>l.currency==='USD'||l.currency==='EUR');
+      return hasFX && !i.TCusd;
+    });
+
+    const statusList = [...new Set(allItems.map(i=>i.Status))].sort();
+    const statusChecks = statusList.map(s=>`
+      <label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;cursor:pointer">
+        <input type="checkbox" class="exp-status-chk" value="${escH(s)}" checked style="width:auto;margin:0"/>
+        <span class="badge ${getBadgeClass(s)}" style="font-size:10px">${escH(s)}</span>
+      </label>`).join('');
+
+    const hasTcGlobal = !!(tcManual.usd_venta);
+
+    showModal(`
+      <div style="font-size:13px;font-weight:600;color:var(--text0);margin-bottom:12px">Configurar exportación</div>
+
+      <!-- Filtro de estados -->
+      <div class="form-group mb-3">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <label style="margin:0">Estados a incluir</label>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-secondary btn-xs" id="exp-all">Todos</button>
+            <button class="btn btn-secondary btn-xs" id="exp-none">Ninguno</button>
+            <button class="btn btn-secondary btn-xs" id="exp-aprobadas">Solo aprobadas</button>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 16px;max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px">
+          ${statusChecks}
+        </div>
+      </div>
+
+      <!-- TC para reqs sin valor congelado -->
+      <div class="form-group mb-3">
+        <label>Tipo de cambio para reqs <strong>sin TC congelado</strong>
+          <span style="font-size:10px;color:var(--text2);font-weight:400">(${needsTC.length} req${needsTC.length!==1?'s':''} en moneda extranjera sin TC)</span>
+        </label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div>
+            <div style="font-size:11px;color:var(--text2);margin-bottom:3px">USD Venta $</div>
+            <input type="number" id="exp-tc-usd" value="${tcManual.usd_venta||''}" placeholder="Ej: 1415.00" step="0.01" style="margin:0"/>
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--text2);margin-bottom:3px">EUR Venta $</div>
+            <input type="number" id="exp-tc-eur" value="${tcManual.eur_venta||''}" placeholder="Ej: 1560.00" step="0.01" style="margin:0"/>
+          </div>
+        </div>
+        <div style="font-size:10px;color:var(--text2);margin-top:5px">
+          Las reqs que ya tienen TC congelado (🔒) usan ese valor histórico independientemente.
+        </div>
+      </div>
+
+      <!-- Opciones de detalle -->
+      <div class="form-group">
+        <label>Opciones</label>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer">
+            <input type="checkbox" id="exp-por-linea" checked style="width:auto;margin:0"/>
+            Detallar ítems (una fila por ítem)
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer">
+            <input type="checkbox" id="exp-inc-novals" checked style="width:auto;margin:0"/>
+            Incluir reqs en ARS (no necesitan TC)
+          </label>
+        </div>
+      </div>
+    `, 'Exportar requisiciones valorizadas', [
+      {label:'⬇ Exportar CSV', cls:'btn-primary', cb:()=>{
+        const selectedStatus = [...document.querySelectorAll('.exp-status-chk:checked')].map(x=>x.value);
+        const expTcUsd = parseFloat(document.getElementById('exp-tc-usd').value)||0;
+        const expTcEur = parseFloat(document.getElementById('exp-tc-eur').value)||0;
+        const porLinea = document.getElementById('exp-por-linea').checked;
+        const incNoVals = document.getElementById('exp-inc-novals').checked;
+
+        let items = allItems.filter(i=>selectedStatus.includes(i.Status));
+        if (!incNoVals) {
+          items = items.filter(i=>{
+            const lines = parseLines(i.LinesJSON);
+            return lines.some(l=>l.currency==='USD'||l.currency==='EUR');
+          });
+        }
+
+        if (!items.length) { toast('No hay requisiciones con los filtros seleccionados','error'); return; }
+
+        const today = new Date().toISOString().slice(0,10);
+        const rows = [];
+
+        // Fila de metadatos del reporte
+        rows.push({
+          '':                '=== REPORTE VALORIZADO METAGAL ===',
+          'Fecha exportación': today,
+          'TC USD (fallback)': expTcUsd||'—',
+          'TC EUR (fallback)': expTcEur||'—',
+          'Total reqs':        items.length,
+        });
+        rows.push({}); // fila vacía
+
+        items.forEach(item=>{
+          const lines = parseLines(item.LinesJSON);
+          // TC para esta req: usar congelado si existe, sino el del export
+          const tcUsd = parseFloat(item.TCusd)||expTcUsd||0;
+          const tcEur = parseFloat(item.TCeur)||expTcEur||0;
+          const tcFuente = item.TCusd ? `🔒 ${item.TCDate||item.Lvl2At?.slice(0,10)||'histórico'}` : (expTcUsd?'manual export':'sin TC');
+
+          // Totales por moneda
+          let sumARS=0, sumUSD=0, sumEUR=0;
+          lines.forEach(l=>{
+            const total=(l.qty||0)*(l.price||0);
+            if (l.currency==='USD') sumUSD+=total;
+            else if (l.currency==='EUR') sumEUR+=total;
+            else sumARS+=total;
+          });
+          const equivARS = sumARS + sumUSD*tcUsd + sumEUR*tcEur;
+
+          if (porLinea) {
+            lines.forEach((l,idx)=>{
+              const lineTotal=(l.qty||0)*(l.price||0);
+              const lineEquiv = l.currency==='USD'?lineTotal*tcUsd : l.currency==='EUR'?lineTotal*tcEur : lineTotal;
+              rows.push({
+                'N° Req':         idx===0?item.Title:'',
+                'Departamento':   idx===0?item.Dept:'',
+                'Solicitante':    idx===0?item.RequesterName:'',
+                'Estado':         idx===0?item.Status:'',
+                'Urgencia':       idx===0?item.Urgency:'',
+                'Cuenta GL':      idx===0?item.GLAccount||'':'',
+                'Centro Costo':   idx===0?item.CostCenter||'':'',
+                'Proveedor':      idx===0?item.SelectedVendor||item.Vendor||'':'',
+                'TC USD usado':   idx===0?tcUsd||'':'',
+                'TC EUR usado':   idx===0?tcEur||'':'',
+                'Fuente TC':      idx===0?tcFuente:'',
+                'Total ARS':      idx===0&&sumARS?sumARS:'',
+                'Total USD':      idx===0&&sumUSD?sumUSD:'',
+                'Total EUR':      idx===0&&sumEUR?sumEUR:'',
+                'Equiv. ARS':     idx===0?(equivARS||''):'',
+                '---':            '',
+                'Descripción ítem': l.desc,
+                'Cantidad':       l.qty,
+                'Unidad':         l.unit,
+                'Moneda ítem':    l.currency||'ARS',
+                'Precio unit.':   l.price,
+                'Total línea':    lineTotal,
+                'Equiv. ARS línea': lineEquiv||'',
+                '----':           '',
+                'Enviada':        idx===0?fmt(item.SubmittedAt):'',
+                'Creada':         idx===0?fmt(item.CreatedAt):'',
+                'Aprobó Compras': idx===0?item.Lvl2By?.split('@')[0]||'':'',
+                'Fecha autor.':   idx===0?fmt(item.Lvl2At):'',
+                'Aprobó Gerencia':idx===0?item.GerBy?.split('@')[0]||'':'',
+                'Fecha Gerencia': idx===0?fmt(item.GerAt):'',
+                'Aprobó Finanzas':idx===0?item.FinBy?.split('@')[0]||'':'',
+                'Fecha Finanzas': idx===0?fmt(item.FinAt):'',
+                'N° OC':          idx===0?item.OCNumber||'':'',
+                'Comprador':      idx===0?item.Buyer||'':'',
+              });
+            });
+          } else {
+            // Una fila por req
+            rows.push({
+              'N° Req':          item.Title,
+              'Departamento':    item.Dept,
+              'Solicitante':     item.RequesterName,
+              'Estado':          item.Status,
+              'Urgencia':        item.Urgency,
+              'Cuenta GL':       item.GLAccount||'',
+              'Centro Costo':    item.CostCenter||'',
+              'Proveedor':       item.SelectedVendor||item.Vendor||'',
+              'TC USD usado':    tcUsd||'',
+              'TC EUR usado':    tcEur||'',
+              'Fuente TC':       tcFuente,
+              'Total ARS':       sumARS||'',
+              'Total USD':       sumUSD||'',
+              'Total EUR':       sumEUR||'',
+              'Equiv. ARS':      equivARS||'',
+              'Enviada':         fmt(item.SubmittedAt),
+              'Creada':          fmt(item.CreatedAt),
+              'Aprobó Compras':  item.Lvl2By?.split('@')[0]||'',
+              'Fecha autor.':    fmt(item.Lvl2At),
+              'Aprobó Gerencia': item.GerBy?.split('@')[0]||'',
+              'Fecha Gerencia':  fmt(item.GerAt),
+              'Aprobó Finanzas': item.FinBy?.split('@')[0]||'',
+              'Fecha Finanzas':  fmt(item.FinAt),
+              'N° OC':           item.OCNumber||'',
+              'Comprador':       item.Buyer||'',
+            });
+          }
+        });
+
+        exportCSV(rows, `Requisiciones_Valorizado_${today}.csv`);
+        toast(`Exportadas ${items.length} requisiciones`, 'success');
+      }},
+      {label:'Cancelar', cls:'btn-secondary'},
+    ]);
+
+    // Botones de selección rápida
+    setTimeout(()=>{
+      document.getElementById('exp-all')?.addEventListener('click',()=>{
+        document.querySelectorAll('.exp-status-chk').forEach(x=>x.checked=true);
+      });
+      document.getElementById('exp-none')?.addEventListener('click',()=>{
+        document.querySelectorAll('.exp-status-chk').forEach(x=>x.checked=false);
+      });
+      document.getElementById('exp-aprobadas')?.addEventListener('click',()=>{
+        const aprobadas = ['Revisada · En gestión','Autorizada · Lista para OC','Autorizada · Pendiente Gerencia','Aprobada por Gerencia','OK Financiero','OC Asignada'];
+        document.querySelectorAll('.exp-status-chk').forEach(x=>{
+          x.checked = aprobadas.includes(x.value);
+        });
+      });
+    },50);
   });
 
   load();
