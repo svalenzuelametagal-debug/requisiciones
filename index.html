@@ -3740,6 +3740,69 @@ function renderReport() {
     </div>
   `;
 
+  function showRptDetail(item) {
+    if (!item) return;
+    const lines = parseLines(item.LinesJSON||'[]');
+    const n2 = n => Number(n||0).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2});
+    const n0 = n => Number(n||0).toLocaleString('es-AR',{maximumFractionDigits:0});
+    const tcU = parseFloat(item.TCusd)||parseFloat(tcManual.usd_venta)||0;
+    const tcE = parseFloat(item.TCeur)||parseFloat(tcManual.eur_venta)||0;
+    const totARS = lines.filter(l=>l.currency==='ARS').reduce((s,l)=>s+(l.qty||0)*(l.price||0),0);
+    const totUSD = lines.filter(l=>l.currency==='USD').reduce((s,l)=>s+(l.qty||0)*(l.price||0),0);
+    const totEUR = lines.filter(l=>l.currency==='EUR').reduce((s,l)=>s+(l.qty||0)*(l.price||0),0);
+    const equiv = totARS + totUSD*tcU + totEUR*tcE;
+    const filas = lines.map(l=>`
+      <tr style="border-bottom:1px solid #EEF0F5">
+        <td style="padding:7px 8px;font-size:12px">${escH(l.desc||'')}</td>
+        <td style="padding:7px 8px;font-size:12px;text-align:center">${l.qty||''}</td>
+        <td style="padding:7px 8px;font-size:12px;text-align:center">${escH(l.unit||'')}</td>
+        <td style="padding:7px 8px;font-size:12px;font-weight:700">${escH(l.currency||'ARS')}</td>
+        <td style="padding:7px 8px;font-size:12px;text-align:right;font-family:var(--mono)">${n2(l.price||0)}</td>
+        <td style="padding:7px 8px;font-size:12px;text-align:right;font-family:var(--mono);font-weight:700">${n2((l.qty||0)*(l.price||0))}</td>
+      </tr>`).join('');
+    const body = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+        <div style="background:#F8F9FB;border-radius:8px;padding:10px 14px;border:1px solid #EEF0F5">
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#9AA5C0;margin-bottom:4px">Departamento</div>
+          <div style="font-size:13px;font-weight:700">${escH(item.Dept)}</div>
+        </div>
+        <div style="background:#F8F9FB;border-radius:8px;padding:10px 14px;border:1px solid #EEF0F5">
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#9AA5C0;margin-bottom:4px">Solicitante</div>
+          <div style="font-size:13px;font-weight:700">${escH(item.RequesterName)}</div>
+        </div>
+        <div style="background:#F8F9FB;border-radius:8px;padding:10px 14px;border:1px solid #EEF0F5">
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#9AA5C0;margin-bottom:4px">Estado</div>
+          <div style="font-size:12px;font-weight:700;color:${statusColors[item.Status]||'#2B7EFF'}">${escH(item.Status)}</div>
+        </div>
+        <div style="background:#F8F9FB;border-radius:8px;padding:10px 14px;border:1px solid #EEF0F5">
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#9AA5C0;margin-bottom:4px">Proveedor</div>
+          <div style="font-size:13px;font-weight:700">${escH(item.SelectedVendor||item.Vendor||'—')}</div>
+        </div>
+        ${item.GLAccount?`<div style="background:#F8F9FB;border-radius:8px;padding:10px 14px;border:1px solid #EEF0F5"><div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#9AA5C0;margin-bottom:4px">Cuenta GL</div><div style="font-size:13px;font-weight:700;font-family:var(--mono)">${escH(item.GLAccount)}</div></div>`:''}
+        ${item.OCNumber?`<div style="background:#F8F9FB;border-radius:8px;padding:10px 14px;border:1px solid #EEF0F5"><div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#9AA5C0;margin-bottom:4px">N° OC</div><div style="font-size:13px;font-weight:700;color:#7C3AED;font-family:var(--mono)">${escH(item.OCNumber)}</div></div>`:''}
+      </div>
+      ${item.Justification?`<div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:6px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#92400E"><strong>Justificación:</strong> ${escH(item.Justification)}</div>`:''}
+      <div style="overflow-x:auto;margin-bottom:14px">
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr>${['Descripción','Cant.','Unidad','Moneda','Precio unit.','Total'].map(h=>`<th style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#9AA5C0;padding:7px 8px;border-bottom:2px solid #EEF0F5;text-align:${h.includes('Precio')||h==='Total'?'right':'left'};background:#fff">${h}</th>`).join('')}</tr></thead>
+          <tbody>${filas}</tbody>
+        </table>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;font-size:11px;color:#9AA5C0;padding-top:10px;border-top:1px solid #EEF0F5;margin-bottom:10px">
+        ${item.CreatedAt?`<span>Creada: <b style="color:#3D4461">${(item.CreatedAt||'').slice(0,10)}</b></span>`:''}
+        ${item.Lvl2By?`<span>Autorizado: <b style="color:#3D4461">${escH(item.Lvl2By.split('@')[0])}</b> el <b style="color:#3D4461">${(item.Lvl2At||'').slice(0,10)}</b></span>`:''}
+        ${item.TCusd?`<span>🔒 TC: <b style="color:#0D9488">USD $${n2(item.TCusd)}</b>${item.TCDate?' ('+item.TCDate+')':''}</span>`:''}
+      </div>
+      ${equiv>0?`<div style="text-align:right;padding-top:8px;border-top:1px solid #EEF0F5">
+        ${totUSD>0?`<span style="background:#E8FAF3;color:#166534;padding:4px 10px;border-radius:6px;font-size:12px;font-weight:700;margin-right:6px">USD ${n2(totUSD)}</span>`:''}
+        ${totEUR>0?`<span style="background:#EFF6FF;color:#1d4ed8;padding:4px 10px;border-radius:6px;font-size:12px;font-weight:700;margin-right:6px">EUR ${n2(totEUR)}</span>`:''}
+        ${totARS>0?`<span style="background:#F4F6FA;color:#3D4461;padding:4px 10px;border-radius:6px;font-size:12px;font-weight:700;margin-right:6px">ARS $${n2(totARS)}</span>`:''}
+        ${equiv>0&&tcU?`<span style="font-size:15px;font-weight:800;color:#E8311A;font-family:var(--mono)">≈ $${n0(equiv)}</span>`:''}
+      </div>`:''}
+    `;
+    showModal(body, '📋 '+item.Title, [{label:'Ver detalle completo →', cls:'btn-primary', action:()=>{renderDetail(item); showView('detail');}}, {label:'Cerrar', cls:'btn-secondary'}]);
+  }
+
   function showRptDrill(type, value) {
     if (!window.rptItems) return;
     let filtered;
@@ -3749,7 +3812,7 @@ function renderReport() {
     if (!filtered.length) return;
     const n2 = n => Number(n||0).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2});
     const rows = filtered.map(i=>`
-      <tr style="border-bottom:1px solid #EEF0F5;cursor:pointer" onclick="renderDetail(window.rptItems.find(x=>x.Title==='${escH(i.Title)}'))">
+      <tr style="border-bottom:1px solid #EEF0F5;cursor:pointer" onclick="showRptDetail(window.rptItems.find(x=>x.Title==='${escH(i.Title)}'))" style="cursor:pointer">
         <td style="padding:8px;font-size:11px;font-weight:700;color:#E8311A;font-family:monospace">${escH(i.Title)}</td>
         <td style="padding:8px;font-size:11px">${escH(type==='dept'?(i.SelectedVendor||i.Vendor||'—'):i.Dept)}</td>
         <td style="padding:8px;font-size:11px">${escH(i.RequesterName)}</td>
@@ -4043,12 +4106,12 @@ function renderReport() {
 
     // Event delegation para drill-down en dashboard vivo
     setTimeout(()=>{
-      // Filas de tabla — clic simple o doble para ver detalle
+      // Filas de tabla — clic simple o doble abre modal dentro del dashboard
       document.querySelectorAll('.rpt-drill-row').forEach(tr=>{
         const go = ()=>{
           const title = tr.dataset.reqTitle;
           const found = window.rptItems && window.rptItems.find(x=>x.Title===title);
-          if (found) { renderDetail(found); showView('detail'); }
+          if (found) showRptDetail(found);
         };
         tr.addEventListener('dblclick', go);
         tr.addEventListener('click', go);
