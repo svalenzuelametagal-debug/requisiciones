@@ -762,7 +762,7 @@ function buildMailHTML(item, accion, nota) {
     <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:13px;text-align:right">${l.currency||'ARS'} ${l.price?Number(l.price).toLocaleString('es-AR',{minimumFractionDigits:2}):'—'}</td>
     <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:12px;color:#888">${l.obs||'—'}</td>
   </tr>`).join('');
-  const adjHtml = attachments.length ? attachments.map(a=>`<a href="#" onclick="openAttachment(${JSON.stringify(a.webUrl)},${JSON.stringify(a.name)});return false;" style="color:#3a8fd4;font-size:12px;display:block;margin-bottom:4px">📎 ${a.name}</a>`).join('') : '<span style="color:#aaa;font-size:12px">Sin adjuntos</span>';
+  const adjHtml = attachments.length ? attachments.map(a=>`<a href="#" class="open-attach" data-url="${escH(a.webUrl)}" data-name="${escH(a.name)}" style="color:#3a8fd4;font-size:12px;display:block;margin-bottom:4px">📎 ${a.name}</a>`).join('') : '<span style="color:#aaa;font-size:12px">Sin adjuntos</span>';
   return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,sans-serif">
   <div style="max-width:660px;margin:24px auto;background:#fff;border-radius:6px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.1)">
     <div style="background:#1a1f25;padding:20px 28px"><div style="color:#e8a020;font-size:20px;font-weight:700">Metagal Argentina</div><div style="color:#6e7e92;font-size:11px;text-transform:uppercase;letter-spacing:.1em;margin-top:3px">Requisiciones de Compra</div></div>
@@ -1722,7 +1722,7 @@ function renderDetail(item) {
     </tr>`).join('');
 
   const attachHtml = attachments.length
-    ? attachments.map(a=>`<div class="attach-item">📎 <a href="#" onclick="openAttachment(${JSON.stringify(a.webUrl)},${JSON.stringify(a.name)});return false;" style="cursor:pointer">${escH(a.name)}</a></div>`).join('')
+    ? attachments.map(a=>`<div class="attach-item">📎 <a href="#" class="open-attach" data-url="${escH(a.webUrl)}" data-name="${escH(a.name)}" style="cursor:pointer">${escH(a.name)}</a></div>`).join('')
     : '<div class="text-muted" style="font-size:12px">Sin adjuntos</div>';
 
   // History
@@ -3278,6 +3278,16 @@ async function initApp(account) {
 }
 
 bootstrap().catch(e=>console.error('Bootstrap error:',e.message));
+
+// Delegated handler for attachment links (works with dynamically rendered content)
+document.addEventListener('click', function(e) {
+  const a = e.target.closest('a.open-attach');
+  if (!a) return;
+  e.preventDefault();
+  const url  = a.dataset.url  || '';
+  const name = a.dataset.name || 'archivo';
+  openAttachment(url, name);
+});
 </script>
 </body>
 </html>
