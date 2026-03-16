@@ -2513,9 +2513,9 @@ function renderFinanzasView() {
       return `<div style="overflow-x:auto"><table>
         <thead><tr>
           <th>N° Req.</th><th>Dpto</th><th>Solicitante</th><th>Cuenta GL</th><th>Urg.</th>
-          <th style="text-align:right">ARS</th>
-          <th style="text-align:right">USD</th>
-          <th style="text-align:right">EUR</th>
+          <th style="text-align:right;width:120px">ARS</th>
+          <th style="text-align:right;width:100px">USD</th>
+          <th style="text-align:right;width:80px">EUR</th>
           <th style="text-align:right;color:var(--accent)" title="Calculado con el TC congelado de cada req. El ícono 🔒 indica TC histórico guardado al momento de autorizar.">Equiv. ARS 🔒</th>
           ${showApproval?'<th>Aprobó Finanzas</th>':'<th>Nota Gerencia</th>'}
           <th></th>
@@ -2606,13 +2606,13 @@ function renderFinanzasView() {
         <div class="section-title" style="font-size:14px;margin-bottom:14px">📊 Comprometido por Cuenta Contable — aprobadas</div>
         <div style="overflow-x:auto"><table>
           <thead><tr>
-            <th>Cuenta GL</th>
-            <th style="text-align:center">Req.</th>
-            <th style="text-align:right">ARS</th>
-            <th style="text-align:right">USD</th>
-            <th style="text-align:right">EUR</th>
-            <th style="text-align:right;color:var(--accent)" title="Calculado con el TC congelado de cada req. El ícono 🔒 indica TC histórico guardado al momento de autorizar.">Equiv. ARS 🔒</th>
-            <th>Departamentos</th>
+            <th style="min-width:80px">Cuenta GL</th>
+            <th style="text-align:center;width:50px">Req.</th>
+            <th style="text-align:right;width:120px">ARS</th>
+            <th style="text-align:right;width:100px">USD</th>
+            <th style="text-align:right;width:80px">EUR</th>
+            <th style="text-align:right;width:130px;color:var(--accent)" title="Calculado con el TC congelado de cada req. El ícono 🔒 indica TC histórico guardado al momento de autorizar.">Equiv. ARS 🔒</th>
+            <th style="min-width:90px">Departamentos</th>
           </tr></thead>
           <tbody>${glRows}
           <!-- Total GL -->
