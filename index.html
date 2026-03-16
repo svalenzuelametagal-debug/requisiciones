@@ -1545,7 +1545,9 @@ function renderForm(item) {
         });
         if (!res.ok) throw new Error(`GitHub ${res.status}`);
         const data = await res.json();
-        const webUrl = data.content?.html_url || data.content?.download_url || '';
+        // Construir URL raw para que abra/descargue directo sin pasar por GitHub viewer
+        const rawPath = data.content?.path || path;
+        const webUrl = `https://raw.githubusercontent.com/${cfg.ghRepo}/main/${rawPath}`;
         uploaded.push({ name: f.name, webUrl, id: path });
       } catch(e) {
         toast(`Error subiendo ${f.name}: ${e.message}`, 'error');
