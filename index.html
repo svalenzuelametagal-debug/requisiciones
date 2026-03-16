@@ -2738,14 +2738,12 @@ function renderFinanzasView() {
   function monedaCeldas(totales, item) {
     const arsVal = toARS(totales, item);
     const hasTc = item ? (item.TCusd || tcManual.usd_venta || item.TCeur || tcManual.eur_venta) : (tcManual.usd_venta || tcManual.eur_venta);
-    const fmtMon = (code, val, color) => val > 0
-      ? `<span style="font-size:9px;font-weight:700;color:${color};opacity:.7;letter-spacing:.5px;margin-right:2px">${code}</span><span style="font-weight:600;color:${color}">${fmt2(val)}</span>`
-      : '<span style="color:var(--text2)">—</span>';
+    const dash = '<span style="color:var(--text2)">—</span>';
     return `
-      <td class="money" style="font-size:12px">${fmtMon('ARS $', totales.ARS, 'var(--text1)')}</td>
-      <td class="money" style="font-size:12px">${fmtMon('USD', totales.USD, '#4caf8a')}</td>
-      <td class="money" style="font-size:12px">${fmtMon('EUR', totales.EUR, '#5b8dee')}</td>
-      <td class="money" style="font-size:12px;color:var(--accent);font-weight:600">${hasTc?'<span style="font-size:9px;font-weight:700;opacity:.7;margin-right:2px">ARS $</span>'+fmt2(arsVal):'—'}</td>`;
+      <td class="money" style="font-size:12px;color:var(--text1)">${totales.ARS>0?'$'+fmt2(totales.ARS):dash}</td>
+      <td class="money" style="font-size:12px;color:#4caf8a">${totales.USD>0?fmt2(totales.USD):dash}</td>
+      <td class="money" style="font-size:12px;color:#5b8dee">${totales.EUR>0?fmt2(totales.EUR):dash}</td>
+      <td class="money" style="font-size:12px;font-weight:700;color:var(--accent)">${hasTc?'$'+fmt2(arsVal):dash}</td>`;
   }
 
   function renderContent(all, desde, hasta) {
@@ -2807,9 +2805,9 @@ function renderFinanzasView() {
             <td style="font-size:12px">${escH(i.RequesterName)}</td>
             <td style="font-family:var(--mono);font-size:12px;color:var(--accent)">${escH(i.GLAccount||'—')}</td>
             <td><span class="badge ${getUrgencyBadge(i.Urgency)}" style="font-size:10px">${escH(i.Urgency)}</span></td>
-            <td class="money" style="font-size:12px">${t.ARS>0?`<span style='font-size:9px;font-weight:700;color:var(--text1);opacity:.7;margin-right:2px'>ARS $</span><span style='font-weight:600;color:var(--text0)'>${fmt2(t.ARS)}</span>`:'<span style="color:var(--text2)">—</span>'}</td>
-            <td class="money" style="font-size:12px">${t.USD>0?`<span style='font-size:9px;font-weight:700;color:#4caf8a;opacity:.7;margin-right:2px'>USD</span><span style='font-weight:600;color:#4caf8a'>${fmt2(t.USD)}</span>`:'<span style="color:var(--text2)">—</span>'}</td>
-            <td class="money" style="font-size:12px">${t.EUR>0?`<span style='font-size:9px;font-weight:700;color:#5b8dee;opacity:.7;margin-right:2px'>EUR</span><span style='font-weight:600;color:#5b8dee'>${fmt2(t.EUR)}</span>`:'<span style="color:var(--text2)">—</span>'}</td>
+            <td class="money" style="font-size:12px;color:var(--text1)">${t.ARS>0?'$'+fmt2(t.ARS):'<span style="color:var(--text2)">—</span>'}</td>
+            <td class="money" style="font-size:12px;color:#4caf8a">${t.USD>0?fmt2(t.USD):'<span style="color:var(--text2)">—</span>'}</td>
+            <td class="money" style="font-size:12px;color:#5b8dee">${t.EUR>0?fmt2(t.EUR):'<span style="color:var(--text2)">—</span>'}</td>
             <td class="money" style="font-size:12px;font-weight:600;color:var(--accent)">${(i.TCusd||tcManual.usd_venta||i.TCeur||tcManual.eur_venta)?'$'+fmt2(arsEquiv):'—'}${i.TCusd?`<span title="TC congelado al autorizar: USD $${Number(i.TCusd).toLocaleString('es-AR',{minimumFractionDigits:2})} · Fecha: ${i.TCDate||i.Lvl2At?.slice(0,10)||'—'}" style="font-size:9px;color:var(--green);margin-left:3px;cursor:help">🔒</span>`:''}</td>
             <td style="font-size:11px;color:var(--text2)">
               ${showApproval
@@ -2822,9 +2820,9 @@ function renderFinanzasView() {
         <!-- Fila de totales -->
         <tr style="background:var(--bg3);font-weight:700;border-top:2px solid var(--border)">
           <td colspan="5" style="font-size:12px;color:var(--text2)">TOTAL (${items.length} requisiciones)</td>
-          <td class="money" style="font-size:13px">${calcTotales(items).ARS>0?`<span style='font-size:9px;font-weight:700;color:var(--text1);opacity:.7;margin-right:2px'>ARS $</span><span style='font-weight:600;color:var(--text0)'>${fmt2(calcTotales(items).ARS)}</span>`:'<span style="color:var(--text2)">—</span>'}</td>
-          <td class="money" style="font-size:13px;color:#4caf8a">${calcTotales(items).USD>0?`<span style='font-size:9px;font-weight:700;color:#4caf8a;opacity:.7;margin-right:2px'>USD</span><span style='font-weight:600;color:#4caf8a'>${fmt2(calcTotales(items).USD)}</span>`:'<span style="color:var(--text2)">—</span>'}</td>
-          <td class="money" style="font-size:13px;color:#5b8dee">${calcTotales(items).EUR>0?`<span style='font-size:9px;font-weight:700;color:#5b8dee;opacity:.7;margin-right:2px'>EUR</span><span style='font-weight:600;color:#5b8dee'>${fmt2(calcTotales(items).EUR)}</span>`:'<span style="color:var(--text2)">—</span>'}</td>
+          <td class="money" style="font-size:13px">${calcTotales(items).ARS>0?'$'+fmt2(calcTotales(items).ARS):'<span style="color:var(--text2)">—</span>'}</td>
+          <td class="money" style="font-size:13px;color:#4caf8a">${calcTotales(items).USD>0?fmt2(calcTotales(items).USD):'<span style="color:var(--text2)">—</span>'}</td>
+          <td class="money" style="font-size:13px;color:#5b8dee">${calcTotales(items).EUR>0?fmt2(calcTotales(items).EUR):'<span style="color:var(--text2)">—</span>'}</td>
           <td class="money" style="font-size:13px;color:var(--accent)">${(tcManual.usd_venta||tcManual.eur_venta)?'$'+fmt2(toARS(calcTotales(items))):'—'}</td>
           <td colspan="2"></td>
         </tr>
