@@ -869,26 +869,31 @@ async function fetchTC(force=false) {
     } catch(e){}
   }
 
+  // Helper: fetch con timeout manual (compatible con todos los browsers)
+  function fetchTimeout(url, ms) {
+    return new Promise((resolve, reject) => {
+      const t = setTimeout(() => reject(new Error('timeout')), ms);
+      fetch(url).then(r => { clearTimeout(t); resolve(r); }).catch(e => { clearTimeout(t); reject(e); });
+    });
+  }
+
   // Intentar múltiples fuentes con fallback
   const sources = [
-    // Fuente 1: dolarapi.com — dólar oficial BNA
     async () => {
-      const r = await fetch('https://dolarapi.com/v1/dolares/oficial', {signal: AbortSignal.timeout(5000)});
-      if (!r.ok) throw new Error('dolarapi status '+r.status);
+      const r = await fetchTimeout('https://dolarapi.com/v1/dolares/oficial', 5000);
+      if (!r.ok) throw new Error('dolarapi '+r.status);
       const d = await r.json();
       return { usd_compra: Number(d.compra).toFixed(2), usd_venta: Number(d.venta).toFixed(2) };
     },
-    // Fuente 2: bluelytics — oficial compra/venta
     async () => {
-      const r = await fetch('https://api.bluelytics.com.ar/v2/latest', {signal: AbortSignal.timeout(5000)});
-      if (!r.ok) throw new Error('bluelytics status '+r.status);
+      const r = await fetchTimeout('https://api.bluelytics.com.ar/v2/latest', 5000);
+      if (!r.ok) throw new Error('bluelytics '+r.status);
       const d = await r.json();
       return { usd_compra: Number(d.oficial.value_buy).toFixed(2), usd_venta: Number(d.oficial.value_sell).toFixed(2) };
     },
-    // Fuente 3: datos.gob.ar — BCRA series (puede tener delay de 1 día)
     async () => {
-      const r = await fetch('https://apis.datos.gob.ar/series/api/series/?ids=168.1_T_CAMBIOR_D_0_0_26:value,168.1_T_CAMBIOR_D_0_0_27:value&last=1&format=json', {signal: AbortSignal.timeout(8000)});
-      if (!r.ok) throw new Error('datos.gob status '+r.status);
+      const r = await fetchTimeout('https://apis.datos.gob.ar/series/api/series/?ids=168.1_T_CAMBIOR_D_0_0_26:value,168.1_T_CAMBIOR_D_0_0_27:value&last=1&format=json', 8000);
+      if (!r.ok) throw new Error('datos.gob '+r.status);
       const json = await r.json();
       const d = json?.data?.[0];
       if (!d || !d[1]) throw new Error('sin datos');
@@ -1066,6 +1071,8 @@ function mapItem(raw) {
     RequiereGerencia: raw.RequiereGerencia||false,
     SelectedVendor:   raw.SelectedVendor||'',
     VendorCriteria:   raw.VendorCriteria||'',
+    TCusd:            raw.TCusd||null,
+    TCeur:            raw.TCeur||null,
     SubmittedAt:  raw.SubmittedAt||'',
     Lvl1At:       raw.Lvl1At||'',
     Lvl1By:       raw.Lvl1By||'',
@@ -1845,6 +1852,7 @@ function renderDetail(item) {
             <div class="detail-row"><span class="detail-label">Proveedor sugerido:</span><span class="detail-value">${escH(item.Vendor)||'—'}</span></div>
               ${item.SelectedVendor?`<div class="detail-row"><span class="detail-label" style="color:var(--green)">✔ Proveedor seleccionado:</span><span class="detail-value" style="color:var(--green);font-weight:600">${escH(item.SelectedVendor)}</span></div>`:''}
               ${item.VendorCriteria?`<div class="detail-row"><span class="detail-label">Criterio de selección:</span><span class="detail-value">${escH(item.VendorCriteria)}</span></div>`:''}
+              ${item.TCusd?`<div class="detail-row"><span class="detail-label" style="color:var(--text2)">TC al autorizar:</span><span class="detail-value" style="font-family:var(--mono);font-size:12px">USD $${Number(item.TCusd).toLocaleString('es-AR',{minimumFractionDigits:2})}${item.TCeur?' | EUR $'+Number(item.TCeur).toLocaleString('es-AR',{minimumFractionDigits:2}):''}</span></div>`:''}
             <div class="detail-row"><span class="detail-label">Fecha necesaria:</span><span class="detail-value">${fmt(item.NeedBy)}</span></div>
             <div class="detail-row"><span class="detail-label">Creada:</span><span class="detail-value">${fmtDT(item.CreatedAt)}</span></div>
             <div class="detail-row"><span class="detail-label">Enviada:</span><span class="detail-value">${fmtDT(item.SubmittedAt)}</span></div>
@@ -2010,13 +2018,13 @@ function renderDetail(item) {
           const noteBase = document.getElementById('approval-note').value.trim();
           const note = [prov?'Proveedor: '+prov:'', criterio?'Criterio: '+criterio:'', noteBase].filter(Boolean).join(' | ');
           if (needsGer) {
-            const fields = {Status:S.APP2, Lvl2At:isoNow(), Lvl2By:currentUser.username, Lvl2Note:note, SelectedVendor:prov, VendorCriteria:criterio};
+            const fields = {Status:S.APP2, Lvl2At:isoNow(), Lvl2By:currentUser.username, Lvl2Note:note, SelectedVendor:prov, VendorCriteria:criterio, TCusd:tcManual.usd_venta||null, TCeur:tcManual.eur_venta||null};
             await doAction(item, fields);
             const updated = {...item, ...fields};
             await notificar(updated,'✅ Autorizada — Pendiente aprobación Gerencia',note,[ROLES_GERENTE[0], item.RequesterMail]);
             toast('Autorizada — enviada a Gerencia para aprobación','success');
           } else {
-            const fields = {Status:S.APP2NOGER, Lvl2At:isoNow(), Lvl2By:currentUser.username, Lvl2Note:note, SelectedVendor:prov, VendorCriteria:criterio};
+            const fields = {Status:S.APP2NOGER, Lvl2At:isoNow(), Lvl2By:currentUser.username, Lvl2Note:note, SelectedVendor:prov, VendorCriteria:criterio, TCusd:tcManual.usd_venta||null, TCeur:tcManual.eur_venta||null};
             await doAction(item, fields);
             const updated = {...item, ...fields};
             await notificar(updated,'✅ Autorizada — Lista para asignación de OC',note,[ROLES_APPROVER[0], item.RequesterMail]);
@@ -2337,20 +2345,23 @@ function renderFinanzasView() {
   }
 
   // Calcula equivalente ARS usando TC cargado
-  function toARS(totales) {
-    const usdV = parseFloat(tcManual.usd_venta)||0;
-    const eurV = parseFloat(tcManual.eur_venta)||0;
+  function toARS(totales, item) {
+    // Usar TC de la req si existe, sino el TC global
+    const usdV = (item && item.TCusd) ? parseFloat(item.TCusd) : parseFloat(tcManual.usd_venta)||0;
+    const eurV = (item && item.TCeur) ? parseFloat(item.TCeur) : parseFloat(tcManual.eur_venta)||0;
     return totales.ARS + totales.USD*usdV + totales.EUR*eurV;
   }
 
   function fmt2(n) { return n.toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 
-  function monedaCeldas(totales) {
+  function monedaCeldas(totales, item) {
+    const arsVal = toARS(totales, item);
+    const hasTc = item ? (item.TCusd || tcManual.usd_venta || item.TCeur || tcManual.eur_venta) : (tcManual.usd_venta || tcManual.eur_venta);
     return `
       <td class="money" style="font-size:12px">${totales.ARS>0?'$'+fmt2(totales.ARS):'—'}</td>
       <td class="money" style="font-size:12px;color:${totales.USD>0?'#4caf8a':'var(--text2)'}">${totales.USD>0?'U$S '+fmt2(totales.USD):'—'}</td>
       <td class="money" style="font-size:12px;color:${totales.EUR>0?'#5b8dee':'var(--text2)'}">${totales.EUR>0?'€ '+fmt2(totales.EUR):'—'}</td>
-      <td class="money" style="font-size:12px;color:var(--accent);font-weight:600">${(tcManual.usd_venta||tcManual.eur_venta)?'$'+fmt2(toARS(totales)):'—'}</td>`;
+      <td class="money" style="font-size:12px;color:var(--accent);font-weight:600">${hasTc?'$'+fmt2(arsVal):'—'}</td>`;
   }
 
   function renderContent(all, desde, hasta) {
@@ -2402,7 +2413,7 @@ function renderFinanzasView() {
         </tr></thead>
         <tbody>${items.map(i=>{
           const t = calcTotales([i]);
-          const arsEquiv = toARS(t);
+          const arsEquiv = toARS(t, i);
           return `<tr data-fin-id="${i._id}" style="cursor:pointer">
             <td><span class="num" style="font-size:12px">${escH(i.Title)}</span>
               ${i.GLCorregido?`<br/><span style="font-size:10px;background:rgba(212,160,23,.2);color:var(--yellow);padding:1px 5px;border-radius:8px">GL corregido</span>`:''}
@@ -2415,7 +2426,7 @@ function renderFinanzasView() {
             <td class="money" style="font-size:12px">${t.ARS>0?'$'+fmt2(t.ARS):'—'}</td>
             <td class="money" style="font-size:12px;color:${t.USD>0?'#4caf8a':'var(--text2)'}">${t.USD>0?'U$S '+fmt2(t.USD):'—'}</td>
             <td class="money" style="font-size:12px;color:${t.EUR>0?'#5b8dee':'var(--text2)'}">${t.EUR>0?'€ '+fmt2(t.EUR):'—'}</td>
-            <td class="money" style="font-size:12px;font-weight:600;color:var(--accent)">${(tcManual.usd_venta||tcManual.eur_venta)?'$'+fmt2(arsEquiv):'—'}</td>
+            <td class="money" style="font-size:12px;font-weight:600;color:var(--accent)">${(i.TCusd||tcManual.usd_venta||i.TCeur||tcManual.eur_venta)?'$'+fmt2(arsEquiv):'—'}${i.TCusd?'<span title="TC guardado al autorizar" style="font-size:9px;color:var(--text2);margin-left:3px">🔒</span>':''}</td>
             <td style="font-size:11px;color:var(--text2)">
               ${showApproval
                 ? (i.FinBy?i.FinBy.split('@')[0]+'<br/>'+fmtDT(i.FinAt):'—')
