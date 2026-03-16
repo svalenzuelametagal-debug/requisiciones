@@ -5850,7 +5850,17 @@ function renderReport() {
     document.getElementById('rpt-content').style.display='block';
 
     // ── CHARTS ────────────────────────────────────────────
-    if (window.Chart) {
+    function loadChartJSForReport(cb) {
+      if (window.Chart) { cb(); return; }
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js';
+      s.onload = cb;
+      s.onerror = () => { window.Chart = null; cb(); };
+      document.head.appendChild(s);
+    }
+
+    loadChartJSForReport(() => {
+      if (!window.Chart) return;
       // Evolución mensual
       const monthCtx = document.getElementById('rpt-chart-month')?.getContext('2d');
       if (monthCtx) {
@@ -5880,7 +5890,7 @@ function renderReport() {
           options:{responsive:true,maintainAspectRatio:false,cutout:'70%',plugins:{legend:{display:false}}}
         });
       }
-    }
+    }); // fin loadChartJSForReport
   }
 
   function kpiCard(ico,label,value,sub,acColor,bgColor) {
