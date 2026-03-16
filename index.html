@@ -2473,13 +2473,22 @@ function renderFinanzasView() {
 
   function renderContent(all, desde, hasta) {
     // Filtrar por fecha de creación
+    const PIPELINE_STATUSES = [S.SENT, S.APP1, S.APP2, S.APP2NOGER];
     let filtrados = all.filter(i=>[S.APPGER,S.APPFIN,S.REJFIN,S.OC].includes(i.Status));
-    if (desde) filtrados = filtrados.filter(i=>(i.CreatedAt||i.SubmittedAt||'').slice(0,10)>=desde);
-    if (hasta) filtrados = filtrados.filter(i=>(i.CreatedAt||i.SubmittedAt||'').slice(0,10)<=hasta);
+    let pipeline  = all.filter(i=>PIPELINE_STATUSES.includes(i.Status));
+    if (desde) {
+      filtrados = filtrados.filter(i=>(i.CreatedAt||i.SubmittedAt||'').slice(0,10)>=desde);
+      pipeline  = pipeline.filter(i=>(i.CreatedAt||i.SubmittedAt||'').slice(0,10)>=desde);
+    }
+    if (hasta) {
+      filtrados = filtrados.filter(i=>(i.CreatedAt||i.SubmittedAt||'').slice(0,10)<=hasta);
+      pipeline  = pipeline.filter(i=>(i.CreatedAt||i.SubmittedAt||'').slice(0,10)<=hasta);
+    }
 
     const pending  = filtrados.filter(i=>i.Status===S.APPGER);
     const approved = filtrados.filter(i=>[S.APPFIN,S.OC].includes(i.Status));
     const rejected = filtrados.filter(i=>i.Status===S.REJFIN);
+    const totPipeline = calcTotales(pipeline);
 
     const totPend = calcTotales(pending);
     const totAppr = calcTotales(approved);
@@ -2636,6 +2645,19 @@ function renderFinanzasView() {
       <div class="card mb-4">
         <div class="section-title" style="font-size:14px;margin-bottom:14px">✖ Rechazadas por Finanzas (${rejected.length})</div>
         ${reqTable(rejected, false)}
+      </div>`:''}
+
+      ${pipeline.length?`
+      <div class="card mb-4">
+        <div class="section-title" style="font-size:14px;margin-bottom:14px">⏳ En proceso de autorización (${pipeline.length})</div>
+        <div class="section-sub" style="margin-bottom:12px">Requisiciones enviadas pero aún no autorizadas por Finanzas — sin TC congelado</div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">
+          ${totPipeline.ARS>0?`<div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:10px 16px"><div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">ARS</div><div style="font-size:15px;font-weight:700;font-family:var(--mono)">$${fmt2(totPipeline.ARS)}</div></div>`:''}
+          ${totPipeline.USD>0?`<div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:10px 16px"><div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">USD</div><div style="font-size:15px;font-weight:700;font-family:var(--mono);color:#4caf8a">${fmt2(totPipeline.USD)}</div></div>`:''}
+          ${totPipeline.EUR>0?`<div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:10px 16px"><div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">EUR</div><div style="font-size:15px;font-weight:700;font-family:var(--mono);color:#5b8dee">${fmt2(totPipeline.EUR)}</div></div>`:''}
+          ${(totPipeline.USD>0||totPipeline.EUR>0)&&(tcManual.usd_venta||tcManual.eur_venta)?`<div style="background:var(--bg3);border:1px solid var(--accent);border-radius:var(--radius);padding:10px 16px"><div style="font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">Equiv. ARS ~</div><div style="font-size:15px;font-weight:700;font-family:var(--mono);color:var(--accent)">$${fmt2(pipeline.reduce((s,i)=>s+toARS(calcTotales([i])),0))}</div></div>`:''}
+        </div>
+        ${reqTable(pipeline, false)}
       </div>`:''}
     `;
     dc.classList.remove('hidden');
