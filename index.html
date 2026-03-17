@@ -2115,9 +2115,39 @@ function renderDetail(item) {
         const ccRaw = document.getElementById('oc-cc').value.trim();
         const cc = ccRaw ? ccRaw.split(',').map(x=>x.trim()).filter(Boolean) : [];
         const msg = document.getElementById('oc-msg').value.trim();
-        const adj = attachments.length
-          ? attachments.map(a=>`<div style="margin:4px 0">📎 <a href="${escH(a.webUrl||'#')}" style="color:#0891b2;font-size:13px">${escH(a.name)}</a></div>`).join('')
-          : '<p style="color:#999;font-size:12px">Sin adjuntos</p>';
+        // Fetch attachments from GitHub as base64 to embed in email
+        const emailAttachments = [];
+        const adjLines = [];
+        const cfg = getCfg();
+        for (const a of attachments) {
+          try {
+            // Convert raw URL to GitHub API URL
+            const rawUrl = a.webUrl || '';
+            const match = rawUrl.match(/raw\.githubusercontent\.com\/([^/]+\/[^/]+)\/[^/]+\/(.*)/);
+            if (match && cfg.ghToken) {
+              const apiUrl = 'https://api.github.com/repos/' + match[1] + '/contents/' + match[2];
+              const resp = await fetch(apiUrl, { headers: githubHeaders(cfg.ghToken) });
+              if (resp.ok) {
+                const data = await resp.json();
+                emailAttachments.push({
+                  '@odata.type': '#microsoft.graph.fileAttachment',
+                  name: a.name,
+                  contentType: a.name.endsWith('.pdf') ? 'application/pdf'
+                    : a.name.match(/\.(doc|docx)$/i) ? 'application/msword'
+                    : a.name.match(/\.(xls|xlsx)$/i) ? 'application/vnd.ms-excel'
+                    : a.name.match(/\.(png|jpg|jpeg)$/i) ? 'image/'+a.name.split('.').pop().toLowerCase()
+                    : 'application/octet-stream',
+                  contentBytes: data.content.split('\n').join('')
+                });
+                adjLines.push('<div style="margin:4px 0">📎 <span style="color:#0891b2;font-size:13px">' + escH(a.name) + '</span></div>');
+                continue;
+              }
+            }
+          } catch(fetchErr) { console.warn('Attachment fetch error:', fetchErr.message); }
+          // Fallback: just show name
+          adjLines.push('<div style="margin:4px 0">📎 <span style="color:#999;font-size:13px">' + escH(a.name) + ' (no disponible)</span></div>');
+        }
+        const adj = adjLines.length ? adjLines.join('') : '<p style="color:#999;font-size:12px">Sin adjuntos</p>';
         const senderName = String(currentUser?.name||currentUser?.username||'Compras').normalize('NFC');
           const htmlBody = buildOCMailHTML(item, msg, adj, senderName);
         try {
@@ -2134,7 +2164,8 @@ function renderDetail(item) {
             reader.onerror = rej;
             reader.readAsDataURL(file);
           })));
-          await sendMailWithAttachments([to], '[OC ' + item.OCNumber + '] Orden de Compra — Metagal Argentina', htmlBody, cc, extraAttachments);
+          const allAttachments = [...emailAttachments, ...extraAttachments];
+          await sendMailWithAttachments([to], '[OC ' + item.OCNumber + '] Orden de Compra — Metagal Argentina', htmlBody, cc, allAttachments);
           if (to !== (item.VendorMail||'')) {
             await doAction(item, {VendorMail: to, UpdatedAt: isoNow()});
           }
