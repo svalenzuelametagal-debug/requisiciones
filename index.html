@@ -2535,8 +2535,12 @@ function showModal(bodyHtml, title, buttons=[]) {
   document.body.appendChild(overlay);
   overlay.querySelector('#modal-x').addEventListener('click',()=>overlay.remove());
   buttons.forEach((b,i)=>{
-    overlay.querySelector(`[data-bi="${i}"]`).addEventListener('click',()=>{
-      if (b.cb) b.cb();
+    overlay.querySelector(`[data-bi="${i}"]`).addEventListener('click', async ()=>{
+      const fn = b.action || b.cb;
+      if (fn) {
+        const result = await fn();
+        if (result === false) return; // action returned false = don't close
+      }
       overlay.remove();
     });
   });
