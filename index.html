@@ -1885,7 +1885,7 @@ function renderDetail(item) {
   actionBtns += `<button class="btn btn-secondary btn-sm" id="btn-dup-req" title="Duplicar como nuevo borrador">⧉ Duplicar</button>`;
   if (canReactivate) actionBtns += `<button class="btn btn-warning" id="btn-reactivate-req">↩ Reactivar requisición</button>`;
   if (canEdit) actionBtns += `<button class="btn btn-secondary" id="btn-edit-req">✏ Editar</button>`;
-  if (userRole==='admin' && item.Status===S.OC) actionBtns += `<button class="btn btn-info" id="btn-send-oc-supplier" style="background:#0891b2;color:#fff">📧 Enviar OC al Proveedor</button>`;
+  if ((userRole==='admin'||userRole==='approver') && item.Status===S.OC) actionBtns += `<button class="btn btn-info" id="btn-send-oc-supplier" style="background:#0891b2;color:#fff">📧 Enviar OC al Proveedor</button>`;
   if (canApproveN1) actionBtns += `<button class="btn btn-success" id="btn-appn1">✔ Dar visto bueno</button><button class="btn btn-danger" id="btn-rejn1">↩ Devolver al solicitante</button>`;
   if (canApproveN2) actionBtns += `<button class="btn btn-success" id="btn-appn2">✔ Autorizar compra</button><button class="btn btn-danger" id="btn-rejn2">✖ No autorizar</button>`;
   if (canAssignOC)  actionBtns += `<button class="btn btn-info" id="btn-assign-oc">📄 Asignar OC</button>`;
