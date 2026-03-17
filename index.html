@@ -743,6 +743,23 @@ async function graphReq(method, url, body = null) {
 // ================================================================
 // EMAIL VIA GRAPH — Mail.Send delegado (sin admin consent)
 // ================================================================
+async function sendMailWithAttachments(toArr, subject, htmlBody, ccArr=[], attachments=[]) {
+  try {
+    const recipients = (Array.isArray(toArr) ? toArr : [toArr])
+      .filter(Boolean).map(a => ({ emailAddress: { address: a } }));
+    if (!recipients.length) return;
+    const ccRecipients = ccArr.filter(Boolean).map(a => ({ emailAddress: { address: a } }));
+    const msg = { subject, body: { contentType: 'HTML', content: htmlBody }, toRecipients: recipients };
+    if (ccRecipients.length) msg.ccRecipients = ccRecipients;
+    if (attachments.length) msg.attachments = attachments;
+    await graphReq('POST', '/me/sendMail', { message: msg, saveToSentItems: true });
+  } catch(e) {
+    const detail = e.message || String(e);
+    console.error('Mail.Send error:', detail);
+    throw new Error(detail);
+  }
+}
+
 async function sendMail(toArr, subject, htmlBody, ccArr=[]) {
   try {
     const recipients = (Array.isArray(toArr) ? toArr : [toArr])
@@ -751,10 +768,11 @@ async function sendMail(toArr, subject, htmlBody, ccArr=[]) {
     const ccRecipients = ccArr.filter(Boolean).map(a => ({ emailAddress: { address: a } }));
     const msg = { subject, body: { contentType: 'HTML', content: htmlBody }, toRecipients: recipients };
     if (ccRecipients.length) msg.ccRecipients = ccRecipients;
-    await graphReq('POST', '/me/sendMail', { message: msg, saveToSentItems: false });
+    await graphReq('POST', '/me/sendMail', { message: msg, saveToSentItems: true });
   } catch(e) {
-    console.error('Mail error:', e.message);
-    throw e;  // propagate so caller can show toast
+    const detail = e.message || String(e);
+    console.error('Mail.Send error:', detail);
+    throw new Error(detail);
   }
 }
 
@@ -812,7 +830,12 @@ function buildMailHTML(item, accion, nota) {
 
 async function notificar(item, accion, nota, destinatarios) {
   const subj = `[Req. ${item.Title}] ${accion}`;
-  await sendMail(destinatarios, subj, buildMailHTML(item, accion, nota));
+  try {
+    await sendMail(destinatarios, subj, buildMailHTML(item, accion, nota));
+  } catch(e) {
+    console.error('notificar error:', e.message);
+    // Mail fallo, pero no interrumpir la accion principal
+  }
 }
 
 function imprimirRequisicion(item) {
@@ -2073,6 +2096,11 @@ function renderDetail(item) {
         <label>Mensaje adicional (opcional)</label>
         <textarea id="oc-msg" rows="3" placeholder="Estimados, adjuntamos OC..."></textarea>
       </div>
+      <div class="form-group">
+        <label>Adjuntar archivos adicionales (opcional)</label>
+        <input type="file" id="oc-extra-files" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg" style="padding:6px"/>
+        <div style="font-size:11px;color:var(--text2);margin-top:4px">PDF, Word, Excel, imágenes</div>
+      </div>
       <div style="margin-top:12px;padding:12px;background:var(--bg3);border-radius:8px;font-size:12px">
         <div style="font-weight:700;margin-bottom:8px">Detalles de la OC</div>
         <div>N° OC: <b>${escH(item.OCNumber)}</b> · Fecha: <b>${fmt(item.OCDate)}</b> · Comprador: <b>${escH(item.Buyer)}</b></div>
@@ -2093,7 +2121,20 @@ function renderDetail(item) {
         const senderName = String(currentUser?.name||currentUser?.username||'Compras').normalize('NFC');
           const htmlBody = buildOCMailHTML(item, msg, adj, senderName);
         try {
-          await sendMail([to], '[OC ' + item.OCNumber + '] Orden de Compra — Metagal Argentina', htmlBody, cc);
+          // Build extra attachments from file input
+          const extraFiles = document.getElementById('oc-extra-files')?.files || [];
+          const extraAttachments = await Promise.all(Array.from(extraFiles).map(file => new Promise((res,rej)=>{
+            const reader = new FileReader();
+            reader.onload = e => res({
+              '@odata.type': '#microsoft.graph.fileAttachment',
+              name: file.name,
+              contentType: file.type || 'application/octet-stream',
+              contentBytes: e.target.result.split(',')[1]
+            });
+            reader.onerror = rej;
+            reader.readAsDataURL(file);
+          })));
+          await sendMailWithAttachments([to], '[OC ' + item.OCNumber + '] Orden de Compra — Metagal Argentina', htmlBody, cc, extraAttachments);
           if (to !== (item.VendorMail||'')) {
             await doAction(item, {VendorMail: to, UpdatedAt: isoNow()});
           }
