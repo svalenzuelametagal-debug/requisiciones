@@ -2122,8 +2122,9 @@ function renderDetail(item) {
     renderDetail({...item, TCusd: tcU, TCeur: tcE, TCDate: tcDate});
   });
 
-  // Eliminar adjuntos
-  (userRole==='admin'||userRole==='approver') && document.querySelectorAll('.btn-del-attach').forEach(btn=>{
+  // Eliminar adjuntos - cualquier usuario puede eliminar adjuntos de sus propias reqs
+  const canDeleteAttach = userRole==='admin' || userRole==='approver' || item.RequesterMail===currentUser?.username;
+  canDeleteAttach && document.querySelectorAll('.btn-del-attach').forEach(btn=>{
     btn.addEventListener('mouseenter',()=>btn.style.color='var(--red)');
     btn.addEventListener('mouseleave',()=>btn.style.color='var(--text2)');
     btn.addEventListener('click', async (e)=>{
