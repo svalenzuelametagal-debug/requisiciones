@@ -1916,7 +1916,7 @@ function renderDetail(item) {
     </tr>`).join('');
 
   const attachHtml = attachments.length
-    ? attachments.map((a,ai)=>`<div class="attach-item" style="display:flex;align-items:center;gap:6px">${a.internal?'🔒':'📎'} <a href="#" class="open-attach" data-url="${escH(a.webUrl)}" data-name="${escH(a.name)}" style="cursor:pointer;flex:1">${escH(a.name)}</a>${a.internal?'<span style="font-size:9px;color:var(--text2);background:var(--bg3);padding:1px 5px;border-radius:4px">interno</span>':''}<button class="btn-del-attach" data-ai="${ai}" title="Eliminar adjunto" style="background:none;border:none;cursor:pointer;color:var(--text2);font-size:13px;padding:0 2px;line-height:1" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--text2)'">✕</button></div>`).join('')
+    ? attachments.map((a,ai)=>`<div class="attach-item" style="display:flex;align-items:center;gap:6px">${a.internal?'🔒':'📎'} <a href="#" class="open-attach" data-url="${escH(a.webUrl)}" data-name="${escH(a.name)}" style="cursor:pointer;flex:1">${escH(a.name)}</a>${a.internal?'<span style="font-size:9px;color:var(--text2);background:var(--bg3);padding:1px 5px;border-radius:4px">interno</span>':''}<button class="btn-del-attach" data-ai="${ai}" title="Eliminar adjunto" style="background:none;border:none;cursor:pointer;color:var(--text2);font-size:13px;padding:2px 6px;border-radius:3px;transition:color .15s">✕</button></div>`).join('')
     : '<div class="text-muted" style="font-size:12px">Sin adjuntos</div>';
 
   // History
@@ -2124,6 +2124,8 @@ function renderDetail(item) {
 
   // Eliminar adjuntos
   (userRole==='admin'||userRole==='approver') && document.querySelectorAll('.btn-del-attach').forEach(btn=>{
+    btn.addEventListener('mouseenter',()=>btn.style.color='var(--red)');
+    btn.addEventListener('mouseleave',()=>btn.style.color='var(--text2)');
     btn.addEventListener('click', async (e)=>{
       e.stopPropagation();
       const ai = parseInt(btn.dataset.ai);
