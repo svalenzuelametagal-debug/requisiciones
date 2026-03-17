@@ -1223,6 +1223,7 @@ function renderList(approvalsMode=false) {
       </div>
     </div>
     <div id="alerts-bar"></div>
+    <div id="pipeline-summary" style="margin-bottom:12px"></div>
     <div class="filter-bar">
       <input type="text" id="flt-q" placeholder="Buscar..." style="max-width:200px"/>
       <select id="flt-dept"><option value="">Todos los depto.</option>${deptOptions}</select>
@@ -1246,6 +1247,43 @@ function renderList(approvalsMode=false) {
         if (criticas.length) html+=`<div style="background:rgba(217,64,64,.12);border:1px solid rgba(217,64,64,.3);border-radius:4px;padding:10px 16px;margin-bottom:10px;font-size:13px;color:var(--red)">⚠ <strong>${criticas.length} requisición(es) CRÍTICA(S)</strong> pendiente(s) de aprobación</div>`;
         if (vencidas.length) html+=`<div style="background:rgba(224,98,26,.12);border:1px solid rgba(224,98,26,.3);border-radius:4px;padding:10px 16px;margin-bottom:10px;font-size:13px;color:var(--orange)">📅 <strong>${vencidas.length} requisición(es)</strong> con fecha necesaria vencida y sin OC asignada</div>`;
         alertsBar.innerHTML=html;
+      }
+      // Resumen de pipeline para admin/approver
+      const summaryEl = document.getElementById('pipeline-summary');
+      if (summaryEl && (userRole==='admin'||userRole==='approver') && !approvalsMode) {
+        const PIPE = [S.SENT,S.APP1,S.APP2,S.APP2NOGER];
+        const pipe = allItems.filter(i=>PIPE.includes(i.Status));
+        if (pipe.length) {
+          const n2 = n=>Number(n||0).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2});
+          const tARS = pipe.reduce((s,i)=>s+calcTotales([i]).ARS,0);
+          const tUSD = pipe.reduce((s,i)=>s+calcTotales([i]).USD,0);
+          const tEUR = pipe.reduce((s,i)=>s+calcTotales([i]).EUR,0);
+          const tUSDv = parseFloat(tcManual.usd_venta)||0;
+          const tEURv = parseFloat(tcManual.eur_venta)||0;
+          const equiv = tARS + tUSD*tUSDv + tEUR*tEURv;
+          // Breakdown by status
+          const byStatus = {};
+          pipe.forEach(i=>{ byStatus[i.Status]=(byStatus[i.Status]||0)+1; });
+          const statusChips = Object.entries(byStatus).map(([st,n])=>
+            `<span style="background:var(--bg3);border:1px solid var(--border);border-radius:20px;padding:2px 10px;font-size:11px;white-space:nowrap">${escH(st)}: <b>${n}</b></span>`
+          ).join(' ');
+          summaryEl.innerHTML = `
+            <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 18px">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+                <span style="font-size:13px;font-weight:700;color:var(--text0)">⏳ En proceso</span>
+                <span style="background:var(--accent);color:#000;border-radius:20px;padding:1px 9px;font-size:12px;font-weight:700">${pipe.length} req</span>
+                ${statusChips}
+              </div>
+              <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+                ${tARS>0?`<span style="font-family:var(--mono);font-size:13px;font-weight:700">ARS <b>$${n2(tARS)}</b></span>`:''}
+                ${tUSD>0?`<span style="font-family:var(--mono);font-size:13px;font-weight:700;color:#4caf8a">USD <b>${n2(tUSD)}</b></span>`:''}
+                ${tEUR>0?`<span style="font-family:var(--mono);font-size:13px;font-weight:700;color:#5b8dee">EUR <b>${n2(tEUR)}</b></span>`:''}
+                ${equiv>0&&(tUSDv||tEURv)?`<span style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--accent)">≈ ARS <b>$${n2(equiv)}</b> <span style="font-size:10px;font-weight:400;color:var(--text2)">(TC actual)</span></span>`:''}
+              </div>
+            </div>`;
+        } else {
+          summaryEl.innerHTML = '';
+        }
       }
       renderTable(approvalsMode);
     } catch(e) {
@@ -2647,18 +2685,7 @@ function renderFinanzasView() {
         ${reqTable(rejected, false)}
       </div>`:''}
 
-      ${pipeline.length?`
-      <div class="card mb-4">
-        <div class="section-title" style="font-size:14px;margin-bottom:14px">⏳ En proceso de autorización (${pipeline.length})</div>
-        <div class="section-sub" style="margin-bottom:12px">Requisiciones enviadas pero aún no autorizadas por Finanzas — sin TC congelado</div>
-        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">
-          ${totPipeline.ARS>0?`<div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:10px 16px"><div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">ARS</div><div style="font-size:15px;font-weight:700;font-family:var(--mono)">$${fmt2(totPipeline.ARS)}</div></div>`:''}
-          ${totPipeline.USD>0?`<div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:10px 16px"><div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">USD</div><div style="font-size:15px;font-weight:700;font-family:var(--mono);color:#4caf8a">${fmt2(totPipeline.USD)}</div></div>`:''}
-          ${totPipeline.EUR>0?`<div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:10px 16px"><div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">EUR</div><div style="font-size:15px;font-weight:700;font-family:var(--mono);color:#5b8dee">${fmt2(totPipeline.EUR)}</div></div>`:''}
-          ${(totPipeline.USD>0||totPipeline.EUR>0)&&(tcManual.usd_venta||tcManual.eur_venta)?`<div style="background:var(--bg3);border:1px solid var(--accent);border-radius:var(--radius);padding:10px 16px"><div style="font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">Equiv. ARS ~</div><div style="font-size:15px;font-weight:700;font-family:var(--mono);color:var(--accent)">$${fmt2(pipeline.reduce((s,i)=>s+toARS(calcTotales([i])),0))}</div></div>`:''}
-        </div>
-        ${reqTable(pipeline, false)}
-      </div>`:''}
+
     `;
     dc.classList.remove('hidden');
 
