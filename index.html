@@ -744,6 +744,21 @@ async function graphReq(method, url, body = null) {
 // EMAIL VIA GRAPH — Mail.Send delegado (sin admin consent)
 // ================================================================
 async function sendMailWithAttachments(toArr, subject, htmlBody, ccArr=[], attachments=[]) {
+  // Force fresh token with Mail.Send scope (handles case where existing token lacks this scope)
+  let token;
+  try {
+    const accounts = msalInstance.getAllAccounts();
+    if (!accounts.length) throw new Error('No hay sesión activa');
+    try {
+      const res = await msalInstance.acquireTokenSilent({scopes: GRAPH_SCOPES, account: accounts[0], forceRefresh: true});
+      token = res.accessToken;
+    } catch(silentErr) {
+      const res = await msalInstance.acquireTokenPopup({scopes: GRAPH_SCOPES});
+      token = res.accessToken;
+    }
+  } catch(tokenErr) {
+    throw new Error('No se pudo obtener el token para enviar mail: ' + tokenErr.message);
+  }
   try {
     const recipients = (Array.isArray(toArr) ? toArr : [toArr])
       .filter(Boolean).map(a => ({ emailAddress: { address: a } }));
@@ -752,7 +767,16 @@ async function sendMailWithAttachments(toArr, subject, htmlBody, ccArr=[], attac
     const msg = { subject, body: { contentType: 'HTML', content: htmlBody }, toRecipients: recipients };
     if (ccRecipients.length) msg.ccRecipients = ccRecipients;
     if (attachments.length) msg.attachments = attachments;
-    await graphReq('POST', '/me/sendMail', { message: msg, saveToSentItems: true });
+    const opts = {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ message: msg, saveToSentItems: true })
+    };
+    const res = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', opts);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: { message: res.statusText } }));
+      throw new Error(err?.error?.message || err?.error?.code || res.statusText);
+    }
   } catch(e) {
     const detail = e.message || String(e);
     console.error('Mail.Send error:', detail);
@@ -1189,7 +1213,7 @@ function buildNav() {
   const email = (currentUser?.username||'').toLowerCase();
   const canCreate = !ROLES_NO_CREATE.map(r=>r.toLowerCase()).includes(email);
   const btns = [];
-  const listaLabel = (userRole==='admin'||userRole==='approver') ? '📋 Todas las Requisiciones' : '📋 Mis Requisiciones';
+  const listaLabel = (userRole==='admin'||userRole==='approver') ? '📋 Todas las Requisiciones' : userRole==='proveedores' ? '📦 Requisiciones con OC Asignada' : '📋 Mis Requisiciones';
   btns.push({view:'list', label:listaLabel});
   if (canCreate) btns.push({view:'form', label:'➕ Nueva'});
   if (userRole==='approver') btns.push({view:'list', label:'📥 Aprobaciones N1', extra:'approvals'});
@@ -1332,6 +1356,10 @@ function renderList(approvalsMode=false) {
     const status = document.getElementById('flt-status')?.value||'';
     const urg = document.getElementById('flt-urg')?.value||'';
     let items = [...allItems];
+    // Proveedores: ven todas las reqs con OC asignada + sus propias reqs
+    if (userRole==='proveedores') items = items.filter(i=>
+      i.Status===S.OC || i.RequesterMail===currentUser?.username
+    );
     if (am) {
       if (userRole==='approver') items = items.filter(i=>i.Status===S.SENT);
       else if (userRole==='admin') items = items.filter(i=>i.Status===S.APP1);
@@ -4647,7 +4675,9 @@ function buildOCMailHTML(item, extraMsg, adjHtml, senderName) {
       +'<td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:12px;color:#888">'+escH(l.obs||'')+'</td></tr>';
   }).join('');
   var gl = item.GLAccount ? '<div style="margin-top:6px"><b>Cuenta GL:</b> '+escH(item.GLAccount)+'</div>' : '';
-  var jus = item.Justification ? '<div style="font-size:13px;font-weight:700;color:#444;margin-bottom:6px">Justificación</div><div style="font-size:13px;color:#555;margin-bottom:20px;line-height:1.6">'+escH(item.Justification)+'</div>' : '';
+  var APP_URL = 'https://svalenzuelametagal-debug.github.io/requisiciones/';
+  var reqLink = '<div style="margin-top:6px"><b>N° Requisición:</b> <a href="'+APP_URL+'?req='+encodeURIComponent(item.Title)+'" style="color:#0f2340;font-weight:700;font-family:monospace">'+escH(item.Title)+'</a> <span style="font-size:11px;color:#888">(acceso interno)</span></div>';
+  var jus = ''; // Justificación no incluida en mail a proveedor
   var extraDiv = extraMsg ? '<div style="background:#fff3cd;border:1px solid #ffc107;border-radius:4px;padding:10px 14px;font-size:13px;margin-bottom:20px;color:#856404">'+escH(extraMsg)+'</div>' : '';
   return '<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,sans-serif">'
     +'<div style="max-width:660px;margin:24px auto;background:#fff;border-radius:6px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.1)">'
