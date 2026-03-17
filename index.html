@@ -1106,10 +1106,13 @@ function parseComments(json) {
 
 function canEditDraft(item) {
   if (userRole === 'admin') return true;
-  const isOwner = item.RequesterMail === currentUser?.username;
   const st = _normalizeStatus(item.Status);
-  const editableStatuses = [S.DRAFT, S.REJ1, S.REJ2, S.REJGER, S.REJFIN];
-  return isOwner && editableStatuses.includes(st);
+  const isOwner = item.RequesterMail === currentUser?.username;
+  // Solicitante puede editar antes del visto bueno N1 (DRAFT o SENT)
+  if (isOwner && [S.DRAFT, S.SENT, S.REJ1, S.REJ2, S.REJGER, S.REJFIN].includes(st)) return true;
+  // N1 (approver) puede editar antes de la autorización N2 (DRAFT, SENT, APP1)
+  if (userRole === 'approver' && [S.DRAFT, S.SENT, S.APP1].includes(st)) return true;
+  return false;
 }
 
 function exportCSV(rows, filename) {
@@ -1325,8 +1328,9 @@ function renderList(approvalsMode=false) {
       const ub = getUrgencyBadge(i.Urgency);
       const lines = parseLines(i.LinesJSON);
       const canDel  = userRole==='admin' || ([S.DRAFT,S.SENT].includes(i.Status) && i.RequesterMail===currentUser.username);
-      const editableStatuses = [S.DRAFT, S.REJ1, S.REJ2, S.REJGER, S.REJFIN];
-      const canEdit = userRole==='admin' || (editableStatuses.includes(i.Status) && i.RequesterMail===currentUser.username);
+      const canEdit = userRole==='admin'
+        || ([S.DRAFT,S.SENT,S.REJ1,S.REJ2,S.REJGER,S.REJFIN].includes(i.Status) && i.RequesterMail===currentUser.username)
+        || (userRole==='approver' && [S.DRAFT,S.SENT,S.APP1].includes(i.Status));
       const isOverdue = i.NeedBy && new Date(i.NeedBy)<new Date() && i.Status!==S.OC && i.Status!==S.DRAFT && i.Status!==S.REJ1 && i.Status!==S.REJ2;
       const isDraftOld = i.Status===S.DRAFT && i.CreatedAt && ((Date.now()-new Date(i.CreatedAt).getTime())>30*24*60*60*1000);
       return `<tr data-id="${i._id}" class="req-row" style="${isOverdue?'border-left:3px solid var(--orange)':''}">
@@ -1448,6 +1452,8 @@ function renderForm(item) {
       <div>
         <div class="section-title">${isEdit?'Editar Requisición':'Nueva Requisición'}</div>
         ${isEdit && userRole==='admin' && item?.Status!==S.DRAFT ? `<div style="background:rgba(232,160,32,.12);border:1px solid rgba(232,160,32,.4);border-radius:4px;padding:8px 14px;margin-top:8px;font-size:12px;color:var(--accent)">⚠ Editando como Administrador — estado actual: <strong>${escH(item.Status)}</strong></div>` : ''}
+        ${isEdit && userRole!=='admin' && item?.Status===S.SENT ? `<div style="background:rgba(43,126,255,.1);border:1px solid rgba(43,126,255,.3);border-radius:4px;padding:8px 14px;margin-top:8px;font-size:12px;color:var(--accent2)">ℹ Al guardar la requisición vuelve a estado <strong>Borrador</strong>. Tenés que reenviarla para que siga el proceso.</div>` : ''}
+        ${isEdit && userRole==='approver' && item?.Status===S.APP1 ? `<div style="background:rgba(43,126,255,.1);border:1px solid rgba(43,126,255,.3);border-radius:4px;padding:8px 14px;margin-top:8px;font-size:12px;color:var(--accent2)">ℹ Editando como Compras N1 — estado actual: <strong>${escH(item.Status)}</strong>. Al guardar vuelve a <strong>Pendiente revisión</strong>.</div>` : ''}
         ${item?`<div class="section-sub"><span class="num">${escH(item.Title)}</span></div>`:''}
       </div>
       <div class="ml-auto d-flex" style="opacity:0;pointer-events:none;user-select:none" aria-hidden="true">
@@ -1559,6 +1565,7 @@ function renderForm(item) {
       qty:      parseFloat(r.querySelector('.il-qty')?.value)||0,
       unit:     r.querySelector('.il-unit')?.value||'UN',
       currency: r.querySelector('.il-cur')?.value||'ARS',
+      gl:       r.querySelector('.il-gl')?.value?.trim()||'',
       price:    parseFloat(r.querySelector('.il-price')?.value)||0,
       link:     r.querySelector('.il-link')?.value||'',
       obs:      r.querySelector('.il-obs')?.value||'',
@@ -1583,6 +1590,7 @@ function renderForm(item) {
           <option ${(l.currency||'ARS')==='USD'?'selected':''}>USD</option>
           <option ${(l.currency||'ARS')==='EUR'?'selected':''}>EUR</option>
         </select></td>
+        <td><input type="text" class="il-gl" value="${escH(l.gl||'')}" placeholder="Cta GL" style="width:70px;font-family:var(--mono);font-size:11px"/></td>
         <td><input type="number" class="il-price" value="${escH(String(l.price||''))}" min="0" step="any" style="width:80px"/></td>
         <td><input type="text" class="il-link" value="${escH(l.link||'')}" placeholder="URL o referencia"/></td>
         <td><input type="text" class="il-obs" value="${escH(l.obs||'')}" placeholder="Obs."/></td>
@@ -1727,14 +1735,22 @@ function renderForm(item) {
         Vendor:          document.getElementById('f-vendor').value.trim(),
         NeedBy:          document.getElementById('f-needby').value||null,
         RequiereGerencia: reqGer,
-        // Preservar estado si admin/approver edita req activa (no borrador ni rechazada)
+        // Lógica de estado al guardar edición
         Status: (() => {
-          if (isEdit && item && (userRole==='admin'||userRole==='approver')) {
+          if (isEdit && item) {
             const normalizedSt = _normalizeStatus(item.Status);
-            const activeStatuses = [S.APP1,S.APP2,S.APP2NOGER,S.APPGER,S.APPFIN,S.OC];
-            if (activeStatuses.includes(normalizedSt)) {
-              return normalizedSt; // mantener estado, no resetear
+            if (userRole==='admin') {
+              // Admin: preserva estado siempre
+              return normalizedSt;
             }
+            if (userRole==='approver') {
+              // N1: si edita APP1, vuelve a SENT para que N2 la vea como modificada
+              if (normalizedSt===S.APP1) return S.SENT;
+              // Si edita SENT/DRAFT, flujo normal
+              return send ? S.SENT : S.DRAFT;
+            }
+            // Solicitante: si edita SENT, vuelve a DRAFT (debe reenviar)
+            if (normalizedSt===S.SENT) return S.DRAFT;
           }
           return send ? S.SENT : S.DRAFT;
         })(),
@@ -1764,12 +1780,19 @@ function renderForm(item) {
           fields.SelectedVendor=''; fields.VendorCriteria='';
         }
         await updateItem(item._id, fields);
+        const newStatus = fields.Status;
+        const fullItemUpd = mapItem({...item, ...fields});
         if (send && (item.Status===S.DRAFT || wasRejected)) {
-          const fullItem = mapItem({...item, ...fields});
           const msg = wasRejected ? '📋 Requisición corregida y reenviada para aprobación' : '📋 Requisición enviada para aprobación';
-          await notificar(fullItem, msg, '', [ROLES_APPROVER[0], ROLES_ADMIN[0]]);
+          await notificar(fullItemUpd, msg, '', [ROLES_APPROVER[0], ROLES_ADMIN[0]]);
+        } else if (isEdit && userRole==='approver' && newStatus===S.SENT && _normalizeStatus(item.Status)===S.APP1) {
+          // N1 modificó una req ya revisada — avisar a N2
+          await notificar(fullItemUpd,'✏ Requisición modificada por Compras N1 — requiere nueva autorización','',[ROLES_ADMIN[0]]);
+        } else if (isEdit && newStatus===S.DRAFT && _normalizeStatus(item.Status)===S.SENT) {
+          // Solicitante modificó — queda en borrador
         }
-        toast(`Requisición ${reqNum} ${send?'reenviada':'guardada'} correctamente.`,'success');
+        const editMsg = isEdit && !send ? 'guardada' : send ? 'reenviada' : 'guardada';
+        toast('Requisición '+reqNum+' '+editMsg+' correctamente.','success');
       }
       renderList(false);
     } catch(e) {
@@ -1827,6 +1850,7 @@ function renderDetail(item) {
       <td class="money">${Number(l.qty||0).toLocaleString('es-AR')}</td>
       <td>${escH(l.unit||'UN')}</td>
       <td>${escH(l.currency||'ARS')}</td>
+      ${l.gl?`<td style="font-family:var(--mono);font-size:11px;color:var(--accent)">${escH(l.gl)}</td>`:'<td style="color:var(--text2)">—</td>'}
       <td class="money">${l.price?Number(l.price).toLocaleString('es-AR',{minimumFractionDigits:2}):'—'}</td>
       <td>${l.link?`<a href="${escH(l.link)}" target="_blank" style="font-size:11px">🔗 Link</a>`:'—'}</td>
       <td>${escH(l.obs||'')}</td>
@@ -1930,7 +1954,7 @@ function renderDetail(item) {
             <h4>Ítems (${lines.length})</h4>
             <div style="overflow-x:auto">
             <table class="items-table">
-              <thead><tr><th>Descripción</th><th>Cant.</th><th>Unidad</th><th>Moneda</th><th>Precio est.</th><th>Ref.</th><th>Obs.</th></tr></thead>
+              <thead><tr><th>Descripción</th><th>Cant.</th><th>Unidad</th><th>Moneda</th><th>Cta GL</th><th>Precio est.</th><th>Ref.</th><th>Obs.</th></tr></thead>
               <tbody>${linesHtml}</tbody>
             </table>
             </div>
