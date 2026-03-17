@@ -1578,6 +1578,7 @@ function renderForm(item) {
             <th style="width:8%">Cant.</th>
             <th style="width:8%">Unidad</th>
             <th style="width:8%">Moneda</th>
+            <th style="width:8%">Cta GL</th>
             <th style="width:10%">Precio est.</th>
             <th style="width:16%">Link/Ref.</th>
             <th style="width:12%">Observaciones</th>
@@ -4658,8 +4659,8 @@ async function exportReportHTML() {
     "    el.addEventListener('dblclick',function(){showStatus(el.dataset.tStatus);});",
     "  });",
     // Charts
-            "// Charts: CSS bars",
-    "(function(){",
+            "// Charts: CSS bars - run after DOM update",
+    "setTimeout(function(){",
     "  try {",
     "    var mBar=document.getElementById('chm');",
     "    if(mBar){",
@@ -4696,7 +4697,7 @@ async function exportReportHTML() {
     "      sDnt.parentElement.innerHTML='<div>'+bars2+'</div>';",
     "    }",
     "  } catch(e){ console.warn('chart error',e); }",
-    "})();",
+    "},100);",
 
     "})();",
   ].join('\n');
