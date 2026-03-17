@@ -3166,14 +3166,15 @@ function renderDashboard() {
     const tbl = `
       <div style="overflow-x:auto">
       <table>
-        <thead><tr><th>N° Req.</th><th>Dept.</th><th>Solicitante</th><th>Estado</th><th>Urgencia</th><th>Creada</th></tr></thead>
-        <tbody>${rows.map(r=>`<tr>
-          <td class="num">${escH(r.Title)}</td>
+        <thead><tr><th>N° Req.</th><th>Dept.</th><th>Solicitante</th><th>Estado</th><th>Urgencia</th><th>Creada</th><th></th></tr></thead>
+        <tbody>${rows.map(r=>`<tr style="cursor:pointer" title="Clic para ver detalle" onclick="document.getElementById('_drillmodal').remove();renderDetail(allItems.find(x=>x.Title==='${escH(r.Title)}')||${JSON.stringify({})});showView('detail');">
+          <td class="num" style="color:var(--accent)">${escH(r.Title)}</td>
           <td>${escH(r.Dept)}</td>
           <td>${escH(r.RequesterName)}</td>
           <td><span class="badge ${getBadgeClass(r.Status)}">${escH(r.Status)}</span></td>
           <td><span class="badge ${getUrgencyBadge(r.Urgency)}">${escH(r.Urgency)}</span></td>
           <td>${fmt(r.CreatedAt)}</td>
+          <td style="text-align:right"><span style="font-size:11px;color:var(--text2)">Ver →</span></td>
         </tr>`).join('')}</tbody>
       </table>
       </div>`;
