@@ -496,6 +496,7 @@ const S = {
   REJFIN:   'Observada por Finanzas',
   APPFIN:   'OK Financiero',
   OC:       'OC Asignada',
+  INACTIVE: 'Inactiva',
 };
 
 const STATUS_BADGE = {
@@ -522,6 +523,7 @@ const STATUS_BADGE = {
   [S.REJFIN]:   'badge-rej2',
   [S.APPFIN]:   'badge-app2',
   [S.OC]:       'badge-oc',
+  [S.INACTIVE]: 'badge-draft',
 };
 
 // ================================================================
@@ -741,15 +743,15 @@ async function graphReq(method, url, body = null) {
 // ================================================================
 // EMAIL VIA GRAPH — Mail.Send delegado (sin admin consent)
 // ================================================================
-async function sendMail(toArr, subject, htmlBody) {
+async function sendMail(toArr, subject, htmlBody, ccArr=[]) {
   try {
     const recipients = (Array.isArray(toArr) ? toArr : [toArr])
       .filter(Boolean).map(a => ({ emailAddress: { address: a } }));
     if (!recipients.length) return;
-    await graphReq('POST', '/me/sendMail', {
-      message: { subject, body: { contentType: 'HTML', content: htmlBody }, toRecipients: recipients },
-      saveToSentItems: false,
-    });
+    const ccRecipients = ccArr.filter(Boolean).map(a => ({ emailAddress: { address: a } }));
+    const msg = { subject, body: { contentType: 'HTML', content: htmlBody }, toRecipients: recipients };
+    if (ccRecipients.length) msg.ccRecipients = ccRecipients;
+    await graphReq('POST', '/me/sendMail', { message: msg, saveToSentItems: false });
   } catch(e) { console.warn('Mail no enviado:', e.message); }
 }
 
@@ -1059,6 +1061,7 @@ function mapItem(raw) {
     Urgency:      fixEncoding(raw.Urgency||'Normal'),
     Justification:fixEncoding(raw.Justification||''),
     Vendor:       fixEncoding(raw.Vendor||''),
+    VendorMail:   raw.VendorMail||'',
     NeedBy:       raw.NeedBy||'',
     Status:       _normalizeStatus(raw.Status)||S.DRAFT,
     LinesJSON:    raw.LinesJSON||'[]',
@@ -1834,7 +1837,8 @@ function renderDetail(item) {
   const bc = getBadgeClass(item.Status);
   const ub = getUrgencyBadge(item.Urgency);
 
-  const canEdit       = canEditDraft(item);
+  const canReactivate = userRole==='admin' && item.Status === S.INACTIVE;
+    const canEdit       = canEditDraft(item);
   const canApproveN1  = (userRole==='approver'||userRole==='admin') && item.Status===S.SENT;
   const canApproveN2  = userRole==='admin' && item.Status===S.APP1;
   const canApproveGer = (userRole==='gerente'||userRole==='admin') && item.Status===S.APP2;
@@ -1879,7 +1883,9 @@ function renderDetail(item) {
   // Action buttons
   let actionBtns = `<button class="btn btn-secondary btn-sm" id="btn-print-req" title="Imprimir / Guardar PDF">🖨 PDF</button>`;
   actionBtns += `<button class="btn btn-secondary btn-sm" id="btn-dup-req" title="Duplicar como nuevo borrador">⧉ Duplicar</button>`;
+  if (canReactivate) actionBtns += `<button class="btn btn-warning" id="btn-reactivate-req">↩ Reactivar requisición</button>`;
   if (canEdit) actionBtns += `<button class="btn btn-secondary" id="btn-edit-req">✏ Editar</button>`;
+  if (userRole==='admin' && item.Status===S.OC) actionBtns += `<button class="btn btn-info" id="btn-send-oc-supplier" style="background:#0891b2;color:#fff">📧 Enviar OC al Proveedor</button>`;
   if (canApproveN1) actionBtns += `<button class="btn btn-success" id="btn-appn1">✔ Dar visto bueno</button><button class="btn btn-danger" id="btn-rejn1">↩ Devolver al solicitante</button>`;
   if (canApproveN2) actionBtns += `<button class="btn btn-success" id="btn-appn2">✔ Autorizar compra</button><button class="btn btn-danger" id="btn-rejn2">✖ No autorizar</button>`;
   if (canAssignOC)  actionBtns += `<button class="btn btn-info" id="btn-assign-oc">📄 Asignar OC</button>`;
@@ -2035,7 +2041,62 @@ function renderDetail(item) {
     if (e.key==='Enter') document.getElementById('btn-add-comment')?.click();
   });
 
+  if (canReactivate) document.getElementById('btn-reactivate-req')?.addEventListener('click', async () => {
+    if (!confirm(`¿Reactivar la requisición ${item.Title}? Vuelve a estado "Pendiente revisión".`)) return;
+    await doAction(item, { Status: S.SENT, UpdatedAt: isoNow() });
+    await notificar({...item, Status: S.SENT}, '♻ Requisición reactivada', `Reactivada por ${currentUser.username}`, [item.RequesterMail, ROLES_APPROVER[0]]);
+    toast('Requisición reactivada y enviada para revisión', 'success');
+    const newItem = {...item, Status: S.SENT};
+    renderDetail(newItem);
+  });
   if (canEdit) document.getElementById('btn-edit-req')?.addEventListener('click',()=>renderForm(item));
+  document.getElementById('btn-send-oc-supplier')?.addEventListener('click', () => {
+    const attachments = parseAttachments(item.AttachmentsJSON||'[]');
+    const adjList = attachments.length
+      ? attachments.map(a=>`<div style="margin-bottom:4px">📎 <a href="${escH(a.webUrl||'#')}" style="color:#0891b2">${escH(a.name)}</a></div>`).join('')
+      : '<span style="color:#999;font-size:12px">Sin adjuntos</span>';
+    const lines = parseLines(item.LinesJSON||'[]');
+    const itemsTable = lines.map(l=>`<tr><td style="padding:6px 10px;border-bottom:1px solid #eee">${escH(l.desc||'')}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center">${l.qty||''} ${escH(l.unit||'')}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right">${escH(l.currency||'ARS')} ${l.price?Number(l.price).toLocaleString('es-AR',{minimumFractionDigits:2}):'—'}</td></tr>`).join('');
+    showModal(`
+      <div class="form-group">
+        <label>Para (mail del proveedor) *</label>
+        <input type="email" id="oc-to" value="${escH(item.VendorMail||'')}" placeholder="proveedor@empresa.com"/>
+      </div>
+      <div class="form-group">
+        <label>CC (separados por coma, opcional)</label>
+        <input type="text" id="oc-cc" value="${escH(ROLES_ADMIN[0])}" placeholder="cc1@empresa.com, cc2@empresa.com"/>
+      </div>
+      <div class="form-group">
+        <label>Mensaje adicional (opcional)</label>
+        <textarea id="oc-msg" rows="3" placeholder="Estimados, adjuntamos OC..."></textarea>
+      </div>
+      <div style="margin-top:12px;padding:12px;background:var(--bg3);border-radius:8px;font-size:12px">
+        <div style="font-weight:700;margin-bottom:8px">Detalles de la OC</div>
+        <div>N° OC: <b>${escH(item.OCNumber)}</b> · Fecha: <b>${fmt(item.OCDate)}</b> · Comprador: <b>${escH(item.Buyer)}</b></div>
+        <div style="margin-top:8px">Ítems:</div>
+        <table style="width:100%;border-collapse:collapse;margin-top:4px"><thead><tr style="background:#f5f5f5"><th style="padding:6px 10px;font-size:11px;text-align:left">Descripción</th><th style="padding:6px 10px;font-size:11px">Cant./Unidad</th><th style="padding:6px 10px;font-size:11px;text-align:right">Precio</th></tr></thead><tbody>${itemsTable}</tbody></table>
+        <div style="margin-top:10px">Adjuntos: ${adjList}</div>
+      </div>`,
+      '📧 Enviar OC al Proveedor',
+      [{label:'Enviar', cls:'btn-primary', action: async () => {
+        const to = document.getElementById('oc-to').value.trim();
+        if (!to) { toast('Ingresá el mail del proveedor','error'); return false; }
+        const ccRaw = document.getElementById('oc-cc').value.trim();
+        const cc = ccRaw ? ccRaw.split(',').map(x=>x.trim()).filter(Boolean) : [];
+        const msg = document.getElementById('oc-msg').value.trim();
+        const adj = attachments.length
+          ? attachments.map(a=>`<div style="margin:4px 0">📎 <a href="${escH(a.webUrl||'#')}" style="color:#0891b2;font-size:13px">${escH(a.name)}</a></div>`).join('')
+          : '<p style="color:#999;font-size:12px">Sin adjuntos</p>';
+        const htmlBody = buildOCMailHTML(item, msg, adj);
+        await sendMail([to], '[OC ' + item.OCNumber + '] Orden de Compra — Metagal Argentina', htmlBody, cc);
+        // Save vendor mail if changed
+        if (to !== (item.VendorMail||'')) {
+          await doAction(item, {VendorMail: to, UpdatedAt: isoNow()});
+        }
+        toast('OC enviada al proveedor correctamente ✓', 'success');
+      }}, {label:'Cancelar', cls:'btn-secondary'}]
+    );
+  });
 
   // Approval modals
   function approvalModal(title, onConfirm) {
@@ -2082,6 +2143,10 @@ function renderDetail(item) {
           <label style="color:var(--accent)">Criterio de selección</label>
           <input type="text" id="n2-criterio" placeholder="Ej: Mejor precio, plazo de entrega, condición de pago…"/>
         </div>
+         <div class="form-group">
+           <label>Mail del proveedor (para envío de OC)</label>
+           <input type="email" id="n2-vendor-mail" placeholder="proveedor@empresa.com"/>
+         </div>
         <div class="form-group"><label>Nota adicional (opcional)</label><textarea id="approval-note" rows="2"></textarea></div>`,
         title, [{label:'Confirmar', cls:'btn-primary', cb:async()=>{
           const prov = document.getElementById('n2-proveedor').value.trim();
@@ -2092,7 +2157,8 @@ function renderDetail(item) {
           if (needsGer) {
             const _tcU = parseFloat(tcManual.usd_venta)||null;
             const _tcE = parseFloat(tcManual.eur_venta)||null;
-            const fields = {Status:S.APP2, Lvl2At:isoNow(), Lvl2By:currentUser.username, Lvl2Note:note, SelectedVendor:prov, VendorCriteria:criterio, TCusd:_tcU, TCeur:_tcE, TCDate:new Date().toISOString().slice(0,10)};
+            const _vmU = document.getElementById('n2-vendor-mail')?.value?.trim()||'';
+            const fields = {Status:S.APP2, Lvl2At:isoNow(), Lvl2By:currentUser.username, Lvl2Note:note, SelectedVendor:prov, VendorCriteria:criterio, VendorMail:_vmU, TCusd:_tcU, TCeur:_tcE, TCDate:new Date().toISOString().slice(0,10)};
             await doAction(item, fields);
             const updated = {...item, ...fields};
             await notificar(updated,'✅ Autorizada — Pendiente aprobación Gerencia',note,[ROLES_GERENTE[0], item.RequesterMail]);
@@ -2100,7 +2166,8 @@ function renderDetail(item) {
           } else {
             const _tcU2 = parseFloat(tcManual.usd_venta)||null;
             const _tcE2 = parseFloat(tcManual.eur_venta)||null;
-            const fields = {Status:S.APP2NOGER, Lvl2At:isoNow(), Lvl2By:currentUser.username, Lvl2Note:note, SelectedVendor:prov, VendorCriteria:criterio, TCusd:_tcU2, TCeur:_tcE2, TCDate:new Date().toISOString().slice(0,10)};
+            const _vmU2 = document.getElementById('n2-vendor-mail')?.value?.trim()||'';
+            const fields = {Status:S.APP2NOGER, Lvl2At:isoNow(), Lvl2By:currentUser.username, Lvl2Note:note, SelectedVendor:prov, VendorCriteria:criterio, VendorMail:_vmU2, TCusd:_tcU2, TCeur:_tcE2, TCDate:new Date().toISOString().slice(0,10)};
             await doAction(item, fields);
             const updated = {...item, ...fields};
             await notificar(updated,'✅ Autorizada — Lista para asignación de OC',note,[ROLES_APPROVER[0], item.RequesterMail]);
@@ -3772,6 +3839,9 @@ async function initApp(account) {
   buildNav();
   fetchTC();
 
+  // Verificar inactividad en background (no bloquea UI)
+  setTimeout(() => checkInactiveReqs(), 3000);
+
   // Deep-link: si viene ?req=ID desde el mail, abrir esa requisición
   const _reqParam = new URLSearchParams(window.location.search).get('req');
   if (_reqParam) {
@@ -4482,6 +4552,87 @@ td{padding:7px 8px;border-bottom:1px solid #EEF0F5;vertical-align:middle}
   a.click();
   toast('Dashboard exportado \u2713','success');
 }
+// ── OC Mail to supplier
+
+function buildOCMailHTML(item, extraMsg, adjHtml) {
+  var lines = parseLines(item.LinesJSON||'[]');
+  var n2 = function(n){return Number(n||0).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2});};
+  var filas = lines.map(function(l){
+    return '<tr><td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:13px">'+escH(l.desc||'')+'</td>'
+      +'<td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:center;font-size:13px">'+escH(String(l.qty||''))+' '+escH(l.unit||'')+'</td>'
+      +'<td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:right;font-size:13px;font-weight:700">'+escH(l.currency||'ARS')+' '+(l.price?n2(l.price):'—')+'</td>'
+      +'<td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:12px;color:#888">'+escH(l.obs||'')+'</td></tr>';
+  }).join('');
+  var gl = item.GLAccount ? '<div style="margin-top:6px"><b>Cuenta GL:</b> '+escH(item.GLAccount)+'</div>' : '';
+  var jus = item.Justification ? '<div style="font-size:13px;font-weight:700;color:#444;margin-bottom:6px">Justificación</div><div style="font-size:13px;color:#555;margin-bottom:20px;line-height:1.6">'+escH(item.Justification)+'</div>' : '';
+  var extraDiv = extraMsg ? '<div style="background:#fff3cd;border:1px solid #ffc107;border-radius:4px;padding:10px 14px;font-size:13px;margin-bottom:20px;color:#856404">'+escH(extraMsg)+'</div>' : '';
+  return '<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,sans-serif">'
+    +'<div style="max-width:660px;margin:24px auto;background:#fff;border-radius:6px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.1)">'
+    +'<div style="background:#0f2340;padding:16px 24px"><div style="color:#f0b030;font-size:18px;font-weight:700">Metagal Argentina</div><div style="color:#6e7e92;font-size:11px;text-transform:uppercase;letter-spacing:.1em;margin-top:2px">Orden de Compra</div></div>'
+    +'<div style="padding:24px 28px">'
+    +'<div style="font-size:22px;font-weight:700;color:#1a1f25;margin-bottom:4px">Orden de Compra N° '+escH(item.OCNumber)+'</div>'
+    +'<div style="font-size:13px;color:#888;margin-bottom:20px">Fecha: '+fmt(item.OCDate)+' &nbsp;·&nbsp; Comprador: '+escH(item.Buyer)+'</div>'
+    +extraDiv
+    +'<div style="background:#f9f9f9;border-radius:4px;padding:14px 16px;margin-bottom:20px;font-size:13px">'
+    +'<div><b>Proveedor:</b> '+escH(item.SelectedVendor||item.Vendor||'—')+'</div>'
+    +'<div style="margin-top:6px"><b>Departamento:</b> '+escH(item.Dept)+' &nbsp;·&nbsp; <b>Solicitante:</b> '+escH(item.RequesterName)+'</div>'
+    +gl+'</div>'
+    +'<div style="font-size:13px;font-weight:700;color:#444;margin-bottom:8px">Detalle de ítems</div>'
+    +'<table style="width:100%;border-collapse:collapse;margin-bottom:20px;border:1px solid #eee">'
+    +'<thead><tr style="background:#f5f5f5">'
+    +'<th style="padding:8px 12px;text-align:left;font-size:12px;color:#666">Descripción</th>'
+    +'<th style="padding:8px 12px;text-align:center;font-size:12px;color:#666">Cant./Unidad</th>'
+    +'<th style="padding:8px 12px;text-align:right;font-size:12px;color:#666">Precio est.</th>'
+    +'<th style="padding:8px 12px;font-size:12px;color:#666">Obs.</th>'
+    +'</tr></thead><tbody>'+filas+'</tbody></table>'
+    +jus
+    +'<div style="font-size:13px;font-weight:700;color:#444;margin-bottom:8px">Adjuntos</div>'
+    +'<div style="margin-bottom:20px">'+adjHtml+'</div>'
+    +'</div>'
+    +'<div style="background:#f5f5f5;padding:12px 28px;font-size:11px;color:#aaa;text-align:center">Metagal Argentina · Compras · '+escH(item.Buyer)+'</div>'
+    +'</div></body></html>';
+}
+
+// ── Inactivity / expiration check (90 days)
+async function checkInactiveReqs() {
+  if (userRole !== 'admin') return;
+  try {
+    const rawItems = await readDB();
+    const items = rawItems.map(mapItem);
+    const PIPELINE = [S.SENT, S.APP1, S.APP2, S.APP2NOGER, S.APPGER, S.APPFIN];
+    const DAYS = 90;
+    const now = Date.now();
+    const toInactivate = items.filter(i => {
+      if (!PIPELINE.includes(i.Status)) return false;
+      const dates = [i.CreatedAt, i.SubmittedAt, i.Lvl1At, i.Lvl2At, i.GerAt, i.FinAt, i.UpdatedAt]
+        .filter(Boolean).map(d => new Date(d).getTime());
+      if (!dates.length) return false;
+      const lastActivity = Math.max(...dates);
+      return (now - lastActivity) > DAYS * 24 * 60 * 60 * 1000;
+    });
+    for (const item of toInactivate) {
+      await doAction(item, { Status: S.INACTIVE, UpdatedAt: isoNow() });
+      // Determine who to notify
+      const pendingApprover = (() => {
+        if (item.Status === S.SENT) return ROLES_APPROVER[0];
+        if (item.Status === S.APP1 || item.Status === S.APP2 || item.Status === S.APP2NOGER) return ROLES_ADMIN[0];
+        if (item.Status === S.APPGER) return ROLES_GERENTE[0];
+        return ROLES_ADMIN[0];
+      })();
+      const notifyList = [...new Set([item.RequesterMail, ROLES_ADMIN[0], pendingApprover].filter(Boolean))];
+      const updItem = {...item, Status: S.INACTIVE};
+      await notificar(updItem,
+        '⚠ Requisición marcada como Inactiva por inactividad (90 días)',
+        `La requisición ${item.Title} no tuvo movimiento por más de 90 días y fue marcada como Inactiva. Puede reactivarse desde el sistema.`,
+        notifyList
+      );
+    }
+    if (toInactivate.length > 0) {
+      console.log(`[Inactividad] ${toInactivate.length} req(s) marcadas como inactivas`);
+    }
+  } catch(e) { console.warn('checkInactiveReqs error:', e.message); }
+}
+
 bootstrap().catch(e=>console.error('Bootstrap error:',e.message));
 
 // Delegated handler for attachment links (works with dynamically rendered content)
