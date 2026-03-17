@@ -1916,7 +1916,7 @@ function renderDetail(item) {
     </tr>`).join('');
 
   const attachHtml = attachments.length
-    ? attachments.map(a=>`<div class="attach-item">📎 <a href="#" class="open-attach" data-url="${escH(a.webUrl)}" data-name="${escH(a.name)}" style="cursor:pointer">${escH(a.name)}</a></div>`).join('')
+    ? attachments.map(a=>`<div class="attach-item">${a.internal?'🔒':'📎'} <a href="#" class="open-attach" data-url="${escH(a.webUrl)}" data-name="${escH(a.name)}" style="cursor:pointer">${escH(a.name)}</a>${a.internal?'<span style="font-size:9px;color:var(--text2);margin-left:4px;background:var(--bg3);padding:1px 5px;border-radius:4px">interno</span>':''}</div>`).join('')
     : '<div class="text-muted" style="font-size:12px">Sin adjuntos</div>';
 
   // History
@@ -2155,7 +2155,7 @@ function renderDetail(item) {
         const resp = await fetch(apiUrl,{method:'PUT',headers:githubHeaders(cfg.ghToken),body:JSON.stringify(body)});
         if (!resp.ok) { const e=await resp.json(); throw new Error(e.message||resp.status); }
         const data = await resp.json();
-        newFiles.push({name:f.name, webUrl:data.content.download_url, sha:data.content.sha});
+        newFiles.push({name:f.name, webUrl:data.content.download_url, sha:data.content.sha, internal:true});
       }
       const allAttach = [...existingAttach, ...newFiles];
       await doAction(item, {AttachmentsJSON: JSON.stringify(allAttach), UpdatedAt: isoNow()});
@@ -2223,10 +2223,12 @@ function renderDetail(item) {
         const cc = ccRaw ? ccRaw.split(',').map(x=>x.trim()).filter(Boolean) : [];
         const msg = document.getElementById('oc-msg').value.trim();
         // Fetch attachments from GitHub as base64 to embed in email
+        // Skip internal attachments (added post-OC for internal use only)
+        const publicAttachments = attachments.filter(a => !a.internal);
         const emailAttachments = [];
         const adjLines = [];
         const cfg = getCfg();
-        for (const a of attachments) {
+        for (const a of publicAttachments) {
           try {
             // Convert raw URL to GitHub API URL
             const rawUrl = a.webUrl || '';
