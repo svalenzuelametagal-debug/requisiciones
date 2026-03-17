@@ -1916,7 +1916,7 @@ function renderDetail(item) {
     </tr>`).join('');
 
   const attachHtml = attachments.length
-    ? attachments.map(a=>`<div class="attach-item">${a.internal?'🔒':'📎'} <a href="#" class="open-attach" data-url="${escH(a.webUrl)}" data-name="${escH(a.name)}" style="cursor:pointer">${escH(a.name)}</a>${a.internal?'<span style="font-size:9px;color:var(--text2);margin-left:4px;background:var(--bg3);padding:1px 5px;border-radius:4px">interno</span>':''}</div>`).join('')
+    ? attachments.map((a,ai)=>`<div class="attach-item" style="display:flex;align-items:center;gap:6px">${a.internal?'🔒':'📎'} <a href="#" class="open-attach" data-url="${escH(a.webUrl)}" data-name="${escH(a.name)}" style="cursor:pointer;flex:1">${escH(a.name)}</a>${a.internal?'<span style="font-size:9px;color:var(--text2);background:var(--bg3);padding:1px 5px;border-radius:4px">interno</span>':''}<button class="btn-del-attach" data-ai="${ai}" title="Eliminar adjunto" style="background:none;border:none;cursor:pointer;color:var(--text2);font-size:13px;padding:0 2px;line-height:1" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--text2)'">✕</button></div>`).join('')
     : '<div class="text-muted" style="font-size:12px">Sin adjuntos</div>';
 
   // History
@@ -2120,6 +2120,20 @@ function renderDetail(item) {
     await doAction(item, { TCusd: tcU, TCeur: tcE, TCDate: tcDate, UpdatedAt: isoNow() });
     toast('TC congelado correctamente 🔒', 'success');
     renderDetail({...item, TCusd: tcU, TCeur: tcE, TCDate: tcDate});
+  });
+
+  // Eliminar adjuntos
+  (userRole==='admin'||userRole==='approver') && document.querySelectorAll('.btn-del-attach').forEach(btn=>{
+    btn.addEventListener('click', async (e)=>{
+      e.stopPropagation();
+      const ai = parseInt(btn.dataset.ai);
+      const aName = attachments[ai]?.name||'este adjunto';
+      if (!confirm(`¿Eliminar "${aName}"?\nEsta acción no se puede deshacer.`)) return;
+      const newAttach = attachments.filter((_,i)=>i!==ai);
+      await doAction(item, {AttachmentsJSON: JSON.stringify(newAttach), UpdatedAt: isoNow()});
+      toast('Adjunto eliminado','success');
+      renderDetail({...item, AttachmentsJSON: JSON.stringify(newAttach)});
+    });
   });
 
   // Adjuntar documento desde vista detalle
