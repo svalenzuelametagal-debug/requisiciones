@@ -2202,8 +2202,9 @@ function renderDetail(item) {
   if (canEdit) document.getElementById('btn-edit-req')?.addEventListener('click',()=>renderForm(item));
   document.getElementById('btn-send-oc-supplier')?.addEventListener('click', () => {
     const attachments = parseAttachments(item.AttachmentsJSON||'[]');
-    const adjList = attachments.length
-      ? attachments.map(a=>`<div style="margin-bottom:4px">📎 <a href="${escH(a.webUrl||'#')}" style="color:#0891b2">${escH(a.name)}</a></div>`).join('')
+    const publicAdj = attachments.filter(a=>!a.internal);
+    const adjList = publicAdj.length
+      ? publicAdj.map(a=>`<div style="margin-bottom:4px">📎 <a href="${escH(a.webUrl||'#')}" style="color:#0891b2">${escH(a.name)}</a></div>`).join('')
       : '<span style="color:#999;font-size:12px">Sin adjuntos</span>';
     const lines = parseLines(item.LinesJSON||'[]');
     const itemsTable = lines.map(l=>`<tr><td style="padding:6px 10px;border-bottom:1px solid #eee">${escH(l.desc||'')}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center">${l.qty||''} ${escH(l.unit||'')}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right">${escH(l.currency||'ARS')} ${l.price?Number(l.price).toLocaleString('es-AR',{minimumFractionDigits:2}):'—'}</td></tr>`).join('');
