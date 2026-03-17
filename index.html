@@ -1939,6 +1939,14 @@ function renderDetail(item) {
   let actionBtns = `<button class="btn btn-secondary btn-sm" id="btn-print-req" title="Imprimir / Guardar PDF">🖨 PDF</button>`;
   actionBtns += `<button class="btn btn-secondary btn-sm" id="btn-dup-req" title="Duplicar como nuevo borrador">⧉ Duplicar</button>`;
   if (canReactivate) actionBtns += `<button class="btn btn-warning" id="btn-reactivate-req">↩ Reactivar requisición</button>`;
+  // Congelar TC manualmente para reqs sin TC guardado que tienen USD/EUR
+  const itemLines = parseLines(item.LinesJSON||'[]');
+  const hasUSD = itemLines.some(l=>l.currency==='USD'||l.currency==='EUR');
+  if (userRole==='admin' && hasUSD && !item.TCusd && !item.TCeur && [S.APP2,S.APP2NOGER,S.APPGER,S.APPFIN,S.OC].includes(item.Status)) {
+    const tcU = parseFloat(tcManual.usd_venta)||0;
+    const tcE = parseFloat(tcManual.eur_venta)||0;
+    if (tcU || tcE) actionBtns += `<button class="btn btn-secondary" id="btn-freeze-tc">🔒 Congelar TC (USD $${tcU.toLocaleString('es-AR',{minimumFractionDigits:2})})</button>`;
+  }
   if (canEdit) actionBtns += `<button class="btn btn-secondary" id="btn-edit-req">✏ Editar</button>`;
   if ((userRole==='admin'||userRole==='approver') && item.Status===S.OC) actionBtns += `<button class="btn btn-info" id="btn-send-oc-supplier" style="background:#0891b2;color:#fff">📧 Enviar OC al Proveedor</button>`;
   if (canApproveN1) actionBtns += `<button class="btn btn-success" id="btn-appn1">✔ Dar visto bueno</button><button class="btn btn-danger" id="btn-rejn1">↩ Devolver al solicitante</button>`;
@@ -2094,6 +2102,16 @@ function renderDetail(item) {
   });
   document.getElementById('comment-input')?.addEventListener('keydown',e=>{
     if (e.key==='Enter') document.getElementById('btn-add-comment')?.click();
+  });
+
+  document.getElementById('btn-freeze-tc')?.addEventListener('click', async () => {
+    const tcU = parseFloat(tcManual.usd_venta)||null;
+    const tcE = parseFloat(tcManual.eur_venta)||null;
+    const tcDate = new Date().toISOString().slice(0,10);
+    if (!confirm(`¿Congelar TC ahora?\nUSD $${(tcU||0).toLocaleString('es-AR',{minimumFractionDigits:2})}${tcE?' | EUR $'+tcE.toLocaleString('es-AR',{minimumFractionDigits:2}):''}\nFecha: ${tcDate}`)) return;
+    await doAction(item, { TCusd: tcU, TCeur: tcE, TCDate: tcDate, UpdatedAt: isoNow() });
+    toast('TC congelado correctamente 🔒', 'success');
+    renderDetail({...item, TCusd: tcU, TCeur: tcE, TCDate: tcDate});
   });
 
   if (canReactivate) document.getElementById('btn-reactivate-req')?.addEventListener('click', async () => {
