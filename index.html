@@ -4347,7 +4347,7 @@ function renderReport() {
         <div style="overflow-x:auto;max-height:350px;overflow-y:auto">
           <table style="width:100%;border-collapse:collapse">
             <thead><tr style="position:sticky;top:0;background:#fff;z-index:1">
-              ${['N° Req','Departamento','Solicitante','Proveedor','Moneda','Equiv. ARS','TC','OC','Estado'].map(h=>`<th style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#9AA5C0;padding:7px 8px;border-bottom:2px solid #EEF0F5;text-align:left;white-space:nowrap">${h}</th>`).join('')}
+              ${['N° Req','Departamento','Solicitante','Proveedor','Moneda','Equiv. ARS','TC','OC','Estado',''].map(h=>`<th style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#9AA5C0;padding:7px 8px;border-bottom:2px solid #EEF0F5;text-align:left;white-space:nowrap">${h}</th>`).join('')}
             </tr></thead>
             <tbody>
               ${aprobadas.sort((a,b)=>(b.Lvl2At||'').localeCompare(a.Lvl2At||'')).map((i,idx)=>{
@@ -4367,6 +4367,7 @@ function renderReport() {
                   <td style="padding:7px 8px;font-size:10px;color:#9AA5C0;text-align:center">${tcSrc}</td>
                   <td style="padding:7px 8px;font-size:11px;font-family:monospace;color:#7C3AED">${escH(i.OCNumber||'—')}</td>
                   <td style="padding:7px 8px"><span style="font-size:10px;background:${i.Status===S.OC?'#E8FAF3':'#EFF6FF'};color:${i.Status===S.OC?'#0DB87B':'#2B7EFF'};padding:2px 7px;border-radius:10px;font-weight:700;white-space:nowrap">${escH(i.Status)}</span></td>
+                  <td style="padding:7px 8px;text-align:right"><button class="btn btn-secondary btn-xs rpt-ver-btn" data-title="${escH(i.Title)}" style="font-size:10px;padding:2px 8px">Ver →</button></td>
                 </tr>`;
               }).join('')}
             </tbody>
@@ -4396,6 +4397,16 @@ function renderReport() {
         tr.addEventListener('dblclick', go);
         tr.addEventListener('click', go);
       });
+      // Ver → buttons - abre detalle completo de la req
+      document.querySelectorAll('.rpt-ver-btn').forEach(btn=>{
+        btn.addEventListener('click', (e)=>{
+          e.stopPropagation(); // don't trigger row click
+          const title = btn.dataset.title;
+          const found = window.rptItems && window.rptItems.find(x=>x.Title===title);
+          if (found) { renderDetail(found); showView('detail'); }
+        });
+      });
+
       // Cards de dept/prov
       document.querySelectorAll('.rpt-drill-card').forEach(el=>{
         el.addEventListener('dblclick', ()=>showRptDrill(el.dataset.drillType, el.dataset.drillVal));
