@@ -752,7 +752,10 @@ async function sendMail(toArr, subject, htmlBody, ccArr=[]) {
     const msg = { subject, body: { contentType: 'HTML', content: htmlBody }, toRecipients: recipients };
     if (ccRecipients.length) msg.ccRecipients = ccRecipients;
     await graphReq('POST', '/me/sendMail', { message: msg, saveToSentItems: false });
-  } catch(e) { console.warn('Mail no enviado:', e.message); }
+  } catch(e) {
+    console.error('Mail error:', e.message);
+    throw e;  // propagate so caller can show toast
+  }
 }
 
 function buildMailHTML(item, accion, nota) {
@@ -2087,13 +2090,17 @@ function renderDetail(item) {
         const adj = attachments.length
           ? attachments.map(a=>`<div style="margin:4px 0">📎 <a href="${escH(a.webUrl||'#')}" style="color:#0891b2;font-size:13px">${escH(a.name)}</a></div>`).join('')
           : '<p style="color:#999;font-size:12px">Sin adjuntos</p>';
-        const htmlBody = buildOCMailHTML(item, msg, adj);
-        await sendMail([to], '[OC ' + item.OCNumber + '] Orden de Compra — Metagal Argentina', htmlBody, cc);
-        // Save vendor mail if changed
-        if (to !== (item.VendorMail||'')) {
-          await doAction(item, {VendorMail: to, UpdatedAt: isoNow()});
+        const senderName = String(currentUser?.name||currentUser?.username||'Compras').normalize('NFC');
+          const htmlBody = buildOCMailHTML(item, msg, adj, senderName);
+        try {
+          await sendMail([to], '[OC ' + item.OCNumber + '] Orden de Compra — Metagal Argentina', htmlBody, cc);
+          if (to !== (item.VendorMail||'')) {
+            await doAction(item, {VendorMail: to, UpdatedAt: isoNow()});
+          }
+          toast('OC enviada al proveedor correctamente ✓', 'success');
+        } catch(mailErr) {
+          toast('Error al enviar el mail: ' + mailErr.message, 'error');
         }
-        toast('OC enviada al proveedor correctamente ✓', 'success');
       }}, {label:'Cancelar', cls:'btn-secondary'}]
     );
   });
@@ -4554,7 +4561,7 @@ td{padding:7px 8px;border-bottom:1px solid #EEF0F5;vertical-align:middle}
 }
 // ── OC Mail to supplier
 
-function buildOCMailHTML(item, extraMsg, adjHtml) {
+function buildOCMailHTML(item, extraMsg, adjHtml, senderName) {
   var lines = parseLines(item.LinesJSON||'[]');
   var n2 = function(n){return Number(n||0).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2});};
   var filas = lines.map(function(l){
@@ -4571,7 +4578,7 @@ function buildOCMailHTML(item, extraMsg, adjHtml) {
     +'<div style="background:#0f2340;padding:16px 24px"><div style="color:#f0b030;font-size:18px;font-weight:700">Metagal Argentina</div><div style="color:#6e7e92;font-size:11px;text-transform:uppercase;letter-spacing:.1em;margin-top:2px">Orden de Compra</div></div>'
     +'<div style="padding:24px 28px">'
     +'<div style="font-size:22px;font-weight:700;color:#1a1f25;margin-bottom:4px">Orden de Compra N° '+escH(item.OCNumber)+'</div>'
-    +'<div style="font-size:13px;color:#888;margin-bottom:20px">Fecha: '+fmt(item.OCDate)+' &nbsp;·&nbsp; Comprador: '+escH(item.Buyer)+'</div>'
+    +'<div style="font-size:13px;color:#888;margin-bottom:20px">Fecha: '+fmt(item.OCDate)+' &nbsp;·&nbsp; Comprador: '+escH(senderName||item.Buyer)+'</div>'
     +extraDiv
     +'<div style="background:#f9f9f9;border-radius:4px;padding:14px 16px;margin-bottom:20px;font-size:13px">'
     +'<div><b>Proveedor:</b> '+escH(item.SelectedVendor||item.Vendor||'—')+'</div>'
@@ -4589,7 +4596,7 @@ function buildOCMailHTML(item, extraMsg, adjHtml) {
     +'<div style="font-size:13px;font-weight:700;color:#444;margin-bottom:8px">Adjuntos</div>'
     +'<div style="margin-bottom:20px">'+adjHtml+'</div>'
     +'</div>'
-    +'<div style="background:#f5f5f5;padding:12px 28px;font-size:11px;color:#aaa;text-align:center">Metagal Argentina · Compras · '+escH(item.Buyer)+'</div>'
+    +'<div style="background:#f5f5f5;padding:12px 28px;font-size:11px;color:#aaa;text-align:center">Metagal Argentina · Compras · '+escH(senderName||item.Buyer)+'</div>'
     +'</div></body></html>';
 }
 
