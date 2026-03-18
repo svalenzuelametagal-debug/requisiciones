@@ -1582,7 +1582,7 @@ function renderList(approvalsMode=false) {
 function renderForm(item) {
   try {
   showView('form');
-  const isEdit = !!item;
+  const isEdit = !!(item && item._id);  // false for new req and duplicates (_id=null)
   const container = document.getElementById('view-form');
   const deptOptions = DEPARTMENTS.map(d=>`<option value="${d.name}" ${item?.Dept===d.name?'selected':''}>${d.name}</option>`).join('');
 
