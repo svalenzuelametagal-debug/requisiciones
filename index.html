@@ -2277,7 +2277,7 @@ function renderDetail(item) {
         }
         const adj = adjLines.length ? adjLines.join('') : '<p style="color:#999;font-size:12px">Sin adjuntos</p>';
         const senderName = String(currentUser?.name||currentUser?.username||'Compras').normalize('NFC');
-          const htmlBody = buildOCMailHTML(item, msg, adj, senderName);
+          const htmlBody = buildOCMailHTML(item, msg, adj, senderName, to);
         try {
           // Build extra attachments from file input
           const extraFiles = document.getElementById('oc-extra-files')?.files || [];
@@ -4853,7 +4853,7 @@ td{padding:7px 8px;border-bottom:1px solid #EEF0F5;vertical-align:middle}
 }
 // ── OC Mail to supplier
 
-function buildOCMailHTML(item, extraMsg, adjHtml, senderName) {
+function buildOCMailHTML(item, extraMsg, adjHtml, senderName, recipientMail) {
   var lines = parseLines(item.LinesJSON||'[]');
   var n2 = function(n){return Number(n||0).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2});};
   var filas = lines.map(function(l){
@@ -4864,10 +4864,13 @@ function buildOCMailHTML(item, extraMsg, adjHtml, senderName) {
   }).join('');
   var gl = item.GLAccount ? '<div style="margin-top:6px"><b>Cuenta GL:</b> '+escH(item.GLAccount)+'</div>' : '';
   var APP_URL = 'https://svalenzuelametagal-debug.github.io/requisiciones/';
-  var reqLink = '<div style="margin-top:14px;margin-bottom:4px">'
+  var isInternalRecipient = (recipientMail||'').toLowerCase().endsWith('@metagal.com.ar');
+  var reqLink = isInternalRecipient
+    ? '<div style="margin-top:14px;margin-bottom:4px">'
     +'<a href="'+APP_URL+'?req='+encodeURIComponent(item.Title)+'" style="display:inline-block;background:#0f2340;color:#ffffff;font-family:Arial,sans-serif;font-size:13px;font-weight:700;text-decoration:none;padding:10px 20px;border-radius:6px">'
     +'Ver requisición '+escH(item.Title)+' →</a>'
-    +'</div>';
+    +'</div>'
+    : '';
   var jus = ''; // Justificación no incluida en mail a proveedor
   var extraDiv = extraMsg ? '<div style="background:#fff3cd;border:1px solid #ffc107;border-radius:4px;padding:10px 14px;font-size:13px;margin-bottom:20px;color:#856404">'+escH(extraMsg)+'</div>' : '';
   return '<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,sans-serif">'
