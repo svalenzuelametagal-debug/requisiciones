@@ -645,7 +645,7 @@ async function readDB() {
   const cfg = getCfg();
   if (!cfg.ghToken || !cfg.ghRepo) throw new Error('Sin configuracion. Pedile a Santiago el link de activacion.');
   const url = 'https://api.github.com/repos/' + cfg.ghRepo + '/contents/' + DB_GITHUB_FILE;
-  const res = await fetch(url, { headers: githubHeaders(cfg.ghToken) });
+  const res = await fetch(url, { cache: 'no-store', headers: { ...githubHeaders(cfg.ghToken), 'Cache-Control': 'no-cache, no-store' } });
   if (res.status === 404) return [];
   if (!res.ok) {
     const e = await res.json().catch(()=>({}));
