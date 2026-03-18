@@ -1364,7 +1364,20 @@ function renderList(approvalsMode=false) {
       if (userRole==='approver') items = items.filter(i=>i.Status===S.SENT);
       else if (userRole==='admin') items = items.filter(i=>i.Status===S.APP1);
     }
-    const qn=normalizeStr(q); items = items.filter(i=>normalizeStr(i.Title+'|'+i.RequesterName+'|'+i.Dept+'|'+i.Justification+'|'+(i.OCNumber||'')+'|'+(i.Buyer||'')+'|'+(i.GLAccount||'')).includes(qn));
+    // Outlook-style search: every word must appear somewhere in the record
+    if (qn) {
+      const words = qn.split(/\s+/).filter(Boolean);
+      items = items.filter(i => {
+        const hay = normalizeStr([
+          i.Title, i.RequesterName, i.RequesterMail, i.Dept,
+          i.Justification, i.OCNumber, i.Buyer, i.GLAccount,
+          i.SelectedVendor, i.Vendor, i.Urgency, i.Status,
+          // also search inside line items descriptions
+          (()=>{ try{ return parseLines(i.LinesJSON||'[]').map(l=>l.desc||'').join(' '); }catch{return '';} })()
+        ].join(' '));
+        return words.every(w => hay.includes(w));
+      });
+    }
     if (dept) items = items.filter(i=>i.Dept===dept);
     if (status) items = items.filter(i=>i.Status===status);
     if (urg) items = items.filter(i=>i.Urgency===urg);
@@ -1689,37 +1702,30 @@ function renderForm(item) {
 
   // Render existing attachments
   let existAtt = parseAttachments(item?.AttachmentsJSON||'[]');
-  if (existAtt.length) {
-    document.getElementById('attach-existing').innerHTML = existAtt.map((a,ai)=>`
+  // existAtt rendered by renderExistAtt() below
+
+  // Delete existing attachment from form
+  function renderExistAtt() {
+    const el = document.getElementById('attach-existing');
+    if (!el) return;
+    el.innerHTML = existAtt.map((a,ai)=>`
       <div class="attach-item" style="display:flex;align-items:center;gap:6px">
         📎 <a href="${escH(toRawUrl(a.webUrl))}" target="_blank" style="flex:1">${escH(a.name)}</a>
         <button type="button" class="btn-del-form-attach" data-ai="${ai}" title="Eliminar adjunto" style="background:none;border:none;cursor:pointer;color:var(--text2);font-size:13px;padding:2px 6px;border-radius:3px">✕</button>
       </div>
-    `).join('');
-  }
-
-  // Delete existing attachment from form
-  document.querySelectorAll('.btn-del-form-attach').forEach(btn=>{
-    btn.addEventListener('mouseenter',()=>btn.style.color='var(--red)');
-    btn.addEventListener('mouseleave',()=>btn.style.color='var(--text2)');
-    btn.addEventListener('click',()=>{
-      const ai = parseInt(btn.dataset.ai);
-      if (!confirm(`¿Eliminar "${existAtt[ai]?.name}"?`)) return;
-      existAtt.splice(ai,1);
-      document.getElementById('attach-existing').innerHTML = existAtt.map((a,ai2)=>`
-        <div class="attach-item" style="display:flex;align-items:center;gap:6px">
-          📎 <a href="${escH(toRawUrl(a.webUrl))}" target="_blank" style="flex:1">${escH(a.name)}</a>
-          <button type="button" class="btn-del-form-attach" data-ai="${ai2}" title="Eliminar adjunto" style="background:none;border:none;cursor:pointer;color:var(--text2);font-size:13px;padding:2px 6px;border-radius:3px">✕</button>
-        </div>
-      `).join('') || '<div style="font-size:12px;color:var(--text2)">Sin adjuntos</div>';
-      // Re-wire new buttons
-      document.querySelectorAll('.btn-del-form-attach').forEach(b=>{
-        b.addEventListener('mouseenter',()=>b.style.color='var(--red)');
-        b.addEventListener('mouseleave',()=>b.style.color='var(--text2)');
-        b.addEventListener('click',()=>b.closest('.attach-item').querySelector('[data-ai]') && b.click());
+    `).join('') || '<div style="font-size:12px;color:var(--text2)">Sin adjuntos</div>';
+    el.querySelectorAll('.btn-del-form-attach').forEach(btn=>{
+      btn.addEventListener('mouseenter',()=>btn.style.color='var(--red)');
+      btn.addEventListener('mouseleave',()=>btn.style.color='var(--text2)');
+      btn.addEventListener('click',()=>{
+        const ai = parseInt(btn.dataset.ai);
+        if (!confirm(`¿Eliminar "${existAtt[ai]?.name}"?`)) return;
+        existAtt.splice(ai,1);
+        renderExistAtt();
       });
     });
-  });
+  }
+  renderExistAtt();
 
   document.getElementById('btn-add-item').addEventListener('click',()=>{
     syncLinesFromDOM();
