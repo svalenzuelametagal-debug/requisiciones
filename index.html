@@ -2202,10 +2202,11 @@ function renderDetail(item) {
   if (canEdit) document.getElementById('btn-edit-req')?.addEventListener('click',()=>renderForm(item));
   document.getElementById('btn-send-oc-supplier')?.addEventListener('click', () => {
     const attachments = parseAttachments(item.AttachmentsJSON||'[]');
-    const publicAdj = attachments.filter(a=>!a.internal);
-    const adjList = publicAdj.length
-      ? publicAdj.map(a=>`<div style="margin-bottom:4px">📎 <a href="${escH(a.webUrl||'#')}" style="color:#0891b2">${escH(a.name)}</a></div>`).join('')
-      : '<span style="color:#999;font-size:12px">Sin adjuntos</span>';
+    const internalAdj = attachments.filter(a=>a.internal);
+    const publicAdj   = attachments.filter(a=>!a.internal);
+    const adjListPub  = publicAdj.map(a=>`<div style="margin-bottom:4px">📎 <a href="${escH(a.webUrl||'#')}" style="color:#0891b2">${escH(a.name)}</a></div>`).join('') || '<span style="color:#999;font-size:12px">Sin adjuntos públicos</span>';
+    const adjListNote = internalAdj.length ? `<div style="margin-top:5px;font-size:10px;color:#9AA5C0">🔒 ${internalAdj.length} adj. interno(s) — visibles desde el link de la RC (no se adjuntan al mail)</div>` : '';
+    const adjList = adjListPub + adjListNote;
     const lines = parseLines(item.LinesJSON||'[]');
     const itemsTable = lines.map(l=>`<tr><td style="padding:6px 10px;border-bottom:1px solid #eee">${escH(l.desc||'')}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center">${l.qty||''} ${escH(l.unit||'')}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right">${escH(l.currency||'ARS')} ${l.price?Number(l.price).toLocaleString('es-AR',{minimumFractionDigits:2}):'—'}</td></tr>`).join('');
     showModal(`
@@ -2240,8 +2241,8 @@ function renderDetail(item) {
         const ccRaw = document.getElementById('oc-cc').value.trim();
         const cc = ccRaw ? ccRaw.split(',').map(x=>x.trim()).filter(Boolean) : [];
         const msg = document.getElementById('oc-msg').value.trim();
-        // Fetch attachments from GitHub as base64 to embed in email
-        // Skip internal attachments (added post-OC for internal use only)
+        // Adjuntos internos (🔒) nunca se adjuntan al mail
+        // Los usuarios internos acceden via el link de la RC incluido en el cuerpo del mail
         const publicAttachments = attachments.filter(a => !a.internal);
         const emailAttachments = [];
         const adjLines = [];
@@ -4863,7 +4864,10 @@ function buildOCMailHTML(item, extraMsg, adjHtml, senderName) {
   }).join('');
   var gl = item.GLAccount ? '<div style="margin-top:6px"><b>Cuenta GL:</b> '+escH(item.GLAccount)+'</div>' : '';
   var APP_URL = 'https://svalenzuelametagal-debug.github.io/requisiciones/';
-  var reqLink = '<div style="margin-top:6px"><b>N° Requisición:</b> <a href="'+APP_URL+'?req='+encodeURIComponent(item.Title)+'" style="color:#0f2340;font-weight:700;font-family:monospace">'+escH(item.Title)+'</a> <span style="font-size:11px;color:#888">(acceso interno)</span></div>';
+  var reqLink = '<div style="margin-top:8px;padding:8px 12px;background:#f0f4ff;border-left:3px solid #0f2340;border-radius:0 4px 4px 0">'
+    +'<span style="font-size:11px;color:#666;display:block;margin-bottom:2px">Requisición interna (acceso solo con cuenta @metagal.com.ar)</span>'
+    +'<a href="'+APP_URL+'?req='+encodeURIComponent(item.Title)+'" style="color:#0f2340;font-weight:800;font-family:monospace;font-size:13px;text-decoration:none">📋 '+escH(item.Title)+'  →  Ver requisición</a>'
+    +'</div>';
   var jus = ''; // Justificación no incluida en mail a proveedor
   var extraDiv = extraMsg ? '<div style="background:#fff3cd;border:1px solid #ffc107;border-radius:4px;padding:10px 14px;font-size:13px;margin-bottom:20px;color:#856404">'+escH(extraMsg)+'</div>' : '';
   return '<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,sans-serif">'
