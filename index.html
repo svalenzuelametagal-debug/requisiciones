@@ -1365,6 +1365,7 @@ function renderList(approvalsMode=false) {
       else if (userRole==='admin') items = items.filter(i=>i.Status===S.APP1);
     }
     // Outlook-style search: every word must appear somewhere in the record
+    const qn = normalizeStr(q);
     if (qn) {
       const words = qn.split(/\s+/).filter(Boolean);
       items = items.filter(i => {
