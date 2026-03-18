@@ -1688,12 +1688,38 @@ function renderForm(item) {
   }
 
   // Render existing attachments
-  const existAtt = parseAttachments(item?.AttachmentsJSON||'[]');
+  let existAtt = parseAttachments(item?.AttachmentsJSON||'[]');
   if (existAtt.length) {
-    document.getElementById('attach-existing').innerHTML = existAtt.map(a=>`
-      <div class="attach-item">📎 <a href="${escH(toRawUrl(a.webUrl))}" target="_blank">${escH(a.name)}</a></div>
+    document.getElementById('attach-existing').innerHTML = existAtt.map((a,ai)=>`
+      <div class="attach-item" style="display:flex;align-items:center;gap:6px">
+        📎 <a href="${escH(toRawUrl(a.webUrl))}" target="_blank" style="flex:1">${escH(a.name)}</a>
+        <button type="button" class="btn-del-form-attach" data-ai="${ai}" title="Eliminar adjunto" style="background:none;border:none;cursor:pointer;color:var(--text2);font-size:13px;padding:2px 6px;border-radius:3px">✕</button>
+      </div>
     `).join('');
   }
+
+  // Delete existing attachment from form
+  document.querySelectorAll('.btn-del-form-attach').forEach(btn=>{
+    btn.addEventListener('mouseenter',()=>btn.style.color='var(--red)');
+    btn.addEventListener('mouseleave',()=>btn.style.color='var(--text2)');
+    btn.addEventListener('click',()=>{
+      const ai = parseInt(btn.dataset.ai);
+      if (!confirm(`¿Eliminar "${existAtt[ai]?.name}"?`)) return;
+      existAtt.splice(ai,1);
+      document.getElementById('attach-existing').innerHTML = existAtt.map((a,ai2)=>`
+        <div class="attach-item" style="display:flex;align-items:center;gap:6px">
+          📎 <a href="${escH(toRawUrl(a.webUrl))}" target="_blank" style="flex:1">${escH(a.name)}</a>
+          <button type="button" class="btn-del-form-attach" data-ai="${ai2}" title="Eliminar adjunto" style="background:none;border:none;cursor:pointer;color:var(--text2);font-size:13px;padding:2px 6px;border-radius:3px">✕</button>
+        </div>
+      `).join('') || '<div style="font-size:12px;color:var(--text2)">Sin adjuntos</div>';
+      // Re-wire new buttons
+      document.querySelectorAll('.btn-del-form-attach').forEach(b=>{
+        b.addEventListener('mouseenter',()=>b.style.color='var(--red)');
+        b.addEventListener('mouseleave',()=>b.style.color='var(--text2)');
+        b.addEventListener('click',()=>b.closest('.attach-item').querySelector('[data-ai]') && b.click());
+      });
+    });
+  });
 
   document.getElementById('btn-add-item').addEventListener('click',()=>{
     syncLinesFromDOM();
