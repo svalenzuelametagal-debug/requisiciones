@@ -2579,6 +2579,56 @@ function renderDetail(item) {
             const rawPath = (rd2.content && rd2.content.path) ? rd2.content.path : path;
             ocAttach = {name: '📄 OC — ' + f.name, webUrl: 'https://raw.githubusercontent.com/' + cfg.ghRepo + '/main/' + rawPath, id: path};
             ocFileStatus.textContent = '✅ ' + f.name;
+
+            // ── Análisis automático del PDF contra la RC ─────────────
+            try {
+              ocFileStatus.textContent = '🔍 Analizando PDF…';
+              const rcItems = parseLines(item.LinesJSON||'[]');
+              const rcSummary = rcItems.map((l,i)=>`${i+1}. ${l.desc} | Cant: ${l.qty} ${l.unit} | Precio: ${l.currency} ${l.price}`).join('\n');
+              const prompt = `Sos un asistente de compras de Metagal Argentina. Analizá este PDF de Orden de Compra y compará con la Requisición.
+
+REQUISICIÓN (RC):
+- N° RC: ${escH(item.Title)}
+- Proveedor RC: ${escH(item.SelectedVendor||item.Vendor||'no especificado')}
+- Ítems de la RC:
+${rcSummary}
+
+TAREA: Del PDF adjunto, extraé:
+1. N° de Nota de Pedido/OC
+2. Proveedor
+3. Ítems con descripción, cantidad y precio unitario
+
+Luego indicá si hay diferencias entre el PDF y la RC (descripción, cantidad o precio distintos).
+
+Respondé en español, formato conciso. Si todo coincide decí "✅ Todo coincide". Si hay diferencias listalas claramente.`;
+
+              const apiResp = await fetch('https://api.anthropic.com/v1/messages', {
+                method:'POST',
+                headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({
+                  model:'claude-sonnet-4-20250514',
+                  max_tokens:1000,
+                  messages:[{
+                    role:'user',
+                    content:[
+                      {type:'document', source:{type:'base64', media_type:'application/pdf', data:b64f}},
+                      {type:'text', text:prompt}
+                    ]
+                  }]
+                })
+              });
+              if (apiResp.ok) {
+                const apiData = await apiResp.json();
+                const analysis = apiData.content?.[0]?.text || 'Sin respuesta';
+                ocFileStatus.innerHTML = '✅ ' + f.name + '<br><div id="oc-pdf-analysis" style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:6px;font-size:12px;color:var(--text0);white-space:pre-wrap;border:1px solid var(--border)">' + escH(analysis) + '</div>';
+              } else {
+                ocFileStatus.textContent = '✅ ' + f.name + ' (análisis no disponible)';
+              }
+            } catch(aiErr) {
+              // Analysis failed silently - don't block the OC upload
+              ocFileStatus.textContent = '✅ ' + f.name;
+            }
+
           } catch(e2) {
             toast('Error subiendo archivo OC: ' + e2.message, 'error');
           }
