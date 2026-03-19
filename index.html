@@ -453,7 +453,7 @@ const ROLES_APPROVER = ['nconte@metagal.com.ar'];
 const ROLES_GERENTE  = ['rlopez@metagal.com.ar'];
 const ROLES_FINANZAS = ['cbetti@metagal.com.ar','dgrageda@metagal.com.ar','mbianchi@metagal.com.ar'];
 // Estos roles no pueden crear requisiciones
-const ROLES_NO_CREATE = ['rlopez@metagal.com.ar','cbetti@metagal.com.ar'];
+const ROLES_NO_CREATE = ['cbetti@metagal.com.ar'];
 
 // Destinatarios sugeridos para aprobación de Finanzas
 const FINANZAS_SUGERIDOS = [
@@ -1163,8 +1163,10 @@ function canEditDraft(item) {
   const isOwner = item.RequesterMail === currentUser?.username;
   // Solicitante puede editar antes del visto bueno N1 (DRAFT o SENT)
   if (isOwner && [S.DRAFT, S.SENT, S.REJ1, S.REJ2, S.REJGER, S.REJFIN].includes(st)) return true;
-  // N1 (approver) puede editar antes de la autorización N2 (DRAFT, SENT, APP1)
+  // N1 (approver) puede editar antes de la autorización N2
   if (userRole === 'approver' && [S.DRAFT, S.SENT, S.APP1].includes(st)) return true;
+  // Gerente puede editar sus propias RCs antes de que lleguen a su aprobación
+  if (userRole === 'gerente' && isOwner && [S.DRAFT, S.SENT, S.APP1].includes(st)) return true;
   return false;
 }
 
@@ -1186,9 +1188,11 @@ async function loadItems() {
   if (userRole==='admin' || userRole==='approver') {
     allItems = mapped; // ven todas
   } else if (userRole==='gerente') {
-    // Pendientes de su aprobación (APP2) + las que él mismo aprobó/rechazó
+    // Sus propias RCs (cualquier estado) + pendientes de su aprobación + las que aprobó
     allItems = mapped.filter(i=>
-      i.Status===S.APP2 || (i.GerAt && [S.APPGER,S.REJGER,S.APPFIN,S.OC].includes(i.Status))
+      i.RequesterMail===currentUser.username ||
+      i.Status===S.APP2 ||
+      (i.GerAt && [S.APPGER,S.REJGER,S.APPFIN,S.OC].includes(i.Status))
     );
   } else if (userRole==='finanzas') {
     allItems = mapped.filter(i=>
@@ -1807,23 +1811,6 @@ function renderForm(item) {
         if (!confirm(`¿Eliminar "${existAtt[ai]?.name}"?`)) return;
         existAtt.splice(ai,1);
         renderExistAtt();
-
-  // Wire attachment delete buttons
-  const canDeleteAttach = userRole==='admin' || userRole==='approver' || item.RequesterMail===currentUser?.username;
-  canDeleteAttach && document.querySelectorAll('.btn-del-attach').forEach(btn=>{
-    btn.addEventListener('mouseenter',()=>btn.style.color='var(--red)');
-    btn.addEventListener('mouseleave',()=>btn.style.color='var(--text2)');
-    btn.addEventListener('click', async (e)=>{
-      e.stopPropagation();
-      const ai = parseInt(btn.dataset.ai);
-      const aName = attachments[ai]?.name||'este adjunto';
-      if (!confirm(`¿Eliminar "${aName}"?\nEsta acción no se puede deshacer.`)) return;
-      const newAttach = attachments.filter((_,i)=>i!==ai);
-      await doAction(item, {AttachmentsJSON: JSON.stringify(newAttach), UpdatedAt: isoNow()});
-      toast('Adjunto eliminado','success');
-      renderDetail({...item, AttachmentsJSON: JSON.stringify(newAttach)});
-    });
-  });
       });
     });
   }
@@ -2275,6 +2262,25 @@ function renderDetail(item) {
       renderDetail({...item, AttachmentsJSON: JSON.stringify(newAttach)});
     });
   });
+
+  // Eliminar adjuntos en vista detalle (admin y approver siempre, otros solo sus reqs)
+  const canDeleteAttach = userRole==='admin' || userRole==='approver' || item.RequesterMail===currentUser?.username;
+  if (canDeleteAttach) {
+    document.querySelectorAll('.btn-del-attach').forEach(btn=>{
+      btn.addEventListener('mouseenter',()=>btn.style.color='var(--red)');
+      btn.addEventListener('mouseleave',()=>btn.style.color='var(--text2)');
+      btn.addEventListener('click', async (e)=>{
+        e.stopPropagation();
+        const ai = parseInt(btn.dataset.ai);
+        const aName = attachments[ai]?.name||'este adjunto';
+        if (!confirm(`¿Eliminar "${aName}"?\nEsta acción no se puede deshacer.`)) return;
+        const newAttach = attachments.filter((_,i)=>i!==ai);
+        await doAction(item, {AttachmentsJSON: JSON.stringify(newAttach), UpdatedAt: isoNow()});
+        toast('Adjunto eliminado','success');
+        renderDetail({...item, AttachmentsJSON: JSON.stringify(newAttach)});
+      });
+    });
+  }
 
   // Adjuntar documento desde vista detalle
   document.getElementById('btn-detail-attach')?.addEventListener('click', async () => {
