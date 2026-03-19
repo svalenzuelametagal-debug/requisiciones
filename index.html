@@ -2033,7 +2033,7 @@ function renderDetail(item) {
     </tr>`).join('');
 
   const attachHtml = attachments.length
-    ? attachments.map((a,ai)=>`<div class="attach-item" style="display:flex;align-items:center;gap:6px">${a.internal?'🔒':'📎'} <a href="#" class="open-attach" data-url="${escH(a.webUrl)}" data-name="${escH(a.name)}" style="cursor:pointer;flex:1">${escH(a.name)}</a>${a.internal?'<span style="font-size:9px;color:var(--text2);background:var(--bg3);padding:1px 5px;border-radius:4px">interno</span>':''}<button class="btn-del-attach" data-ai="${ai}" title="Eliminar adjunto" style="background:none;border:none;cursor:pointer;color:var(--text2);font-size:13px;padding:2px 6px;border-radius:3px;transition:color .15s">✕</button></div>`).join('')
+    ? attachments.map((a,ai)=>`<div class="attach-item" style="display:flex;align-items:center;gap:6px">${a.internal?'🔒':'📎'} <a href="#" class="open-attach" data-url="${escH(a.webUrl)}" data-name="${escH(a.name)}" style="cursor:pointer;flex:1">${escH(a.name)}</a>${a.internal?'<span style="font-size:9px;color:var(--text2);background:var(--bg3);padding:1px 5px;border-radius:4px">interno</span>':''}${a.name&&a.name.toLowerCase().endsWith('.pdf')?'<button class="btn-analyze-pdf" data-ai="'+ai+'" data-url="'+escH(a.webUrl)+'"  title="Analizar PDF vs RC"  style="background:none;border:1px solid var(--text2);cursor:pointer;color:var(--text2);font-size:10px;padding:1px 6px;border-radius:4px">🔍</button>'  :''}<button class="btn-del-attach" data-ai="${ai}" title="Eliminar adjunto" style="background:none;border:none;cursor:pointer;color:var(--text2);font-size:13px;padding:2px 6px;border-radius:3px;transition:color .15s">✕</button></div>`).join('')
     : '<div class="text-muted" style="font-size:12px">Sin adjuntos</div>';
 
   // History
@@ -2239,6 +2239,62 @@ function renderDetail(item) {
     renderDetail({...item, TCusd: tcU, TCeur: tcE, TCDate: tcDate});
   });
 
+  // Analizar PDF vs RC
+  document.querySelectorAll('.btn-analyze-pdf').forEach(btn=>{
+    btn.addEventListener('mouseenter',()=>btn.style.color='var(--accent)');
+    btn.addEventListener('mouseleave',()=>btn.style.color='var(--text2)');
+    btn.addEventListener('click', async()=>{
+      const url = btn.dataset.url;
+      const name = btn.dataset.name;
+      if (!url) { toast('URL no disponible','error'); return; }
+      btn.textContent = '⌛';
+      btn.disabled = true;
+      try {
+        // Fetch PDF from GitHub as base64
+        const cfg = getCfg();
+        const rawUrl = url;
+        const match = rawUrl.match(/raw\.githubusercontent\.com\/([^/]+\/[^/]+)\/[^/]+\/(.*)/);
+        let b64pdf = null;
+        if (match && cfg.ghToken) {
+          const apiUrl = 'https://api.github.com/repos/' + match[1] + '/contents/' + match[2];
+          const resp = await fetch(apiUrl, { headers: githubHeaders(cfg.ghToken) });
+          if (resp.ok) { const d = await resp.json(); b64pdf = d.content.split('\n').join(''); }
+        }
+        if (!b64pdf) { toast('No se pudo leer el PDF','error'); btn.textContent='🔍'; btn.disabled=false; return; }
+        const rcItems = parseLines(item.LinesJSON||'[]');
+        const rcLines = rcItems.map(function(l,i){return (i+1)+'. '+l.desc+' | Cant: '+l.qty+' '+(l.unit||'UN')+' | '+(l.currency||'ARS')+' '+l.price;}).join('\n');
+        const prompt = 'Analizá este PDF de Orden de Compra de Metagal Argentina y respondé SOLO con un objeto JSON válido sin markdown:\n{"ocNumber":"NP XXXXX","proveedor":"nombre","items":[{"desc":"descripción","qty":número,"unit":"UN","currency":"ARS","price":número}],"diferencias":["dif 1"]}\n\nÍtems de la RC para comparar:\n' + rcLines;
+        const apiResp = await fetch('https://api.anthropic.com/v1/messages',{
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:[
+            {type:'document',source:{type:'base64',media_type:'application/pdf',data:b64pdf}},
+            {type:'text',text:prompt}
+          ]}]})
+        });
+        if (!apiResp.ok) throw new Error('API error '+apiResp.status);
+        const apiData = await apiResp.json();
+        const raw = (apiData.content?.[0]?.text||'').replace(/```[a-z]*/g,'').replace(/```/g,'').trim();
+        let parsed = null;
+        try { parsed = JSON.parse(raw); } catch(e) {}
+        if (parsed) {
+          const diffs = parsed.diferencias||[];
+          const hasDiff = diffs.length > 0;
+          const msg = hasDiff
+            ? '⚠ DIFERENCIAS:\n' + diffs.join('\n') + '\n\n¿Actualizar RC con datos del PDF?'
+            : '✅ Todo coincide con la RC.\n\n¿Confirmar revisión?';
+          if (hasDiff && confirm(msg)) {
+            const newLines = parsed.items.map(it=>({desc:it.desc||'',qty:Number(it.qty)||1,unit:it.unit||'UN',currency:it.currency||'ARS',price:Number(it.price)||0,link:'',obs:'',gl:''}));
+            await doAction(item, {LinesJSON:JSON.stringify(newLines),UpdatedAt:isoNow()});
+            item.LinesJSON = JSON.stringify(newLines);
+            toast('✅ RC actualizada con los datos del PDF','success');
+            renderDetail(item);
+          } else if (!hasDiff) { toast('✅ Todo coincide con la RC','success'); }
+        } else { toast('No se pudo analizar el PDF','error'); }
+      } catch(err) { toast('Error: '+err.message,'error'); }
+      btn.textContent='🔍'; btn.disabled=false;
+    });
+  });
+
   // Eliminar adjuntos - cualquier usuario puede eliminar adjuntos de sus propias reqs
   const canDeleteAttach = userRole==='admin' || userRole==='approver' || item.RequesterMail===currentUser?.username;
   canDeleteAttach && document.querySelectorAll('.btn-del-attach').forEach(btn=>{
@@ -2298,6 +2354,35 @@ function renderDetail(item) {
       btn.disabled = false;
       btn.textContent = '📎 Subir adjunto';
       toast(`${newFiles.length} archivo(s) adjuntado(s) correctamente`, 'success');
+      // Auto-analyze PDFs from memory (no need to fetch from GitHub)
+      for (let k=0; k<files.length; k++) {
+        if (files[k].name.toLowerCase().endsWith('.pdf')) {
+          try {
+            const b64pdf = await new Promise((res,rej)=>{const rd=new FileReader();rd.onload=e=>res(e.target.result.split(',')[1]);rd.onerror=rej;rd.readAsDataURL(files[k]);});
+            const rcItems = parseLines(item.LinesJSON||'[]');
+            const rcLines = rcItems.map(function(l,i){return (i+1)+'. '+l.desc+' | Cant: '+l.qty+' '+(l.unit||'UN')+' | '+(l.currency||'ARS')+' '+l.price;}).join('\n');
+            const prompt = 'Analizá este PDF de Orden de Compra de Metagal Argentina y respondé SOLO con JSON válido sin markdown ni backticks:\n{"ocNumber":"NP XXXXX","proveedor":"nombre","items":[{"desc":"descripción","qty":número,"unit":"UN","currency":"ARS","price":número}],"diferencias":["diferencia si hay"]}\n\nÍtems de la RC para comparar:\n'+rcLines;
+            toast('🔍 Analizando '+files[k].name+'…','info');
+            const apiResp = await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:[{type:'document',source:{type:'base64',media_type:'application/pdf',data:b64pdf}},{type:'text',text:prompt}]}]})});
+            if (apiResp.ok) {
+              const apiData = await apiResp.json();
+              const raw=(apiData.content?.[0]?.text||'').replace(/```[a-z]*/g,'').replace(/```/g,'').trim();
+              let parsed=null; try{parsed=JSON.parse(raw);}catch(e){}
+              if (parsed) {
+                const diffs=parsed.diferencias||[];
+                if (diffs.length>0) {
+                  if (confirm('⚠ DIFERENCIAS detectadas en '+files[k].name+':\n\n'+diffs.join('\n')+'\n\n¿Actualizar los ítems de la RC con los datos del PDF?')) {
+                    const newLines=parsed.items.map(it=>({desc:it.desc||'',qty:Number(it.qty)||1,unit:it.unit||'UN',currency:it.currency||'ARS',price:Number(it.price)||0,link:'',obs:'',gl:''}));
+                    await doAction(item, {LinesJSON:JSON.stringify(newLines),UpdatedAt:isoNow()});
+                    item.LinesJSON=JSON.stringify(newLines);
+                    toast('✅ RC actualizada con los datos del PDF','success');
+                  }
+                } else { toast('✅ '+files[k].name+': todo coincide con la RC','success'); }
+              }
+            }
+          } catch(aiErr){ console.warn('PDF analysis error:',aiErr.message); }
+        }
+      }
       // Refresh detail view
       renderDetail({...item, AttachmentsJSON: JSON.stringify(allAttach)});
     } catch(err) {
