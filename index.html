@@ -2255,7 +2255,8 @@ function renderDetail(item) {
         const aName = attachments[ai]?.name||'este adjunto';
         if (!confirm(`¿Eliminar "${aName}"?\nEsta acción no se puede deshacer.`)) return;
         const newAttach = attachments.filter((_,i)=>i!==ai);
-        const isOCFile = (attachments[ai]?.name||'').startsWith('📄 OC — ');
+        const attName = attachments[ai]?.name||'';
+        const isOCFile = attName.includes('OC — ') || attName.includes('OC —') || (item.OCNumber && attName.includes(item.OCNumber.replace(' ','')));
         const revertOC = isOCFile && item.Status === S.OC;
         const extraFields = revertOC
           ? {Status: S.APP2NOGER, OCNumber:'', OCDate:'', Buyer:''}
