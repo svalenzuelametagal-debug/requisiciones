@@ -2243,26 +2243,6 @@ function renderDetail(item) {
     renderDetail({...item, TCusd: tcU, TCeur: tcE, TCDate: tcDate});
   });
 
-  // Analizar PDF vs RC
-  document.querySelectorAll('.btn-analyze-pdf').forEach(btn=>{
-    btn.addEventListener('mouseenter',()=>btn.style.color='var(--accent)');
-    btn.addEventListener('mouseleave',()=>btn.style.color='var(--text2)');
-    btn.addEventListener('click', async()=>{
-      const url = btn.datase
-  // Eliminar adjuntosyle.color='var(--red)');
-    btn.addEventListener('mouseleave',()=>btn.style.color='var(--text2)');
-    btn.addEventListener('click', async (e)=>{
-      e.stopPropagation();
-      const ai = parseInt(btn.dataset.ai);
-      const aName = attachments[ai]?.name||'este adjunto';
-      if (!confirm(`¿Eliminar "${aName}"?\nEsta acción no se puede deshacer.`)) return;
-      const newAttach = attachments.filter((_,i)=>i!==ai);
-      await doAction(item, {AttachmentsJSON: JSON.stringify(newAttach), UpdatedAt: isoNow()});
-      toast('Adjunto eliminado','success');
-      renderDetail({...item, AttachmentsJSON: JSON.stringify(newAttach)});
-    });
-  });
-
   // Eliminar adjuntos en vista detalle (admin y approver siempre, otros solo sus reqs)
   const canDeleteAttach = userRole==='admin' || userRole==='approver' || item.RequesterMail===currentUser?.username;
   if (canDeleteAttach) {
@@ -2922,7 +2902,6 @@ ${rcItems.map((l,i)=>`${i+1}. ${l.desc} | Cant: ${l.qty} ${l.unit} | Moneda: ${l
       renderForm(clone);
     });
   }
-  });
 }
 
 
