@@ -1186,8 +1186,9 @@ async function loadItems() {
   if (userRole==='admin' || userRole==='approver') {
     allItems = mapped; // ven todas
   } else if (userRole==='gerente') {
+    // Pendientes de su aprobación (APP2) + las que él mismo aprobó/rechazó
     allItems = mapped.filter(i=>
-      i.RequiereGerencia===true && [S.APP2,S.APPGER,S.REJGER].includes(i.Status)
+      i.Status===S.APP2 || (i.GerAt && [S.APPGER,S.REJGER,S.APPFIN,S.OC].includes(i.Status))
     );
   } else if (userRole==='finanzas') {
     allItems = mapped.filter(i=>
@@ -3254,7 +3255,7 @@ function renderGerenteView() {
 
   function renderGerContent(all) {
     const pendGer  = all.filter(i=>i.Status===S.APP2);
-    const appGer   = all.filter(i=>i.Status===S.APPGER||i.Status===S.OC);
+    const appGer   = all.filter(i=>i.GerAt); // solo las que Gerencia realmente aprobó
     const rejGer   = all.filter(i=>i.Status===S.REJGER);
     const criticas = all.filter(i=>i.Urgency==='Crítica'&&i.Status===S.APP2);
 
