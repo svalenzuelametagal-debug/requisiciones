@@ -2737,6 +2737,77 @@ function renderDetail(item) {
           }
         }
 
+        // ── Análisis PDF antes de guardar OC ────────────────────────
+        if (ocFileInput?.files?.length && typeof pdfjsLib !== 'undefined') {
+          try {
+            const pdfFile = ocFileInput.files[0];
+            const arrayBuf2 = await pdfFile.arrayBuffer();
+            const pdf2 = await pdfjsLib.getDocument({data: new Uint8Array(arrayBuf2)}).promise;
+            let pdfText = '';
+            for (let p=1; p<=pdf2.numPages; p++) {
+              const pg = await pdf2.getPage(p);
+              const tc2 = await pg.getTextContent();
+              let lastY2=null, lineStr2='';
+              tc2.items.forEach(function(it){
+                if(lastY2!==null&&Math.abs(it.transform[5]-lastY2)>2){pdfText+=lineStr2+'\n';lineStr2='';}
+                lineStr2+=it.str; lastY2=it.transform[5];
+              });
+              pdfText+=lineStr2+'\n';
+            }
+            const npM = pdfText.match(/NOTA DE PEDIDO\s*No\.?\s*0*(\d+)/i);
+            const npNum2 = npM ? 'NP '+npM[1] : '';
+            const itemRx2 = /^\s*(\d+)\s+(?:\d+\s+)?(.+?)\s+(\d+(?:\.\d+)?)\s+\d{2}[\/\-]\d{2}[\/\-]\d{4}\s+([\d.]+)/gm;
+            const ocPdfItems = []; let im2;
+            while((im2=itemRx2.exec(pdfText))!==null){
+              let desc2=im2[2].trim().replace(/\s+(PIEZA|UN|KG|LT|MT|M2|SET|JGO|PAR|LTS|CJ|PC|BOX)\s*(?:\(NO\s*FRACCION\.?\))?\s*$/i,'').trim();
+              ocPdfItems.push({num:parseInt(im2[1]),desc:desc2,qty:parseFloat(im2[3]),price:parseFloat(im2[4])});
+            }
+            const rcItemsOC = parseLines(item.LinesJSON||'[]');
+            if (ocPdfItems.length && rcItemsOC.length) {
+              const diffs3=[]; const updates3=[];
+              for(let i=0;i<Math.max(rcItemsOC.length,ocPdfItems.length);i++){
+                const rc=rcItemsOC[i]; const oc=ocPdfItems[i];
+                if(rc&&oc){
+                  const qD=Math.abs(rc.qty-oc.qty)>0.001;
+                  const pD=Math.abs((rc.price||0)-oc.price)>0.01;
+                  if(qD) diffs3.push('• Ítem '+(i+1)+': cantidad RC='+rc.qty+' / OC='+oc.qty);
+                  if(pD) diffs3.push('• Ítem '+(i+1)+': precio RC='+(rc.price||'—')+' / OC='+oc.price);
+                  if(qD||pD) updates3.push({idx:i,qD,pD,oc});
+                }
+              }
+              if(diffs3.length){
+                const proceed = await new Promise(function(resolve){
+                  showModal(
+                    '<div style="margin-bottom:10px;font-size:13px">'+(npNum2?'<strong>'+escH(npNum2)+'</strong> — ':'')+ocPdfItems.length+' ítem(s) en el PDF</div>'
+                    +'<div style="background:rgba(217,64,64,.1);border:1px solid rgba(217,64,64,.3);border-radius:6px;padding:10px 14px;font-size:12px;margin-bottom:12px">'
+                    +'<div style="font-weight:700;color:var(--red);margin-bottom:6px">⚠ Diferencias vs RC:</div>'
+                    +diffs3.map(function(d){return '<div style="color:var(--orange);margin-bottom:3px">'+escH(d)+'</div>';}).join('')
+                    +'</div><div style="font-size:12px;color:var(--text2)">¿Actualizás la RC con los datos del PDF antes de asignar?</div>',
+                    '📄 PDF vs RC',
+                    [
+                      {label:'✅ Actualizar RC y asignar OC', cls:'btn-primary', action:async function(){
+                        const curL=parseLines(item.LinesJSON||'[]');
+                        const newL=curL.map(function(ln,i){
+                          const u=updates3.find(function(x){return x.idx===i;});
+                          if(!u) return ln;
+                          return Object.assign({},ln,u.qD?{qty:u.oc.qty}:{},u.pD?{price:u.oc.price}:{});
+                        });
+                        item.LinesJSON=JSON.stringify(newL);
+                        resolve(true);
+                      }},
+                      {label:'Asignar OC sin cambios', cls:'btn-secondary', action:function(){ resolve(true); }},
+                      {label:'Cancelar', cls:'btn-secondary btn-sm', action:function(){ resolve(false); }}
+                    ]
+                  );
+                });
+                if(!proceed) return false; // return false = don't close outer modal
+              } else {
+                toast('✅ PDF: cantidades y precios coinciden con la RC'+(npNum2?' ('+npNum2+')':''),'success');
+              }
+            }
+          } catch(pdfErr2){ console.warn('OC PDF analysis:',pdfErr2.message); }
+        }
+
         // Agregar OC a adjuntos existentes
         const existingAttach = parseAttachments(item.AttachmentsJSON||'[]');
         if (ocAttach) existingAttach.push(ocAttach);
