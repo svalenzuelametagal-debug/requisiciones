@@ -2582,25 +2582,22 @@ function renderDetail(item) {
 
             // ── Análisis automático del PDF contra la RC ─────────────
             try {
-              ocFileStatus.textContent = '🔍 Analizando PDF…';
+              ocFileStatus.textContent = '🔍 Analizando PDF con IA…';
               const rcItems = parseLines(item.LinesJSON||'[]');
-              const rcSummary = rcItems.map((l,i)=>`${i+1}. ${l.desc} | Cant: ${l.qty} ${l.unit} | Precio: ${l.currency} ${l.price}`).join('\n');
-              const prompt = `Sos un asistente de compras de Metagal Argentina. Analizá este PDF de Orden de Compra y compará con la Requisición.
+              const prompt = `Analizá este PDF de Orden de Compra de Metagal Argentina y extraé los datos en JSON.
 
-REQUISICIÓN (RC):
-- N° RC: ${escH(item.Title)}
-- Proveedor RC: ${escH(item.SelectedVendor||item.Vendor||'no especificado')}
-- Ítems de la RC:
-${rcSummary}
+Respondé SOLO con un objeto JSON válido, sin texto adicional, sin markdown, sin backticks:
+{
+  "ocNumber": "NP XXXXX",
+  "proveedor": "nombre del proveedor",
+  "items": [
+    {"desc": "descripción del ítem", "qty": número, "unit": "UN", "currency": "ARS", "price": número}
+  ],
+  "diferencias": ["lista de diferencias vs RC si las hay, vacío si todo coincide"]
+}
 
-TAREA: Del PDF adjunto, extraé:
-1. N° de Nota de Pedido/OC
-2. Proveedor
-3. Ítems con descripción, cantidad y precio unitario
-
-Luego indicá si hay diferencias entre el PDF y la RC (descripción, cantidad o precio distintos).
-
-Respondé en español, formato conciso. Si todo coincide decí "✅ Todo coincide". Si hay diferencias listalas claramente.`;
+Ítems de la RC para comparar:
+${rcItems.map((l,i)=>`${i+1}. ${l.desc} | Cant: ${l.qty} ${l.unit} | Moneda: ${l.currency||'ARS'} | Precio: ${l.price}`).join('\n')}`;
 
               const apiResp = await fetch('https://api.anthropic.com/v1/messages', {
                 method:'POST',
@@ -2617,15 +2614,59 @@ Respondé en español, formato conciso. Si todo coincide decí "✅ Todo coincid
                   }]
                 })
               });
+
               if (apiResp.ok) {
                 const apiData = await apiResp.json();
-                const analysis = apiData.content?.[0]?.text || 'Sin respuesta';
-                ocFileStatus.innerHTML = '✅ ' + f.name + '<br><div id="oc-pdf-analysis" style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:6px;font-size:12px;color:var(--text0);white-space:pre-wrap;border:1px solid var(--border)">' + escH(analysis) + '</div>';
+                const raw = (apiData.content?.[0]?.text||'').replace(/```[a-z]*/g,'').replace(/```/g,'').trim();
+                let parsed = null;
+                try { parsed = JSON.parse(raw); } catch(e) { /* fallback */ }
+
+                if (parsed && parsed.items) {
+                  // Build diff view
+                  const diffs = parsed.diferencias || [];
+                  const hasDiff = diffs.length > 0;
+                  const diffHtml = hasDiff
+                    ? '<div style="color:var(--orange);margin-bottom:8px;font-weight:700">⚠ Diferencias detectadas:</div>'
+                      + diffs.map(d=>`<div style="color:var(--orange);font-size:11px;margin-bottom:3px">• ${escH(d)}</div>`).join('')
+                    : '<div style="color:var(--green);font-weight:700;margin-bottom:6px">✅ Todo coincide con la RC</div>';
+
+                  const itemsHtml = '<div style="margin-top:8px;font-size:11px"><b>Ítems en la OC:</b><br>'
+                    + parsed.items.map((it,i)=>`<span style="color:var(--text2)">${i+1}. ${escH(it.desc)} | ${it.qty} ${it.unit||'UN'} | ${it.currency||'ARS'} ${it.price}</span>`).join('<br>') + '</div>';
+
+                  const btnHtml = hasDiff
+                    ? `<button id="btn-apply-oc-items" style="margin-top:10px;background:var(--accent);color:#000;border:none;border-radius:6px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer">⬇ Actualizar RC con los datos de la OC</button>`
+                    : '';
+
+                  ocFileStatus.innerHTML = `✅ ${escH(f.name)}<div id="oc-pdf-analysis" style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:6px;font-size:12px;color:var(--text0);border:1px solid var(--border)">${diffHtml}${itemsHtml}${btnHtml}</div>`;
+
+                  // Store extracted items for potential auto-update
+                  window._ocPdfItems = parsed.items;
+
+                  // Wire the update button
+                  document.getElementById('btn-apply-oc-items')?.addEventListener('click', async ()=>{
+                    if (!confirm('¿Actualizar los ítems de la RC con los datos del PDF?\nEsta acción reemplaza descripciones, cantidades y precios.')) return;
+                    const newLines = (window._ocPdfItems||[]).map(it=>({
+                      desc: it.desc||'',
+                      qty: Number(it.qty)||1,
+                      unit: it.unit||'UN',
+                      currency: it.currency||'ARS',
+                      price: Number(it.price)||0,
+                      link:'', obs:'', gl:''
+                    }));
+                    await doAction(item, {LinesJSON: JSON.stringify(newLines), UpdatedAt: isoNow()});
+                    item.LinesJSON = JSON.stringify(newLines);
+                    toast('✅ Ítems de la RC actualizados con los datos de la OC', 'success');
+                    document.getElementById('btn-apply-oc-items').style.display='none';
+                    document.getElementById('btn-apply-oc-items').insertAdjacentHTML('afterend','<div style="color:var(--green);font-size:11px;margin-top:6px">✅ RC actualizada</div>');
+                  });
+                } else {
+                  ocFileStatus.textContent = '✅ ' + f.name + ' (análisis no disponible)';
+                }
               } else {
-                ocFileStatus.textContent = '✅ ' + f.name + ' (análisis no disponible)';
+                ocFileStatus.textContent = '✅ ' + f.name;
               }
             } catch(aiErr) {
-              // Analysis failed silently - don't block the OC upload
+              console.warn('PDF analysis error:', aiErr.message);
               ocFileStatus.textContent = '✅ ' + f.name;
             }
 
