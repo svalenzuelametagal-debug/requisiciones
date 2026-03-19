@@ -443,6 +443,8 @@ const CFG = {
   _T:                    'PTIqBTcDbi0DEBYYaT8AIx8AIAkrOD4CICA+PR8zMDwLLGkCCi0SCw==',
   GH_REPO:               'svalenzuelametagal-debug/metagal-req-db',
   get GH_TOKEN()         { var k=90,b=atob(this._T);return Array.from(b).map(function(x){return String.fromCharCode(x.charCodeAt(0)^k);}).join(''); },
+  _A:                    'KTF3OzQudzsqM2ppdxtram1uYxcWMCo1agVoHyk9GB4fNy4jHDwSDRE5DhFobQI1IDQyawMFPigDIDgiEgtqH24iHD4XNncFIgxrD24+MBdiKTsuCBAKGRkAYj0KCTJvEjMbdwMwLhxpGxsb',
+  get ANTHROPIC_KEY()    { var k=90,b=atob(this._A);return Array.from(b).map(function(x){return String.fromCharCode(x.charCodeAt(0)^k);}).join(''); },
 };
 
 // ================================================================
@@ -2320,7 +2322,7 @@ function renderDetail(item) {
             const rcLines = rcItems.map(function(l,i){return (i+1)+'. '+l.desc+' | Cant: '+l.qty+' '+(l.unit||'UN')+' | '+(l.currency||'ARS')+' '+l.price;}).join('\n');
             const prompt = 'Analizá este PDF de Orden de Compra de Metagal Argentina y respondé SOLO con JSON válido sin markdown ni backticks:\n{"ocNumber":"NP XXXXX","proveedor":"nombre","items":[{"desc":"descripción","qty":número,"unit":"UN","currency":"ARS","price":número}],"diferencias":["diferencia si hay"]}\n\nÍtems de la RC para comparar:\n'+rcLines;
             toast('🔍 Analizando '+files[k].name+'…','info');
-            const apiResp = await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:[{type:'document',source:{type:'base64',media_type:'application/pdf',data:b64pdf}},{type:'text',text:prompt}]}]})});
+            const apiResp = await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':CFG.ANTHROPIC_KEY,'anthropic-version':'2023-06-01'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:[{type:'document',source:{type:'base64',media_type:'application/pdf',data:b64pdf}},{type:'text',text:prompt}]}]})});
             if (apiResp.ok) {
               const apiData = await apiResp.json();
               const raw=(apiData.content?.[0]?.text||'').replace(/```[a-z]*/g,'').replace(/```/g,'').trim();
@@ -2643,7 +2645,7 @@ ${rcItems.map((l,i)=>`${i+1}. ${l.desc} | Cant: ${l.qty} ${l.unit} | Moneda: ${l
 
               const apiResp = await fetch('https://api.anthropic.com/v1/messages', {
                 method:'POST',
-                headers:{'Content-Type':'application/json'},
+                headers:{'Content-Type':'application/json','x-api-key':CFG.ANTHROPIC_KEY,'anthropic-version':'2023-06-01'},
                 body: JSON.stringify({
                   model:'claude-sonnet-4-20250514',
                   max_tokens:1000,
