@@ -2255,9 +2255,15 @@ function renderDetail(item) {
         const aName = attachments[ai]?.name||'este adjunto';
         if (!confirm(`¿Eliminar "${aName}"?\nEsta acción no se puede deshacer.`)) return;
         const newAttach = attachments.filter((_,i)=>i!==ai);
-        await doAction(item, {AttachmentsJSON: JSON.stringify(newAttach), UpdatedAt: isoNow()});
-        toast('Adjunto eliminado','success');
-        renderDetail({...item, AttachmentsJSON: JSON.stringify(newAttach)});
+        const isOCFile = (attachments[ai]?.name||'').startsWith('📄 OC — ');
+        const revertOC = isOCFile && item.Status === S.OC;
+        const extraFields = revertOC
+          ? {Status: S.APP2NOGER, OCNumber:'', OCDate:'', Buyer:''}
+          : {};
+        await doAction(item, {AttachmentsJSON: JSON.stringify(newAttach), ...extraFields, UpdatedAt: isoNow()});
+        if (revertOC) toast('OC eliminada — requisición vuelve a estado "Lista para OC"','success');
+        else toast('Adjunto eliminado','success');
+        renderDetail({...item, ...extraFields, AttachmentsJSON: JSON.stringify(newAttach)});
       });
     });
   }
