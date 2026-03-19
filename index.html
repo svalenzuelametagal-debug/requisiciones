@@ -2819,6 +2819,7 @@ function renderDetail(item) {
           Lvl2At:item.Lvl2At||isoNow(), Lvl2By:item.Lvl2By||currentUser.username,
           Lvl2Note:obs||item.Lvl2Note||'',
           TCusd: tcOCusd, TCeur: tcOCeur, TCDate: date,
+          LinesJSON: item.LinesJSON,
           AttachmentsJSON: JSON.stringify(existingAttach)};
         await doAction(item, fields);
         const updated = {...item, ...fields};
