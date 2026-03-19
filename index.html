@@ -1807,6 +1807,23 @@ function renderForm(item) {
         if (!confirm(`¿Eliminar "${existAtt[ai]?.name}"?`)) return;
         existAtt.splice(ai,1);
         renderExistAtt();
+
+  // Wire attachment delete buttons
+  const canDeleteAttach = userRole==='admin' || userRole==='approver' || item.RequesterMail===currentUser?.username;
+  canDeleteAttach && document.querySelectorAll('.btn-del-attach').forEach(btn=>{
+    btn.addEventListener('mouseenter',()=>btn.style.color='var(--red)');
+    btn.addEventListener('mouseleave',()=>btn.style.color='var(--text2)');
+    btn.addEventListener('click', async (e)=>{
+      e.stopPropagation();
+      const ai = parseInt(btn.dataset.ai);
+      const aName = attachments[ai]?.name||'este adjunto';
+      if (!confirm(`¿Eliminar "${aName}"?\nEsta acción no se puede deshacer.`)) return;
+      const newAttach = attachments.filter((_,i)=>i!==ai);
+      await doAction(item, {AttachmentsJSON: JSON.stringify(newAttach), UpdatedAt: isoNow()});
+      toast('Adjunto eliminado','success');
+      renderDetail({...item, AttachmentsJSON: JSON.stringify(newAttach)});
+    });
+  });
       });
     });
   }
