@@ -2432,13 +2432,38 @@ function renderDetail(item) {
 
   if (canApproveN1) {
     document.getElementById('btn-appn1').addEventListener('click',()=>{
-      approvalModal('Dar visto bueno — Compras', async(note)=>{
-        const updated = {...item, Status:S.APP1, Lvl1At:isoNow(), Lvl1By:currentUser.username, Lvl1Note:note};
-        await doAction(item, {Status:S.APP1, Lvl1At:isoNow(), Lvl1By:currentUser.username, Lvl1Note:note});
-        await notificar(updated,'✅ Revisada por Compras — Pendiente autorización',note,[ROLES_ADMIN[0], item.RequesterMail]);
-        toast('Elevada a autorización — notificación enviada','success');
-        renderList(false);
-      });
+      showModal(`
+        <div class="form-group"><label>Nota (opcional)</label><textarea id="approval-note" rows="2" placeholder="Observaciones, criterios…"></textarea></div>
+        <div class="form-group">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="n1-send-ger" ${item.RequiereGerencia?'checked':''} style="width:16px;height:16px"/>
+            <span>Enviar a <strong>Gerencia (Raúl López)</strong> para aprobación antes de autorizar</span>
+          </label>
+        </div>`,
+        'Dar visto bueno — Compras',
+        [{label:'Confirmar', cls:'btn-primary', action: async()=>{
+          const note = document.getElementById('approval-note').value.trim();
+          const sendToGer = document.getElementById('n1-send-ger')?.checked || false;
+          const now = isoNow();
+          const fields = {Lvl1At:now, Lvl1By:currentUser.username, Lvl1Note:note};
+          if (sendToGer) {
+            // Skip N2 — go directly to APP2 notifying admin + Gerencia
+            Object.assign(fields, {Status:S.APP2, Lvl2At:now, Lvl2By:currentUser.username, Lvl2Note:'Elevado directamente a Gerencia por '+currentUser.username});
+            await doAction(item, fields);
+            const updated = {...item, ...fields};
+            await notificar(updated,'✅ Revisada y elevada a Gerencia',note,[ROLES_GERENTE[0], ROLES_ADMIN[0], item.RequesterMail]);
+            toast('Elevada a Gerencia — notificación enviada','success');
+          } else {
+            Object.assign(fields, {Status:S.APP1});
+            await doAction(item, fields);
+            const updated = {...item, ...fields};
+            await notificar(updated,'✅ Revisada por Compras — Pendiente autorización',note,[ROLES_ADMIN[0], item.RequesterMail]);
+            toast('Elevada a autorización — notificación enviada','success');
+          }
+          renderList(false);
+        }},
+        {label:'Cancelar', cls:'btn-secondary'}
+      ]);
     });
     document.getElementById('btn-rejn1').addEventListener('click',()=>{
       approvalModal('Devolver al solicitante', async(note)=>{
