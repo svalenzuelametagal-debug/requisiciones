@@ -1703,7 +1703,12 @@ function renderForm(item) {
       <div id="attach-existing" class="attach-list mb-3"></div>
       <div class="form-group">
         <label>Agregar archivos — PDF, Word, Excel, <strong>imágenes</strong> (JPG, PNG, HEIC), videos</label>
-        <input type="file" id="f-files" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.webp,.bmp,.heic,.mp4,.mov" style="padding:6px"/>
+        <div id="form-drop-zone" style="border:2px dashed var(--border);border-radius:8px;padding:16px;text-align:center;cursor:pointer;transition:border-color .2s;background:var(--bg3)">
+          <div style="font-size:13px;color:var(--text2);margin-bottom:8px">📎 Arrastrá archivos acá o hacé clic para seleccionar</div>
+          <input type="file" id="f-files" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.webp,.bmp,.heic,.mp4,.mov" style="display:none"/>
+          <button type="button" id="form-pick-btn" class="btn btn-secondary btn-sm">Elegir archivos</button>
+        </div>
+        <div id="form-file-list" style="margin-top:8px;display:flex;flex-direction:column;gap:4px"></div>
       </div>
       <div id="attach-upload-status" style="font-size:12px;color:var(--text2)"></div>
     </div>
@@ -1995,6 +2000,54 @@ function renderForm(item) {
   document.getElementById('btn-save-draft-b')?.addEventListener('click',()=>saveReq(false));
   document.getElementById('btn-send-req-b')?.addEventListener('click',()=>saveReq(true));
 
+  // ── Drop zone file accumulation ─────────────────────────────
+  (function(){
+    const dropZone = document.getElementById('form-drop-zone');
+    const fileInput2 = document.getElementById('f-files');
+    const pickBtn = document.getElementById('form-pick-btn');
+    const listEl = document.getElementById('form-file-list');
+    if (!dropZone || !fileInput2) return;
+    let dt = new DataTransfer();
+
+    function addFiles(newFiles) {
+      for (let i=0; i<newFiles.length; i++) {
+        if (!Array.from(dt.files).some(f=>f.name===newFiles[i].name)) {
+          dt.items.add(newFiles[i]);
+        }
+      }
+      fileInput2.files = dt.files;
+      renderList2();
+    }
+
+    function removeFile(idx) {
+      const newDT = new DataTransfer();
+      Array.from(dt.files).forEach((f,i)=>{ if(i!==idx) newDT.items.add(f); });
+      dt = newDT;
+      fileInput2.files = dt.files;
+      renderList2();
+    }
+
+    function renderList2() {
+      listEl.innerHTML = Array.from(dt.files).map((f,i)=>
+        `<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);background:var(--bg3);padding:4px 8px;border-radius:4px">
+          📎 <span style="flex:1">${escH(f.name)} <span style="color:var(--text3)">(${(f.size/1024).toFixed(0)} KB)</span></span>
+          <button type="button" data-ri="${i}" style="background:none;border:none;cursor:pointer;color:var(--text2);font-size:12px;padding:0 4px" title="Quitar">✕</button>
+        </div>`
+      ).join('');
+      listEl.querySelectorAll('[data-ri]').forEach(btn=>{
+        btn.addEventListener('click',()=>removeFile(parseInt(btn.dataset.ri)));
+      });
+      dropZone.style.borderColor = dt.files.length ? 'var(--accent)' : '';
+    }
+
+    pickBtn?.addEventListener('click',()=>fileInput2.click());
+    dropZone.addEventListener('click', e=>{if(e.target!==pickBtn) fileInput2.click();});
+    fileInput2.addEventListener('change',()=>{ addFiles(fileInput2.files); });
+    dropZone.addEventListener('dragover', e=>{e.preventDefault();dropZone.style.borderColor='var(--accent)';});
+    dropZone.addEventListener('dragleave', ()=>{if(!dt.files.length) dropZone.style.borderColor='';});
+    dropZone.addEventListener('drop', e=>{e.preventDefault();addFiles(e.dataTransfer.files);});
+  })();
+
   renderItems();
   } catch(err) {
     const container = document.getElementById('view-form');
@@ -2113,7 +2166,7 @@ function renderDetail(item) {
             <h4>Solicitante</h4>
             <div class="detail-row"><span class="detail-label">Nombre:</span><span class="detail-value">${escH(item.RequesterName)}</span></div>
             <div class="detail-row"><span class="detail-label">Mail:</span><span class="detail-value">${escH(item.RequesterMail)}</span></div>
-            <div class="detail-row"><span class="detail-label">Cuenta GL:</span><span class="detail-value">${escH(item.GLAccount)||'—'}${item.GLCorregido?` <span style="font-size:11px;color:var(--yellow);background:rgba(212,160,23,.15);padding:1px 6px;border-radius:10px">corregido por Gerencia</span>`:''}</span></div>
+            <div class="detail-row"><span class="detail-label">Cuenta GL:</span><span class="detail-value">${escH(item.GLAccount)||'—'}${item.GLCorregido?` <span style="font-size:11px;color:var(--yellow);background:rgba(212,160,23,.15);padding:1px 6px;border-radius:10px">corregido por Gerencia</span>`:''}</span>${(userRole==='gerente'||userRole==='admin')?`<button id="btn-edit-gl" style="margin-left:8px;background:none;border:1px solid var(--text2);border-radius:4px;padding:1px 8px;font-size:11px;cursor:pointer;color:var(--text2)">✏ editar GL</button>`:''}  </div>
             <div class="detail-row"><span class="detail-label">Centro de Costo:</span><span class="detail-value">${escH(item.CostCenter)||'—'}</span></div>
             <div class="detail-row"><span class="detail-label">Proveedor sugerido:</span><span class="detail-value">${escH(item.Vendor)||'—'}</span></div>
               ${item.SelectedVendor?`<div class="detail-row"><span class="detail-label" style="color:var(--green)">✔ Proveedor seleccionado:</span><span class="detail-value" style="color:var(--green);font-weight:600">${escH(item.SelectedVendor)}</span></div>`:''}
@@ -2245,6 +2298,22 @@ function renderDetail(item) {
     await doAction(item, { TCusd: tcU, TCeur: tcE, TCDate: tcDate, UpdatedAt: isoNow() });
     toast('TC congelado correctamente 🔒', 'success');
     renderDetail({...item, TCusd: tcU, TCeur: tcE, TCDate: tcDate});
+  });
+
+  // Editar Cuenta GL (gerente y admin)
+  document.getElementById('btn-edit-gl')?.addEventListener('click', ()=>{
+    const cur = item.GLAccount||'';
+    showModal(
+      `<div class="form-group"><label style="color:var(--accent)">Cuenta GL</label><input type="text" id="gl-edit-input" value="${escH(cur)}" placeholder="Ej: 631299" style="font-family:var(--mono)"/></div>`,
+      'Editar Cuenta GL',
+      [{label:'Guardar', cls:'btn-primary', action: async ()=>{
+        const newGL = document.getElementById('gl-edit-input').value.trim();
+        await doAction(item, {GLAccount: newGL, GLCorregido: true, UpdatedAt: isoNow()});
+        toast('Cuenta GL actualizada','success');
+        renderDetail({...item, GLAccount: newGL, GLCorregido: true});
+      }},
+      {label:'Cancelar', cls:'btn-secondary'}]
+    );
   });
 
   // Eliminar adjuntos en vista detalle (admin y approver siempre, otros solo sus reqs)
