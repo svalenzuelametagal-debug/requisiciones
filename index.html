@@ -2369,6 +2369,85 @@ function renderDetail(item) {
         } catch(pdfErr) { console.warn('PDF analysis:', pdfErr.message); }
       }
 
+      // ── Análisis PDF con PDF.js ──────────────────────────────────
+      for (let k=0; k<files.length; k++) {
+        if (!files[k].name.toLowerCase().endsWith('.pdf')) continue;
+        try {
+          if (typeof pdfjsLib === 'undefined') { toast('PDF.js no cargó, recargá la página','error'); continue; }
+          toast('🔍 Analizando '+files[k].name+'…','info');
+          const arrayBuf = await files[k].arrayBuffer();
+          const pdf = await pdfjsLib.getDocument({data: new Uint8Array(arrayBuf)}).promise;
+          let fullText = '';
+          for (let p=1; p<=pdf.numPages; p++) {
+            const page = await pdf.getPage(p);
+            const tc = await page.getTextContent();
+            let lastY = null, lineStr = '';
+            tc.items.forEach(function(it) {
+              if (lastY !== null && Math.abs(it.transform[5] - lastY) > 2) { fullText += lineStr + '\n'; lineStr = ''; }
+              lineStr += it.str; lastY = it.transform[5];
+            });
+            fullText += lineStr + '\n';
+          }
+
+          // Parse NP number
+          const npMatch = fullText.match(/NOTA DE PEDIDO\s*No\.?\s*0*(\d+)/i) || fullText.match(/N[Oo°]?\.?\s*(?:NP|PEDIDO|OC)\s*:?\s*0*(\d+)/i);
+          const npNum = npMatch ? 'NP '+npMatch[1] : '';
+
+          // Parse items (Metagal NP format: num desc qty date price iva)
+          const ocItems = [];
+          const itemRx = /^\s*(\d+)\s+(?:\d+\s+)?(.+?)\s+(\d+(?:\.\d+)?)\s+\d{2}[\/\-]\d{2}[\/\-]\d{4}\s+([\d.]+)/gm;
+          let im;
+          while ((im = itemRx.exec(fullText)) !== null) {
+            let desc = im[2].trim().replace(/\s+(PIEZA|UN|KG|LT|MT|M2|SET|JGO|PAR|LTS|CJ|PC|BOX)\s*(?:\(NO\s*FRACCION\.?\))?\s*$/i,'').trim();
+            ocItems.push({num:parseInt(im[1]), desc, qty:parseFloat(im[3]), price:parseFloat(im[4])});
+          }
+
+          const rcItems2 = parseLines(item.LinesJSON||'[]');
+          if (!ocItems.length) { toast('⚠ No se encontraron ítems en el PDF. Formato no reconocido.','error'); continue; }
+
+          const diffs2 = []; const updates2 = [];
+          const maxLen2 = Math.max(rcItems2.length, ocItems.length);
+          for (let i=0; i<maxLen2; i++) {
+            const rc = rcItems2[i]; const oc = ocItems[i];
+            if (!rc && oc) { diffs2.push('• Ítem '+(i+1)+' en OC no existe en RC: '+oc.desc+' x'+oc.qty+' $'+oc.price); updates2.push({idx:i,type:'add',oc}); }
+            else if (rc && !oc) { diffs2.push('• Ítem '+(i+1)+' en RC no está en OC: '+rc.desc); }
+            else if (rc && oc) {
+              const qD = Math.abs(rc.qty - oc.qty) > 0.001;
+              const pD = Math.abs((rc.price||0) - oc.price) > 0.01;
+              if (qD) diffs2.push('• Ítem '+(i+1)+' — cantidad: RC='+rc.qty+' / OC='+oc.qty);
+              if (pD) diffs2.push('• Ítem '+(i+1)+' — precio: RC='+(rc.price||'—')+' / OC='+oc.price);
+              if (qD||pD) updates2.push({idx:i,type:'update',rc,oc,qD,pD});
+            }
+          }
+
+          if (!diffs2.length) {
+            toast('✅ PDF analizado — cantidades y precios coinciden con la RC'+(npNum?' ('+npNum+')':''),'success');
+          } else {
+            const diffHtml2 = '<div style="margin-bottom:10px;font-size:13px">'+(npNum?'<strong>'+escH(npNum)+'</strong> — ':'')+ocItems.length+' ítem(s) en el PDF</div>'
+              +'<div style="background:rgba(217,64,64,.1);border:1px solid rgba(217,64,64,.3);border-radius:6px;padding:10px 14px;font-size:12px;margin-bottom:12px">'
+              +'<div style="font-weight:700;color:var(--red);margin-bottom:6px">⚠ Diferencias encontradas:</div>'
+              +diffs2.map(function(d){return '<div style="color:var(--orange);margin-bottom:3px">'+escH(d)+'</div>';}).join('')
+              +'</div><div style="font-size:12px;color:var(--text2)">¿Actualizar la RC con los datos del PDF?</div>';
+            showModal(diffHtml2,'📄 PDF vs RC',[
+              {label:'✅ Actualizar RC',cls:'btn-primary',action:async function(){
+                const curLines = parseLines(item.LinesJSON||'[]');
+                const newLines2 = curLines.map(function(ln,i){
+                  const u=updates2.find(function(x){return x.idx===i&&x.type==='update';});
+                  if(!u) return ln;
+                  return Object.assign({},ln,u.qD?{qty:u.oc.qty}:{},u.pD?{price:u.oc.price}:{});
+                });
+                await doAction(item,{LinesJSON:JSON.stringify(newLines2),UpdatedAt:isoNow()});
+                item.LinesJSON=JSON.stringify(newLines2);
+                toast('✅ RC actualizada con los datos del PDF','success');
+                renderDetail({...item,AttachmentsJSON:JSON.stringify(allAttach)});
+              }},
+              {label:'No, dejar como está',cls:'btn-secondary'}
+            ]);
+            continue;
+          }
+        } catch(pdfErr) { console.error('PDF analysis:',pdfErr); toast('Error analizando PDF: '+pdfErr.message,'error'); }
+      }
+
       // Refresh detail view
       renderDetail({...item, AttachmentsJSON: JSON.stringify(allAttach)});
     } catch(err) {
