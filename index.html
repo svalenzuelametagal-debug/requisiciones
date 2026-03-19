@@ -2065,8 +2065,8 @@ function renderDetail(item) {
   }
   if (canEdit) actionBtns += `<button class="btn btn-secondary" id="btn-edit-req">✏ Editar</button>`;
   if ((userRole==='admin'||userRole==='approver') && item.Status===S.OC) actionBtns += `<button class="btn btn-info" id="btn-send-oc-supplier" style="background:#0891b2;color:#fff">📧 Enviar OC al Proveedor</button>`;
-  if (canApproveN1) actionBtns += `<button class="btn btn-success" id="btn-appn1">✔ Dar visto bueno</button><button class="btn btn-danger" id="btn-rejn1">↩ Devolver al solicitante</button>`;
-  if (canApproveN2) actionBtns += `<button class="btn btn-success" id="btn-appn2">✔ Autorizar compra</button><button class="btn btn-danger" id="btn-rejn2">✖ No autorizar</button>`;
+  if (canApproveN1) actionBtns += `<button class="btn btn-success" id="btn-appn1">✔ Dar visto bueno</button><button class="btn btn-warning" id="btn-appn1-ger" style="background:#c8900a;border-color:#c8900a;color:#fff">📤 Enviar a Gerencia</button><button class="btn btn-danger" id="btn-rejn1">↩ Devolver al solicitante</button>`;
+  if (canApproveN2) actionBtns += `<button class="btn btn-success" id="btn-appn2">✔ Autorizar compra</button><button class="btn btn-warning" id="btn-appn2-ger" style="background:#c8900a;border-color:#c8900a;color:#fff">📤 Enviar a Gerencia</button><button class="btn btn-danger" id="btn-rejn2">✖ No autorizar</button>`;
   if (canAssignOC)  actionBtns += `<button class="btn btn-info" id="btn-assign-oc">📄 Asignar OC</button>`;
   if (canApproveGer)actionBtns += `<button class="btn btn-success" id="btn-appger">✔ Aprobar</button><button class="btn btn-danger" id="btn-rejger">✖ No aprobar</button>`;
   if (canApproveFin)actionBtns += `<button class="btn btn-success" id="btn-appfin">✔ Dar OK Financiero</button><button class="btn btn-danger" id="btn-rejfin">✖ Observar</button>`;
@@ -2468,6 +2468,17 @@ function renderDetail(item) {
         {label:'Cancelar', cls:'btn-secondary'}
       ]);
     });
+    document.getElementById('btn-appn1-ger')?.addEventListener('click',()=>{
+      approvalModal('Enviar a Gerencia — Raúl López', async(note)=>{
+        const now = isoNow();
+        const fields = {Status:S.APP2, Lvl1At:now, Lvl1By:currentUser.username, Lvl1Note:note, Lvl2At:now, Lvl2By:currentUser.username, Lvl2Note:'Elevado a Gerencia por '+currentUser.username};
+        await doAction(item, fields);
+        const updated = {...item, ...fields};
+        await notificar(updated,'📤 Enviada a Gerencia para aprobación',note,[ROLES_GERENTE[0], ROLES_ADMIN[0], item.RequesterMail]);
+        toast('Enviada a Gerencia — notificación enviada','success');
+        renderList(false);
+      });
+    });
     document.getElementById('btn-rejn1').addEventListener('click',()=>{
       approvalModal('Devolver al solicitante', async(note)=>{
         const updated = {...item, Status:S.REJ1, Lvl1At:isoNow(), Lvl1By:currentUser.username, Lvl1Note:note};
@@ -2536,6 +2547,19 @@ function renderDetail(item) {
           }
           renderList(false);
         }},{label:'Cancelar',cls:'btn-secondary'}]);
+    });
+    document.getElementById('btn-appn2-ger')?.addEventListener('click',()=>{
+      approvalModal('Enviar a Gerencia — Raúl López', async(note)=>{
+        const now = isoNow();
+        const _tcU = parseFloat(tcManual.usd_venta)||null;
+        const _tcE = parseFloat(tcManual.eur_venta)||null;
+        const fields = {Status:S.APP2, Lvl2At:now, Lvl2By:currentUser.username, Lvl2Note:'Enviado a Gerencia: '+note, TCusd:_tcU, TCeur:_tcE, TCDate:now.slice(0,10)};
+        await doAction(item, fields);
+        const updated = {...item, ...fields};
+        await notificar(updated,'📤 Autorizada — Pendiente aprobación Gerencia',note,[ROLES_GERENTE[0], item.RequesterMail]);
+        toast('Enviada a Gerencia — notificación enviada','success');
+        renderList(false);
+      });
     });
     document.getElementById('btn-rejn2').addEventListener('click',()=>{
       approvalModal('No autorizar — Compras', async(note)=>{
