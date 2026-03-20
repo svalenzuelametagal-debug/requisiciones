@@ -859,10 +859,11 @@ function buildMailHTML(item, accion, nota) {
 async function notificar(item, accion, nota, destinatarios) {
   const subj = `[Req. ${item.Title}] ${accion}`;
   try {
-    await sendMail(destinatarios, subj, buildMailHTML(item, accion, nota));
+    // Use sendMailWithAttachments for better token handling (forceRefresh)
+    await sendMailWithAttachments(destinatarios, subj, buildMailHTML(item, accion, nota));
   } catch(e) {
     console.error('notificar error:', e.message);
-    // Mail fallo, pero no interrumpir la accion principal
+    toast('⚠ No se pudo enviar el mail de notificación: ' + e.message, 'error');
   }
 }
 
