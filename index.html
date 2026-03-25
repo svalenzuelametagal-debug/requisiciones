@@ -2629,6 +2629,17 @@ function renderDetail(item) {
         const cfg = getCfg();
         for (const a of publicAttachments) {
           try {
+            // If we have the b64 cached (fresh upload), use it directly
+            if (a._b64) {
+              emailAttachments.push({
+                '@odata.type': '#microsoft.graph.fileAttachment',
+                name: a.name,
+                contentType: a.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'application/octet-stream',
+                contentBytes: a._b64
+              });
+              adjLines.push('<div style="margin:4px 0">📎 <span style="color:#0891b2;font-size:13px">' + escH(a.name) + '</span></div>');
+              continue;
+            }
             // Convert raw URL to GitHub API URL
             const rawUrl = a.webUrl || '';
             const match = rawUrl.match(/raw\.githubusercontent\.com\/([^/]+\/[^/]+)\/[^/]+\/(.*)/);
@@ -2646,8 +2657,13 @@ function renderDetail(item) {
                   const rawResp = await fetch(apiUrl, { headers: { Authorization: 'token ' + cfg.ghToken, Accept: 'application/vnd.github.raw' } });
                   if (rawResp.ok) {
                     const ab = await rawResp.arrayBuffer();
-                    const bytes = new Uint8Array(ab);
-                    let bin = ''; bytes.forEach(b => bin += String.fromCharCode(b));
+                    // Efficient base64 encoding for large files
+                    const bytes2 = new Uint8Array(ab);
+                    const chunkSize = 8192;
+                    let bin = '';
+                    for (let ci = 0; ci < bytes2.length; ci += chunkSize) {
+                      bin += String.fromCharCode(...bytes2.subarray(ci, ci + chunkSize));
+                    }
                     contentB64 = btoa(bin);
                   }
                 }
@@ -2856,7 +2872,7 @@ function renderDetail(item) {
             if (!rs.ok) throw new Error('GitHub ' + rs.status);
             const rd2 = await rs.json();
             const rawPath = (rd2.content && rd2.content.path) ? rd2.content.path : path;
-            ocAttach = {name: '📄 OC — ' + f.name, webUrl: 'https://raw.githubusercontent.com/' + cfg.ghRepo + '/main/' + rawPath, id: path};
+            ocAttach = {name: '📄 OC — ' + f.name, webUrl: 'https://raw.githubusercontent.com/' + cfg.ghRepo + '/main/' + rawPath, id: path, _b64: b64f};
             ocFileStatus.textContent = '✅ ' + f.name;
 
             ocFileStatus.textContent = '✅ ' + f.name;
