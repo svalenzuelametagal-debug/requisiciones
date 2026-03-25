@@ -2629,7 +2629,7 @@ function renderDetail(item) {
             const rawUrl = a.webUrl || '';
             const match = rawUrl.match(/raw\.githubusercontent\.com\/([^/]+\/[^/]+)\/[^/]+\/(.*)/);
             if (match && cfg.ghToken) {
-              const apiUrl = 'https://api.github.com/repos/' + match[1] + '/contents/' + match[2];
+              const apiUrl = 'https://api.github.com/repos/' + match[1] + '/contents/' + match[2].split('/').map(encodeURIComponent).join('/');
               const resp = await fetch(apiUrl, { headers: githubHeaders(cfg.ghToken) });
               if (resp.ok) {
                 const data = await resp.json();
