@@ -627,8 +627,20 @@ async function openAttachment(url, filename) {
     const res = await fetch(apiUrl, { headers: { Authorization: 'token ' + cfg.ghToken, Accept: 'application/vnd.github.v3+json' } });
     if (!res.ok) throw new Error('GitHub ' + res.status);
     const data = await res.json();
-    const b64 = data.content.replace(/\n/g, '');
-    const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+    let bytes;
+    if (data.content) {
+      // Normal case: content is base64
+      const b64 = data.content.replace(/\n/g, '');
+      bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+    } else if (data.download_url) {
+      // Large file: fetch via download_url
+      const dlRes = await fetch(data.download_url, { headers: { Authorization: 'token ' + cfg.ghToken } });
+      if (!dlRes.ok) throw new Error('Descarga fallida: ' + dlRes.status);
+      const ab = await dlRes.arrayBuffer();
+      bytes = new Uint8Array(ab);
+    } else {
+      throw new Error('No se pudo obtener el contenido del archivo');
+    }
     const ext = (filename || '').split('.').pop().toLowerCase();
     const mimeMap = { pdf:'application/pdf', png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg',
       gif:'image/gif', webp:'image/webp', heic:'image/heic', bmp:'image/bmp',
