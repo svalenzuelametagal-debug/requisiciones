@@ -613,47 +613,35 @@ function toRawUrl(url) {
 async function openAttachment(url, filename) {
   if (!url || url === '#') return;
   try {
-    // Extract path from github.com or raw.githubusercontent.com URL
-    let apiUrl;
     const blobMatch = url.match(/^https:\/\/github\.com\/([^/]+)\/([^/]+)\/blob\/([^/]+)\/(.+)$/);
     const rawMatch  = url.match(/^https:\/\/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\/(.+)$/);
     const match = blobMatch || rawMatch;
-    if (match) {
-      apiUrl = 'https://api.github.com/repos/' + match[1] + '/' + match[2] + '/contents/' + match[4];
-    } else {
-      window.open(url, '_blank'); return;
-    }
+    if (!match) { window.open(url, '_blank'); return; }
+
+    const apiUrl = 'https://api.github.com/repos/' + match[1] + '/' + match[2] + '/contents/' + match[4];
     const cfg = getCfg();
-    const res = await fetch(apiUrl, { headers: { Authorization: 'token ' + cfg.ghToken, Accept: 'application/vnd.github.v3+json' } });
-    if (!res.ok) throw new Error('GitHub ' + res.status);
-    const data = await res.json();
-    let bytes;
-    if (data.content) {
-      // Normal case: content is base64
-      const b64 = data.content.replace(/\n/g, '');
-      bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
-    } else if (data.download_url) {
-      // Archivo grande: usar API con Accept: application/vnd.github.raw
-      const rawRes = await fetch(apiUrl, {
-        headers: { Authorization: 'token ' + cfg.ghToken, Accept: 'application/vnd.github.raw' }
-      });
-      if (!rawRes.ok) throw new Error('Descarga fallida: ' + rawRes.status);
-      const ab = await rawRes.arrayBuffer();
-      bytes = new Uint8Array(ab);
-    } else {
-      throw new Error('No se pudo obtener el contenido del archivo');
-    }
-    const ext = (filename || '').split('.').pop().toLowerCase();
-    const mimeMap = { pdf:'application/pdf', png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg',
+    const ext = (filename || url).split('.').pop().toLowerCase();
+    const mimeMap = {
+      pdf:'application/pdf', png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg',
       gif:'image/gif', webp:'image/webp', heic:'image/heic', bmp:'image/bmp',
-      mp4:'video/mp4', mov:'video/quicktime', xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      mp4:'video/mp4', mov:'video/quicktime',
+      xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       xls:'application/vnd.ms-excel', doc:'application/msword',
-      docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
+      docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      eml:'message/rfc822'
+    };
     const mime = mimeMap[ext] || 'application/octet-stream';
-    const blob = new Blob([bytes], { type: mime });
+
+    // Try vnd.github.raw first — returns raw bytes directly, no base64 decoding needed
+    const rawRes = await fetch(apiUrl, {
+      headers: { Authorization: 'token ' + cfg.ghToken, Accept: 'application/vnd.github.raw' }
+    });
+    if (!rawRes.ok) throw new Error('GitHub ' + rawRes.status);
+    const ab = await rawRes.arrayBuffer();
+    const blob = new Blob([ab], { type: mime });
     const blobUrl = URL.createObjectURL(blob);
     window.open(blobUrl, '_blank');
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
   } catch(e) {
     toast('Error abriendo adjunto: ' + e.message, 'error');
   }
