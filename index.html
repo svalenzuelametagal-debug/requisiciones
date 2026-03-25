@@ -1405,7 +1405,22 @@ function renderList(approvalsMode=false) {
 
   function renderTable(am) {
     const wrap = document.getElementById('list-table-wrap');
-    const items = getFiltered(am);
+    let items = getFiltered(am);
+    // Sort
+    const col = renderList._sortCol;
+    const dir = renderList._sortDir;
+    items = [...items].sort((a,b)=>{
+      let va = a[col]||'', vb = b[col]||'';
+      // Numeric sort for dates and numbers
+      if (col==='CreatedAt'||col==='NeedBy'||col==='OCDate') {
+        va = va ? new Date(va).getTime() : 0;
+        vb = vb ? new Date(vb).getTime() : 0;
+      } else {
+        va = String(va).toLowerCase();
+        vb = String(vb).toLowerCase();
+      }
+      return va < vb ? -dir : va > vb ? dir : 0;
+    });
     document.getElementById('list-count').textContent = `${items.length} registro(s)`;
 
     // ── SEARCH PREVIEW (Outlook-style) ──────────────────────
@@ -1526,12 +1541,27 @@ function renderList(approvalsMode=false) {
       <div style="overflow-x:auto">
       <table>
         <thead><tr>
-          <th>N° Req.</th><th>Departamento</th><th>Solicitante</th><th>Urgencia</th><th>Estado</th><th>N° OC</th><th>Ítems</th><th>Fecha necesaria</th><th>Creada</th><th>Justificación</th><th></th>
+          ${[
+            ['Title','N° Req.'],['Dept','Departamento'],['RequesterName','Solicitante'],
+            ['Urgency','Urgencia'],['Status','Estado'],['OCNumber','N° OC'],
+            [null,'Ítems'],['NeedBy','Fecha nec.'],['CreatedAt','Creada'],['Justification','Justificación']
+          ].map(([col,label])=>col?`<th data-sort="${col}" style="cursor:pointer;user-select:none;white-space:nowrap">${label} ${renderList._sortCol===col?(renderList._sortDir>0?'↑':'↓'):'⇅'}</th>`:`<th>${label}</th>`).join('')}
+          <th></th>
         </tr></thead>
         <tbody id="list-tbody">${rows}</tbody>
       </table>
       </div>`;
     wrap.classList.remove('hidden');
+    // Wire sortable headers
+    wrap.querySelectorAll('th[data-sort]').forEach(th=>{
+      th.addEventListener('click',()=>{
+        const col = th.dataset.sort;
+        if (renderList._sortCol === col) renderList._sortDir *= -1;
+        else { renderList._sortCol = col; renderList._sortDir = -1; }
+        renderTable(am);
+      });
+    });
+
     wrap.querySelectorAll('.req-row').forEach(r=>{
       r.addEventListener('dblclick',()=>{
         const item = allItems.find(i=>i._id===r.dataset.id);
