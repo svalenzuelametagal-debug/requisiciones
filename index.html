@@ -921,13 +921,14 @@ async function fetchTC(force=false) {
   const badge = document.getElementById('tc-badge');
   if (badge) badge.textContent = 'TC: actualizando…';
 
-  // Verificar si ya tenemos TC del día de hoy — si es así no re-fetchar (salvo force=true)
+  // No re-fetchar si fue actualizado hace menos de 30 minutos (salvo force=true)
   if (!force) {
-    const today = new Date().toISOString().slice(0,10);
     try {
       const cached = JSON.parse(localStorage.getItem('mgal_tc')||'{}');
-      if (cached._date === today && cached.usd_venta) {
-        updateTCBadge(); return; // ya tenemos el TC de hoy
+      const lastFetch = cached._ts ? new Date(cached._ts).getTime() : 0;
+      const age = Date.now() - lastFetch;
+      if (cached.usd_venta && age < 30 * 60 * 1000) {
+        updateTCBadge(); return;
       }
     } catch(e){}
   }
@@ -972,6 +973,7 @@ async function fetchTC(force=false) {
         tcManual.usd_compra = result.usd_compra;
         tcManual.usd_venta  = result.usd_venta;
         tcManual._date = new Date().toISOString().slice(0,10);
+        tcManual._ts   = new Date().toISOString();
         try { localStorage.setItem('mgal_tc', JSON.stringify(tcManual)); } catch(e2){}
         ok = true;
         break;
@@ -989,8 +991,12 @@ function updateTCBadge() {
   const usdV = tcManual.usd_venta  ? `$${Number(tcManual.usd_venta).toLocaleString('es-AR',{minimumFractionDigits:2})}` : '—';
   const eurC = tcManual.eur_compra ? `€${Number(tcManual.eur_compra).toLocaleString('es-AR',{minimumFractionDigits:2})}` : '—';
   const eurV = tcManual.eur_venta  ? `€${Number(tcManual.eur_venta).toLocaleString('es-AR',{minimumFractionDigits:2})}` : '—';
-  badge.textContent = `USD C:${usdC} V:${usdV}${tcManual.eur_venta?` | EUR V:${eurV}`:''}`;
-  badge.title = `TC BNA Billete (clic para editar)\nUSD Compra: ${usdC} | USD Venta: ${usdV}\nEUR Compra: ${eurC} | EUR Venta: ${eurV}`;
+  const tsAgo = tcManual._ts ? (() => {
+    const mins = Math.round((Date.now() - new Date(tcManual._ts).getTime()) / 60000);
+    return mins < 1 ? 'ahora' : `hace ${mins} min`;
+  })() : '';
+  badge.textContent = `USD C:${usdC} V:${usdV}${tcManual.eur_venta?` | EUR V:${eurV}`:''}${tsAgo?' · '+tsAgo:''}`;
+  badge.title = `TC BNA Billete (clic para editar)\nUSD Compra: ${usdC} | USD Venta: ${usdV}\nEUR Compra: ${eurC} | EUR Venta: ${eurV}\nÚltima actualización: ${tcManual._ts?new Date(tcManual._ts).toLocaleTimeString('es-AR'):'—'}`;
 }
 
 function showTCEditor() {
@@ -4473,6 +4479,8 @@ async function initApp(account) {
 
   buildNav();
   fetchTC();
+  // Auto-actualizar TC cada 30 minutos
+  setInterval(() => { fetchTC(true); }, 30 * 60 * 1000);
 
   // Verificar inactividad en background (no bloquea UI)
   setTimeout(() => checkInactiveReqs(), 3000);
