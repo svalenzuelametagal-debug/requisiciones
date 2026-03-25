@@ -633,10 +633,12 @@ async function openAttachment(url, filename) {
       const b64 = data.content.replace(/\n/g, '');
       bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
     } else if (data.download_url) {
-      // Large file: fetch via download_url (sin Authorization - raw.githubusercontent.com no acepta CORS con ese header)
-      const dlRes = await fetch(data.download_url);
-      if (!dlRes.ok) throw new Error('Descarga fallida: ' + dlRes.status);
-      const ab = await dlRes.arrayBuffer();
+      // Archivo grande: usar API con Accept: application/vnd.github.raw
+      const rawRes = await fetch(apiUrl, {
+        headers: { Authorization: 'token ' + cfg.ghToken, Accept: 'application/vnd.github.raw' }
+      });
+      if (!rawRes.ok) throw new Error('Descarga fallida: ' + rawRes.status);
+      const ab = await rawRes.arrayBuffer();
       bytes = new Uint8Array(ab);
     } else {
       throw new Error('No se pudo obtener el contenido del archivo');
