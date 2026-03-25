@@ -2818,6 +2818,7 @@ function renderDetail(item) {
         // ── Análisis PDF antes de guardar OC ────────────────────────
         if (ocFileInput?.files?.length && typeof pdfjsLib !== 'undefined') {
           try {
+            toast('🔍 Analizando PDF contra la RC…', 'info');
             const pdfFile = ocFileInput.files[0];
             const arrayBuf2 = await pdfFile.arrayBuffer();
             const pdf2 = await pdfjsLib.getDocument({data: new Uint8Array(arrayBuf2)}).promise;
@@ -2841,7 +2842,9 @@ function renderDetail(item) {
               ocPdfItems.push({num:parseInt(im2[1]),desc:desc2,qty:parseFloat(im2[3]),price:parseFloat(im2[4])});
             }
             const rcItemsOC = parseLines(item.LinesJSON||'[]');
-            if (ocPdfItems.length && rcItemsOC.length) {
+            if (!ocPdfItems.length) {
+              toast('⚠ No se encontraron ítems en el PDF para comparar. Verificá que sea una NP de Metagal.', 'error');
+            } else if (ocPdfItems.length && rcItemsOC.length) {
               const diffs3=[]; const updates3=[];
               for(let i=0;i<Math.max(rcItemsOC.length,ocPdfItems.length);i++){
                 const rc=rcItemsOC[i]; const oc=ocPdfItems[i];
@@ -2883,7 +2886,7 @@ function renderDetail(item) {
                 toast('✅ PDF: cantidades y precios coinciden con la RC'+(npNum2?' ('+npNum2+')':''),'success');
               }
             }
-          } catch(pdfErr2){ console.warn('OC PDF analysis:',pdfErr2.message); }
+          } catch(pdfErr2){ console.warn('OC PDF analysis:',pdfErr2.message); toast('Error analizando PDF: '+pdfErr2.message,'error'); }
         }
 
         // Agregar OC a adjuntos existentes
