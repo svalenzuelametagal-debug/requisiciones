@@ -2624,17 +2624,21 @@ function renderDetail(item) {
         const emailAttachments = [];
         const adjLines = [];
         const cfg = getCfg();
+        // Force token from CFG if localStorage is empty (covers Nicolás and others)
+        const ghToken = cfg.ghToken || CFG.GH_TOKEN;
+        if (!ghToken) { toast('⚠ Sin token de GitHub — contactá a Santiago', 'error'); }
         toast('📎 Preparando adjuntos (' + publicAttachments.length + ')…', 'info');
         for (const a of publicAttachments) {
           adjLines.push('<div style="margin:4px 0">📎 <span style="color:#0891b2;font-size:13px">' + escH(a.name) + '</span></div>');
           try {
             const rawUrl = a.webUrl || '';
             const match = rawUrl.match(/raw\.githubusercontent\.com\/([^/]+\/[^/]+)\/[^/]+\/(.*)/);
-            if (!match || !cfg.ghToken) { console.warn('No match/token for', a.name); continue; }
+            if (!match) { console.warn('URL no reconocida:', rawUrl); continue; }
+            if (!ghToken) { console.warn('Sin token para:', a.name); continue; }
             const apiUrl = 'https://api.github.com/repos/' + match[1] + '/contents/' + match[2].split('/').map(encodeURIComponent).join('/');
             // Always use vnd.github.raw — works for any file size
-            const rawResp = await fetch(apiUrl, { headers: { Authorization: 'token ' + cfg.ghToken, Accept: 'application/vnd.github.raw' } });
-            if (!rawResp.ok) { console.warn('Fetch failed', rawResp.status, a.name); continue; }
+            const rawResp = await fetch(apiUrl, { headers: { Authorization: 'token ' + ghToken, Accept: 'application/vnd.github.raw' } });
+            if (!rawResp.ok) { toast('⚠ No se pudo descargar: ' + a.name + ' (HTTP ' + rawResp.status + ')', 'error'); continue; }
             const ab = await rawResp.arrayBuffer();
             const bytes = new Uint8Array(ab);
             const chunkSize = 8192;
