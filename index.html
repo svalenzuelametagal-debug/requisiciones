@@ -2624,65 +2624,29 @@ function renderDetail(item) {
         const emailAttachments = [];
         const adjLines = [];
         const cfg = getCfg();
+        toast('📎 Preparando adjuntos (' + publicAttachments.length + ')…', 'info');
         for (const a of publicAttachments) {
+          adjLines.push('<div style="margin:4px 0">📎 <span style="color:#0891b2;font-size:13px">' + escH(a.name) + '</span></div>');
           try {
-            // If we have the b64 cached (fresh upload), use it directly
-            if (a._b64) {
-              emailAttachments.push({
-                '@odata.type': '#microsoft.graph.fileAttachment',
-                name: a.name,
-                contentType: a.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'application/octet-stream',
-                contentBytes: a._b64
-              });
-              adjLines.push('<div style="margin:4px 0">📎 <span style="color:#0891b2;font-size:13px">' + escH(a.name) + '</span></div>');
-              continue;
-            }
-            // Convert raw URL to GitHub API URL
             const rawUrl = a.webUrl || '';
             const match = rawUrl.match(/raw\.githubusercontent\.com\/([^/]+\/[^/]+)\/[^/]+\/(.*)/);
-            if (match && cfg.ghToken) {
-              const apiUrl = 'https://api.github.com/repos/' + match[1] + '/contents/' + match[2].split('/').map(encodeURIComponent).join('/');
-              const resp = await fetch(apiUrl, { headers: githubHeaders(cfg.ghToken) });
-              if (resp.ok) {
-                const data = await resp.json();
-                let contentB64;
-                if (data.content) {
-                  // Small file: base64 content inline
-                  contentB64 = data.content.replace(/\n/g,'');
-                } else if (data.download_url || data.size > 0) {
-                  // Large file: fetch raw bytes and convert to base64
-                  const rawResp = await fetch(apiUrl, { headers: { Authorization: 'token ' + cfg.ghToken, Accept: 'application/vnd.github.raw' } });
-                  if (rawResp.ok) {
-                    const ab = await rawResp.arrayBuffer();
-                    // Efficient base64 encoding for large files
-                    const bytes2 = new Uint8Array(ab);
-                    const chunkSize = 8192;
-                    let bin = '';
-                    for (let ci = 0; ci < bytes2.length; ci += chunkSize) {
-                      bin += String.fromCharCode(...bytes2.subarray(ci, ci + chunkSize));
-                    }
-                    contentB64 = btoa(bin);
-                  }
-                }
-                if (contentB64) {
-                  emailAttachments.push({
-                    '@odata.type': '#microsoft.graph.fileAttachment',
-                    name: a.name,
-                    contentType: a.name.endsWith('.pdf') ? 'application/pdf'
-                      : a.name.match(/\.(doc|docx)$/i) ? 'application/msword'
-                      : a.name.match(/\.(xls|xlsx)$/i) ? 'application/vnd.ms-excel'
-                      : a.name.match(/\.(png|jpg|jpeg)$/i) ? 'image/'+a.name.split('.').pop().toLowerCase()
-                      : 'application/octet-stream',
-                    contentBytes: contentB64
-                  });
-                }
-                adjLines.push('<div style="margin:4px 0">📎 <span style="color:#0891b2;font-size:13px">' + escH(a.name) + '</span></div>');
-                continue;
-              }
+            if (!match || !cfg.ghToken) { console.warn('No match/token for', a.name); continue; }
+            const apiUrl = 'https://api.github.com/repos/' + match[1] + '/contents/' + match[2].split('/').map(encodeURIComponent).join('/');
+            // Always use vnd.github.raw — works for any file size
+            const rawResp = await fetch(apiUrl, { headers: { Authorization: 'token ' + cfg.ghToken, Accept: 'application/vnd.github.raw' } });
+            if (!rawResp.ok) { console.warn('Fetch failed', rawResp.status, a.name); continue; }
+            const ab = await rawResp.arrayBuffer();
+            const bytes = new Uint8Array(ab);
+            const chunkSize = 8192;
+            let bin = '';
+            for (let ci = 0; ci < bytes.length; ci += chunkSize) {
+              bin += String.fromCharCode(...bytes.subarray(ci, ci + chunkSize));
             }
-          } catch(fetchErr) { console.warn('Attachment fetch error:', fetchErr.message); }
-          // Fallback: just show name
-          adjLines.push('<div style="margin:4px 0">📎 <span style="color:#999;font-size:13px">' + escH(a.name) + ' (no disponible)</span></div>');
+            const contentB64 = btoa(bin);
+            const ext = a.name.split('.').pop().toLowerCase();
+            const mime = {pdf:'application/pdf',doc:'application/msword',docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',xls:'application/vnd.ms-excel',xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',gif:'image/gif'}[ext] || 'application/octet-stream';
+            emailAttachments.push({'@odata.type':'#microsoft.graph.fileAttachment', name:a.name, contentType:mime, contentBytes:contentB64});
+          } catch(fetchErr) { console.warn('Attachment error:', a.name, fetchErr.message); }
         }
         const adj = adjLines.length ? adjLines.join('') : '<p style="color:#999;font-size:12px">Sin adjuntos</p>';
         const senderName = String(currentUser?.name||currentUser?.username||'Compras').normalize('NFC');
@@ -2869,7 +2833,7 @@ function renderDetail(item) {
             if (!rs.ok) throw new Error('GitHub ' + rs.status);
             const rd2 = await rs.json();
             const rawPath = (rd2.content && rd2.content.path) ? rd2.content.path : path;
-            ocAttach = {name: '📄 OC — ' + f.name, webUrl: 'https://raw.githubusercontent.com/' + cfg.ghRepo + '/main/' + rawPath, id: path, _b64: b64f};
+            ocAttach = {name: '📄 OC — ' + f.name, webUrl: 'https://raw.githubusercontent.com/' + cfg.ghRepo + '/main/' + rawPath, id: path};
             ocFileStatus.textContent = '✅ ' + f.name;
 
             ocFileStatus.textContent = '✅ ' + f.name;
