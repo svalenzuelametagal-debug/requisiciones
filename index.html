@@ -2619,7 +2619,11 @@ function renderDetail(item) {
         const msg = document.getElementById('oc-msg').value.trim();
         // Adjuntos internos (🔒) nunca se adjuntan al mail
         // Los usuarios internos acceden via el link de la RC incluido en el cuerpo del mail
-        const publicAttachments = attachments.filter(a => !a.internal);
+        // Re-read attachments including the OC PDF just uploaded
+        const allCurrentAttach = ocAttach
+          ? [...attachments.filter(a=>!a.internal), ocAttach]
+          : attachments.filter(a=>!a.internal);
+        const publicAttachments = allCurrentAttach;
         const emailAttachments = [];
         const adjLines = [];
         const cfg = getCfg();
