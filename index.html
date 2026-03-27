@@ -2872,18 +2872,18 @@ function renderDetail(item) {
             }
             const npM = pdfText.match(/NOTA DE PEDIDO\s*No\.?\s*0*(\d+)/i);
             const npNum2 = npM ? 'NP '+npM[1] : '';
-            // Extract first delivery date from PDF (dd/mm/yyyy format in item lines)
+            // Extract delivery date: in Metagal NPs the emission date appears first,
+            // then each item has its own delivery date. Take the LAST distinct date.
             const dateMatches = pdfText.match(/\b(\d{2}[\/\-]\d{2}[\/\-]\d{4})\b/g);
             const pdfDelivery = dateMatches ? (()=>{
-              // Skip the emission date (usually first), take the delivery date from item lines
-              for (const d of dateMatches) {
-                const parts = d.split(/[\/\-]/);
-                if (parts.length===3) {
-                  const iso = parts[2]+'-'+parts[1]+'-'+parts[0];
-                  if (iso > new Date().toISOString().slice(0,10)) return iso; // future date = delivery
-                }
+              const isoDate = d => { const p=d.split(/[\/\-]/); return p.length===3?p[2]+'-'+p[1]+'-'+p[0]:''; };
+              const allDates = [...new Set(dateMatches.map(isoDate).filter(Boolean))].sort();
+              const ocIso = isoDate(date); // OC emission date
+              // Return the latest date that is not the emission date
+              for (let i=allDates.length-1; i>=0; i--) {
+                if (allDates[i] !== ocIso && allDates[i] >= '2024-01-01') return allDates[i];
               }
-              return '';
+              return allDates[allDates.length-1] || '';
             })() : '';
             const itemRx2 = /^\s*(\d+)\s+(?:\d+\s+)?(.+?)\s+(\d+(?:\.\d+)?)\s+\d{2}[\/\-]\d{2}[\/\-]\d{4}\s+([\d.]+)/gm;
             const ocPdfItems = []; let im2;
