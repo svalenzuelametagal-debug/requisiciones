@@ -1532,6 +1532,7 @@ function renderList(approvalsMode=false) {
         <td style="font-family:var(--mono);font-size:12px;color:var(--accent2)">${i.OCNumber||'\u2014'}</td>
         <td>${lines.length} ítem(s)</td>
         <td>${fmt(i.NeedBy)}</td>
+        <td>${i.DeliveryDate?`<span style="color:var(--green);font-weight:600">${fmt(i.DeliveryDate)}</span>`:'—'}</td>
         <td>${fmt(i.CreatedAt)}</td>
         <td class="text-muted" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escH(i.Justification).substring(0,60)}</td>
         <td style="white-space:nowrap">
@@ -1547,7 +1548,7 @@ function renderList(approvalsMode=false) {
           ${[
             ['Title','N° Req.'],['Dept','Departamento'],['RequesterName','Solicitante'],
             ['Urgency','Urgencia'],['Status','Estado'],['OCNumber','N° OC'],
-            [null,'Ítems'],['NeedBy','Fecha nec.'],['CreatedAt','Creada'],['Justification','Justificación']
+            [null,'Ítems'],['NeedBy','Fecha nec.'],['DeliveryDate','📅 Entrega OC'],['CreatedAt','Creada'],['Justification','Justificación']
           ].map(([col,label])=>col?`<th data-sort="${col}" style="cursor:pointer;user-select:none;white-space:nowrap">${label} ${renderList._sortCol===col?(renderList._sortDir>0?'↑':'↓'):'⇅'}</th>`:`<th>${label}</th>`).join('')}
           <th></th>
         </tr></thead>
@@ -2871,11 +2872,24 @@ function renderDetail(item) {
             }
             const npM = pdfText.match(/NOTA DE PEDIDO\s*No\.?\s*0*(\d+)/i);
             const npNum2 = npM ? 'NP '+npM[1] : '';
+            // Extract first delivery date from PDF (dd/mm/yyyy format in item lines)
+            const dateMatches = pdfText.match(/\b(\d{2}[\/\-]\d{2}[\/\-]\d{4})\b/g);
+            const pdfDelivery = dateMatches ? (()=>{
+              // Skip the emission date (usually first), take the delivery date from item lines
+              for (const d of dateMatches) {
+                const parts = d.split(/[\/\-]/);
+                if (parts.length===3) {
+                  const iso = parts[2]+'-'+parts[1]+'-'+parts[0];
+                  if (iso > new Date().toISOString().slice(0,10)) return iso; // future date = delivery
+                }
+              }
+              return '';
+            })() : '';
             const itemRx2 = /^\s*(\d+)\s+(?:\d+\s+)?(.+?)\s+(\d+(?:\.\d+)?)\s+\d{2}[\/\-]\d{2}[\/\-]\d{4}\s+([\d.]+)/gm;
             const ocPdfItems = []; let im2;
             while((im2=itemRx2.exec(pdfText))!==null){
               let desc2=im2[2].trim().replace(/\s+(PIEZA|UN|KG|LT|MT|M2|SET|JGO|PAR|LTS|CJ|PC|BOX)\s*(?:\(NO\s*FRACCION\.?\))?\s*$/i,'').trim();
-              ocPdfItems.push({num:parseInt(im2[1]),desc:desc2,qty:parseFloat(im2[3]),price:parseFloat(im2[4])});
+              ocPdfItems.push({num:parseInt(im[1]),desc:desc2,qty:parseFloat(im2[3]),price:parseFloat(im2[4])});
             }
             const rcItemsOC = parseLines(item.LinesJSON||'[]');
             if (!ocPdfItems.length) {
