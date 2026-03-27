@@ -838,6 +838,7 @@ function buildMailHTML(item, accion, nota) {
           ${item.NeedBy?`<tr><td style="padding:5px 0;color:#888;font-size:12px">Fecha necesaria</td><td style="padding:5px 0;font-size:13px">${fmt(item.NeedBy)}</td></tr>`:''}
           ${item.OCNumber?`<tr><td style="padding:5px 0;color:#888;font-size:12px">N° OC</td><td style="padding:5px 0;font-weight:700;font-family:monospace;color:#e8a020">${item.OCNumber}</td></tr>`:''}
           ${item.Buyer?`<tr><td style="padding:5px 0;color:#888;font-size:12px">Comprador</td><td style="padding:5px 0;font-size:13px">${item.Buyer}</td></tr>`:''}
+          ${item.DeliveryDate?`<tr><td style="padding:5px 0;color:#888;font-size:12px">📅 Entrega estimada</td><td style="padding:5px 0;font-size:13px;font-weight:700;color:#2ea86b">${fmt(item.DeliveryDate)}</td></tr>`:''}
         </table>
       </div>
       <div style="font-size:13px;font-weight:700;color:#444;margin-bottom:8px">Justificación</div>
@@ -1156,6 +1157,7 @@ function mapItem(raw) {
     OCNumber:     raw.OCNumber||'',
     OCDate:       raw.OCDate||'',
     Buyer:        raw.Buyer||'',
+    DeliveryDate: raw.DeliveryDate||'',
     CreatedAt:    raw.CreatedAt||'',
     UpdatedAt:    raw.UpdatedAt||'',
   };
@@ -2182,6 +2184,7 @@ function renderDetail(item) {
       <div class="oc-box">
         <div class="detail-row"><span class="detail-label">N° OC:</span><span class="detail-value num">${escH(item.OCNumber)}</span></div>
         <div class="detail-row"><span class="detail-label">Fecha OC:</span><span class="detail-value">${fmt(item.OCDate)}</span></div>
+        ${item.DeliveryDate?`<div class="detail-row"><span class="detail-label">📅 Entrega estimada:</span><span class="detail-value" style="color:var(--green);font-weight:700">${fmt(item.DeliveryDate)}</span></div>`:''}
         <div class="detail-row"><span class="detail-label">Comprador:</span><span class="detail-value">${escH(item.Buyer)}</span></div>
       </div>
     </div>` : '';
@@ -2798,6 +2801,7 @@ function renderDetail(item) {
       showModal(`
         <div class="form-group mb-3"><label>N° Orden de Compra *</label><input type="text" id="oc-num" value="${suggestedOC}" placeholder="OC-2025-0001"/></div>
         <div class="form-group mb-3"><label>Fecha OC</label><input type="date" id="oc-date" value="${now}"/></div>
+        <div class="form-group mb-3"><label>📅 Fecha estimada de entrega (opcional)</label><input type="date" id="oc-delivery" value="${item.NeedBy||''}"/></div>
         <div class="form-group mb-3"><label>Comprador *</label><input type="text" id="oc-buyer" value="${currentUser.name||currentUser.username}"/></div>
         <div class="form-group mb-3"><label>Cuenta Contable (GL) *</label><input type="text" id="oc-gl" value="${escH(item.GLAccount||'')}" placeholder="Ej: 6.1.01.001"/></div>
         <div class="form-group mb-3"><label>Observaciones OC (opcional)</label><textarea id="oc-obs" rows="2" placeholder="Notas adicionales sobre la OC…"></textarea></div>
@@ -2928,11 +2932,13 @@ function renderDetail(item) {
         // Congelar TC del día al emitir la OC
         const tcOCusd = tcManual.usd_venta || null;
         const tcOCeur = tcManual.eur_venta || null;
+        const delivery = document.getElementById('oc-delivery')?.value || '';
         const fields = {Status:S.OC, OCNumber:num, OCDate:date, Buyer:buyer, GLAccount:gl,
           Lvl2At:item.Lvl2At||isoNow(), Lvl2By:item.Lvl2By||currentUser.username,
           Lvl2Note:obs||item.Lvl2Note||'',
           TCusd: tcOCusd, TCeur: tcOCeur, TCDate: date,
           LinesJSON: item.LinesJSON,
+          DeliveryDate: delivery || item.NeedBy || '',
           AttachmentsJSON: JSON.stringify(existingAttach)};
         await doAction(item, fields);
         const updated = {...item, ...fields};
