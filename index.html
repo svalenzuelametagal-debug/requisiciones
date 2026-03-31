@@ -367,6 +367,71 @@ tr:hover td{background:var(--bg2)}
   #header{flex-wrap:wrap;height:auto;padding:10px 16px;gap:8px}
   #main{padding:12px}
 }
+
+/* ── CAMPANITA ─────────────────────────────── */
+#notif-bell-btn {
+  position: relative;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 20px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  transition: background .15s;
+  line-height: 1;
+}
+#notif-bell-btn:hover { background: var(--bg3); }
+#notif-badge {
+  position: absolute;
+  top: -2px; right: -2px;
+  background: var(--red);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 10px;
+  padding: 1px 5px;
+  min-width: 16px;
+  text-align: center;
+  line-height: 1.4;
+  display: none;
+}
+#notif-panel {
+  position: fixed;
+  top: 56px; right: 12px;
+  width: 360px;
+  max-height: 480px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.5);
+  z-index: 2000;
+  overflow: hidden;
+  display: none;
+}
+#notif-panel.open { display: flex; flex-direction: column; }
+.notif-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 700; font-size: 13px;
+}
+.notif-list { overflow-y: auto; flex: 1; }
+.notif-item {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background .15s;
+  font-size: 12px;
+}
+.notif-item:hover { background: var(--bg3); }
+.notif-item.unread { border-left: 3px solid var(--accent); }
+.notif-icon { font-size: 18px; margin-top: 1px; flex-shrink: 0; }
+.notif-text { flex: 1; }
+.notif-title { font-weight: 700; color: var(--text0); margin-bottom: 2px; }
+.notif-sub { color: var(--text2); line-height: 1.4; }
+.notif-empty { padding: 32px; text-align: center; color: var(--text2); font-size: 13px; }
+
 </style>
 </head>
 <body>
@@ -1070,6 +1135,136 @@ function showTCEditor() {
   ]);
 }
 
+
+// ================================================================
+// CAMPANITA DE NOTIFICACIONES
+// ================================================================
+let _notifItems = [];
+
+function buildNotifications(items) {
+  const notifs = [];
+  const now = Date.now();
+  const username = currentUser?.username || '';
+
+  items.forEach(item => {
+    // Para admin/approver: RCs pendientes de acción
+    if (userRole === 'admin' || userRole === 'approver') {
+      if (item.Status === 'Pendiente revisión') {
+        const age = Math.round((now - new Date(item.SubmittedAt||item.CreatedAt).getTime()) / 3600000);
+        notifs.push({
+          id: 'sent_' + item._id,
+          icon: '📋',
+          title: item.Title + ' — Pendiente revisión',
+          sub: item.Dept + ' · ' + item.RequesterName + (age > 2 ? ' · hace ' + age + 'h' : ''),
+          urgent: age > 24,
+          item
+        });
+      }
+      if ((userRole === 'admin') && item.Status === 'Revisada · En gestión') {
+        notifs.push({
+          id: 'app1_' + item._id,
+          icon: '✅',
+          title: item.Title + ' — Lista para autorizar',
+          sub: item.Dept + ' · ' + item.RequesterName,
+          urgent: false,
+          item
+        });
+      }
+    }
+
+    // Para gerente: pendientes de su aprobación
+    if (userRole === 'gerente' && item.Status === 'Autorizada · Pendiente Gerencia') {
+      notifs.push({id:'ger_'+item._id, icon:'🏢', title:item.Title+' — Requiere tu aprobación', sub:item.Dept+' · '+item.RequesterName, urgent:true, item});
+    }
+
+    // Para todos: sus propias RCs con novedades
+    if (item.RequesterMail === username) {
+      if (item.Status === 'Devuelta por Compras' || item.Status === 'No autorizada' || item.Status === 'No autorizada por Gerencia') {
+        notifs.push({id:'rej_'+item._id, icon:'↩', title:item.Title+' — Devuelta/rechazada', sub:(item.Lvl1Note||item.Lvl2Note||'Sin nota').substring(0,60), urgent:true, item});
+      }
+      if (item.Status === 'OC Asignada' && item.DeliveryDate) {
+        const daysUntil = Math.round((new Date(item.DeliveryDate)-now)/86400000);
+        if (daysUntil >= 0 && daysUntil <= 3) {
+          notifs.push({id:'del_'+item._id, icon:'📦', title:item.Title+' — Entrega en '+daysUntil+'d', sub:'OC: '+item.OCNumber+' · '+item.SelectedVendor, urgent:daysUntil===0, item});
+        }
+      }
+    }
+
+    // Fechas de entrega vencidas (admin/approver ven todas)
+    if ((userRole==='admin'||userRole==='approver') && item.Status==='OC Asignada' && item.DeliveryDate) {
+      const daysUntil = Math.round((new Date(item.DeliveryDate)-now)/86400000);
+      if (daysUntil < 0 && daysUntil > -7) {
+        notifs.push({id:'late_'+item._id, icon:'⏰', title:item.Title+' — Entrega vencida hace '+Math.abs(daysUntil)+'d', sub:item.RequesterName+' · '+item.OCNumber, urgent:true, item});
+      }
+    }
+  });
+
+  // Sort: urgent first, then by title
+  notifs.sort((a,b) => (b.urgent?1:0)-(a.urgent?1:0));
+  return notifs;
+}
+
+function renderNotifPanel() {
+  const notifs = buildNotifications(allItems);
+  const readIds = JSON.parse(localStorage.getItem('mgal_notif_read')||'[]');
+  const badge = document.getElementById('notif-badge');
+  const list = document.getElementById('notif-list');
+  if (!badge || !list) return;
+
+  const unread = notifs.filter(n => !readIds.includes(n.id));
+  badge.textContent = unread.length || '';
+  badge.style.display = unread.length ? 'block' : 'none';
+
+  if (!notifs.length) {
+    list.innerHTML = '<div class="notif-empty">🎉 Sin notificaciones pendientes</div>';
+    return;
+  }
+
+  list.innerHTML = notifs.map(n => {
+    const isUnread = !readIds.includes(n.id);
+    return `<div class="notif-item${isUnread?' unread':''}${n.urgent?' '+(n.icon==='⏰'||n.icon==='↩'?'':''): ''}" data-id="${n.id}" data-reqid="${n.item._id}">
+      <div class="notif-icon">${n.icon}</div>
+      <div class="notif-text">
+        <div class="notif-title">${n.title}</div>
+        <div class="notif-sub">${n.sub}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Wire clicks
+  list.querySelectorAll('.notif-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const item = allItems.find(i => i._id === el.dataset.reqid);
+      if (item) { renderDetail(item); showView('detail'); }
+      document.getElementById('notif-panel').classList.remove('open');
+      // Mark as read
+      const ids = JSON.parse(localStorage.getItem('mgal_notif_read')||'[]');
+      if (!ids.includes(el.dataset.id)) { ids.push(el.dataset.id); localStorage.setItem('mgal_notif_read', JSON.stringify(ids.slice(-200))); }
+      renderNotifPanel();
+    });
+  });
+}
+
+function initNotifBell() {
+  const btn = document.getElementById('notif-bell-btn');
+  const panel = document.getElementById('notif-panel');
+  if (!btn || !panel) return;
+  btn.addEventListener('click', e => {
+    e.stopPropagation();
+    panel.classList.toggle('open');
+    if (panel.classList.contains('open')) renderNotifPanel();
+  });
+  document.addEventListener('click', e => {
+    if (!panel.contains(e.target) && e.target !== btn) panel.classList.remove('open');
+  });
+  document.getElementById('notif-mark-all')?.addEventListener('click', () => {
+    const notifs = buildNotifications(allItems);
+    const ids = notifs.map(n=>n.id);
+    localStorage.setItem('mgal_notif_read', JSON.stringify(ids));
+    renderNotifPanel();
+  });
+}
+
 // ================================================================
 // TOAST
 // ================================================================
@@ -1392,6 +1587,7 @@ function renderList(approvalsMode=false) {
         }
       }
       renderTable(approvalsMode);
+      renderNotifPanel();
     } catch(e) {
       toast('Error cargando requisiciones: '+e.message,'error');
     } finally {
@@ -4562,6 +4758,7 @@ async function initApp(account) {
 
   buildNav();
   fetchTC();
+  initNotifBell();
   // Auto-actualizar TC cada 30 minutos
   setInterval(() => { fetchTC(true); }, 30 * 60 * 1000);
 
