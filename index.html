@@ -1350,6 +1350,7 @@ function mapItem(raw) {
     Justification:fixEncoding(raw.Justification||''),
     Vendor:       fixEncoding(raw.Vendor||''),
     VendorMail:   raw.VendorMail||'',
+    AltVendor:    fixEncoding(raw.AltVendor||''),
     NeedBy:       raw.NeedBy||'',
     Status:       _normalizeStatus(raw.Status)||S.DRAFT,
     LinesJSON:    raw.LinesJSON||'[]',
@@ -1383,6 +1384,9 @@ function mapItem(raw) {
     DeliveryDate: raw.DeliveryDate||'',
     CreatedAt:    raw.CreatedAt||'',
     UpdatedAt:    raw.UpdatedAt||'',
+    ItemHistoryJSON: raw.ItemHistoryJSON||'[]',
+    ReceivedAt:   raw.ReceivedAt||'',
+    ReceivedNote: raw.ReceivedNote||'',
   };
 }
 
@@ -1407,6 +1411,29 @@ function canEditDraft(item) {
   // Gerente puede editar sus propias RCs antes de que lleguen a su aprobación
   if (userRole === 'gerente' && isOwner && [S.DRAFT, S.SENT, S.APP1].includes(st)) return true;
   return false;
+}
+
+
+function exportDashboardExcel(items) {
+  if (!items.length) { toast('Sin datos para exportar','error'); return; }
+  const rows = items.map(i => ({
+    'N° RC': i.Title,
+    'Departamento': i.Dept,
+    'Solicitante': i.RequesterName,
+    'Estado': i.Status,
+    'Urgencia': i.Urgency,
+    'Proveedor': i.SelectedVendor||i.Vendor||'',
+    'N° OC': i.OCNumber||'',
+    'Cuenta GL': i.GLAccount||'',
+    'Justificación': i.Justification||'',
+    'Creada': fmtDT(i.CreatedAt),
+    'Entrega OC': i.DeliveryDate?fmt(i.DeliveryDate):'',
+    'Recibido': i.ReceivedAt?fmtDT(i.ReceivedAt):'',
+    'ARS': parseLines(i.LinesJSON||'[]').filter(l=>l.currency==='ARS').reduce((s,l)=>s+(l.qty||0)*(l.price||0),0),
+    'USD': parseLines(i.LinesJSON||'[]').filter(l=>l.currency==='USD').reduce((s,l)=>s+(l.qty||0)*(l.price||0),0),
+  }));
+  exportCSV(rows, 'Metagal_RC_' + new Date().toISOString().slice(0,10) + '.csv');
+  toast('✅ CSV descargado','success');
 }
 
 function exportCSV(rows, filename) {
@@ -1588,6 +1615,7 @@ function renderList(approvalsMode=false) {
       }
       renderTable(approvalsMode);
       renderNotifPanel();
+      checkStaleRC();
     } catch(e) {
       toast('Error cargando requisiciones: '+e.message,'error');
     } finally {
@@ -2178,7 +2206,18 @@ function renderForm(item) {
       const allAttach = [...existAtt, ...newFiles];
       const now = isoNow();
       const reqGer = document.getElementById('f-req-ger')?.checked || false;
-      const fields = {
+      // Track item changes
+        let itemHistory = [];
+        if (isEdit && item?.LinesJSON) {
+          const oldLines = parseLines(item.LinesJSON);
+          const newLines = v.lines;
+          if (JSON.stringify(oldLines) !== JSON.stringify(newLines)) {
+            const prev = JSON.parse(item.ItemHistoryJSON||'[]');
+            prev.push({when:isoNow(),by:currentUser?.username||'',snap:item.LinesJSON});
+            itemHistory = prev.slice(-5); // keep last 5 versions
+          }
+        }
+        const fields = {
         Title:           reqNum,
         Dept:            v.dept,
         RequesterName:   fixEncoding(v.name||''),
@@ -2210,6 +2249,7 @@ function renderForm(item) {
           return send ? S.SENT : S.DRAFT;
         })(),
         LinesJSON:       JSON.stringify(v.lines),
+        ...(itemHistory.length?{ItemHistoryJSON:JSON.stringify(itemHistory)}:{}),
         AttachmentsJSON: JSON.stringify(allAttach),
         UpdatedAt:       now,
       };
@@ -2345,6 +2385,7 @@ function renderDetail(item) {
   const canApproveFin = (userRole==='finanzas'||userRole==='admin') && item.Status===S.APPGER;
   const canAssignOC   = (userRole==='admin'||userRole==='approver') && [S.APPFIN, S.APP2NOGER].includes(item.Status);
   const canReopen     = userRole==='admin' && [S.REJ1,S.REJ2,S.REJGER,S.REJFIN].includes(item.Status);
+  const canMarkReceived = item.Status===S.OC && !item.ReceivedAt && item.RequesterMail===currentUser?.username;
   const canCorrect    = [S.REJ1,S.REJ2,S.REJGER,S.REJFIN].includes(item.Status) && item.RequesterMail===currentUser?.username;
 
   // Line items table
@@ -2409,7 +2450,8 @@ function renderDetail(item) {
       <div class="oc-box">
         <div class="detail-row"><span class="detail-label">N° OC:</span><span class="detail-value num">${escH(item.OCNumber)}</span></div>
         <div class="detail-row"><span class="detail-label">Fecha OC:</span><span class="detail-value">${fmt(item.OCDate)}</span></div>
-        ${item.DeliveryDate?`<div class="detail-row"><span class="detail-label">📅 Entrega estimada:</span><span class="detail-value" style="color:var(--green);font-weight:700">${fmt(item.DeliveryDate)}</span></div>`:''}
+        ${item.ReceivedAt?`<div class="detail-row"><span class="detail-label">✅ Recibido:</span><span class="detail-value" style="color:var(--green)">${fmtDT(item.ReceivedAt)}${item.ReceivedNote?' — '+escH(item.ReceivedNote):''}</span></div>`:''}
+            ${item.DeliveryDate?`<div class="detail-row"><span class="detail-label">📅 Entrega estimada:</span><span class="detail-value" style="color:var(--green);font-weight:700">${fmt(item.DeliveryDate)}</span></div>`:''}
         <div class="detail-row"><span class="detail-label">Comprador:</span><span class="detail-value">${escH(item.Buyer)}</span></div>
       </div>
     </div>` : '';
@@ -2436,7 +2478,7 @@ function renderDetail(item) {
             <div class="detail-row"><span class="detail-label">Mail:</span><span class="detail-value">${escH(item.RequesterMail)}</span></div>
             <div class="detail-row"><span class="detail-label">Cuenta GL:</span><span class="detail-value">${escH(item.GLAccount)||'—'}${item.GLCorregido?` <span style="font-size:11px;color:var(--yellow);background:rgba(212,160,23,.15);padding:1px 6px;border-radius:10px">corregido por Gerencia</span>`:''}</span>${(userRole==='gerente'||userRole==='admin')?`<button id="btn-edit-gl" style="margin-left:8px;background:none;border:1px solid var(--text2);border-radius:4px;padding:1px 8px;font-size:11px;cursor:pointer;color:var(--text2)">✏ editar GL</button>`:''}  </div>
             <div class="detail-row"><span class="detail-label">Centro de Costo:</span><span class="detail-value">${escH(item.CostCenter)||'—'}</span></div>
-            <div class="detail-row"><span class="detail-label">Proveedor sugerido:</span><span class="detail-value">${escH(item.Vendor)||'—'}</span></div>
+            <div class="detail-row"><span class="detail-label">Proveedor sugerido:</span><span class="detail-value">${escH(item.Vendor)||'—'}${item.AltVendor?` <span style="font-size:11px;color:var(--text2)">/ Alt: ${escH(item.AltVendor)}</span>`:''}</span></div>
               ${item.SelectedVendor?`<div class="detail-row"><span class="detail-label" style="color:var(--green)">✔ Proveedor seleccionado:</span><span class="detail-value" style="color:var(--green);font-weight:600">${escH(item.SelectedVendor)}</span></div>`:''}
               ${item.VendorCriteria?`<div class="detail-row"><span class="detail-label">Criterio de selección:</span><span class="detail-value">${escH(item.VendorCriteria)}</span></div>`:''}
               ${item.TCusd?`<div class="detail-row"><span class="detail-label" style="color:var(--text2)">🔒 TC al emitir OC${item.TCDate?' ('+item.TCDate+')':''}:</span><span class="detail-value" style="font-family:var(--mono);font-size:12px;color:var(--accent)">USD $${Number(item.TCusd).toLocaleString('es-AR',{minimumFractionDigits:2})}${item.TCeur?' | EUR $'+Number(item.TCeur).toLocaleString('es-AR',{minimumFractionDigits:2}):''} <span style="font-size:10px;color:var(--text2)">(congelado)</span></span></div>`:''}
@@ -2582,6 +2624,16 @@ function renderDetail(item) {
       }},
       {label:'Cancelar', cls:'btn-secondary'}]
     );
+  });
+
+  document.getElementById('btn-mark-received')?.addEventListener('click',()=>{
+    approvalModal('Confirmar recepción del material', async(note)=>{
+      const fields={ReceivedAt:isoNow(),ReceivedNote:note,UpdatedAt:isoNow()};
+      await doAction(item,fields);
+      await notificar({...item,...fields},'📦 Material recibido por el solicitante',note,[ROLES_ADMIN[0],ROLES_APPROVER[0]]);
+      toast('✅ Recepción confirmada','success');
+      renderList(false);
+    });
   });
 
   // Eliminar adjuntos en vista detalle (admin y approver siempre, otros solo sus reqs)
@@ -4214,6 +4266,7 @@ function renderDashboard() {
   }
 
   document.getElementById('dash-refresh').addEventListener('click', load);
+      document.getElementById('dash-excel')?.addEventListener('click', () => exportDashboardExcel(window.rptFilteredItems||[]));
   document.getElementById('dash-export').addEventListener('click',()=>{
     // Contar cuántas reqs necesitan TC
     const needsTC = allItems.filter(i=>{
@@ -4543,6 +4596,26 @@ function generateActivationUrl(cfg) {
 // ================================================================
 // BOOTSTRAP
 // ================================================================
+
+// ── RECORDATORIO RC SIN MOVIMIENTO ──────────────────────────────
+async function checkStaleRC() {
+  if (userRole !== 'admin' && userRole !== 'approver') return;
+  const stale = allItems.filter(i => {
+    if (![S.SENT, S.APP1].includes(i.Status)) return false;
+    const lastMove = i.Lvl1At || i.SubmittedAt || i.CreatedAt;
+    if (!lastMove) return false;
+    const days = (Date.now() - new Date(lastMove).getTime()) / 86400000;
+    return days >= 3; // más de 3 días sin movimiento
+  });
+  if (!stale.length) return;
+  // Only notify once per session
+  const key = 'mgal_stale_' + new Date().toISOString().slice(0,10);
+  if (sessionStorage.getItem(key)) return;
+  sessionStorage.setItem(key, '1');
+  const msg = stale.length + ' RC(s) llevan más de 3 días sin movimiento:\n' + stale.map(i=>i.Title+' — '+i.Status).join('\n');
+  toast('⏳ ' + stale.length + ' RC(s) sin movimiento hace +3 días (ver campanita)', 'error', 8000);
+}
+
 // ── NOTIFICACIONES ──────────────────────────────────────────────────────
 let _lastNotifCheck = Date.now();
 let _notifKnownIds = new Set();
