@@ -3229,6 +3229,22 @@ function renderDetail(item) {
             }
             const npM = pdfText.match(/NOTA DE PEDIDO\s*No\.?\s*0*(\d+)/i);
             const npNum2 = npM ? 'NP '+npM[1] : '';
+            // Extract vendor name: appears after "Señores PROVEEDOR XXXX / NAME" 
+            let pdfVendor = '';
+            const vendorM = pdfText.match(/(?:Se\u00f1ores|Senores|SENORES|SE\u00d1ORES)[^\n]*\n([^\n]+)/i)
+              || pdfText.match(/(?:PROVEEDOR\s*\d+[^\n]*\n)([^\n]+)/i);
+            if (vendorM) {
+              pdfVendor = vendorM[1].trim().replace(/^(CERRADA|BLOQUEADA|ACTIVO|\d+)\s*/i,'').trim();
+            }
+            // Auto-fill vendor field in modal
+            if (pdfVendor) {
+              const vendorEl = document.getElementById('oc-prov') || document.getElementById('oc-vendor');
+              if (vendorEl && !vendorEl.value) vendorEl.value = pdfVendor;
+              // Also update n2-proveedor if visible
+              const n2El = document.getElementById('n2-proveedor');
+              if (n2El && !n2El.value) n2El.value = pdfVendor;
+              toast('🏭 Proveedor detectado: '+pdfVendor, 'success');
+            }
             // Extract delivery date: in Metagal NPs the emission date appears first,
             // then each item has its own delivery date. Take the LAST distinct date.
             const dateMatches = pdfText.match(/\b(\d{2}[\/\-]\d{2}[\/\-]\d{4})\b/g);
