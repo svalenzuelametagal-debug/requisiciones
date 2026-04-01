@@ -1609,6 +1609,29 @@ function buildNav() {
 // ================================================================
 // VISTA: LISTA
 // ================================================================
+
+// ── PERSISTIR ESTADO FILTROS ─────────────────────────────────────
+function saveListState() {
+  try {
+    sessionStorage.setItem('mgal_ls', JSON.stringify({
+      q:      document.getElementById('flt-q')?.value||'',
+      dept:   document.getElementById('flt-dept')?.value||'',
+      status: document.getElementById('flt-status')?.value||'',
+      urg:    document.getElementById('flt-urg')?.value||'',
+      col:    renderList._sortCol||'CreatedAt',
+      dir:    renderList._sortDir||-1
+    }));
+  } catch(e){}
+}
+function restoreListState() {
+  try {
+    const s = JSON.parse(sessionStorage.getItem('mgal_ls')||'{}');
+    const set = (id,v) => { const el=document.getElementById(id); if(el&&v) el.value=v; };
+    set('flt-q', s.q); set('flt-dept', s.dept); set('flt-status', s.status); set('flt-urg', s.urg);
+    if (s.col) renderList._sortCol = s.col;
+    if (s.dir) renderList._sortDir = s.dir;
+  } catch(e){}
+}
 function renderList(approvalsMode=false) {
   showView('list');
   const container = document.getElementById('view-list');
@@ -1704,39 +1727,30 @@ function renderList(approvalsMode=false) {
   }
 
   function getFiltered(am) {
-    const q = (document.getElementById('flt-q')?.value||'').toLowerCase();
-    const dept = document.getElementById('flt-dept')?.value||'';
-    const status = document.getElementById('flt-status')?.value||'';
-    const urg = document.getElementById('flt-urg')?.value||'';
-    let items = [...allItems];
-    // Proveedores: ven todas las reqs con OC asignada + sus propias reqs
-    if (userRole==='proveedores') items = items.filter(i=>
-      i.Status===S.OC || i.RequesterMail===currentUser?.username
-    );
+  const q     = (document.getElementById('flt-q')?.value||'').trim().toLowerCase();
+  const dept  = document.getElementById('flt-dept')?.value||'';
+  const status= document.getElementById('flt-status')?.value||'';
+  const urg   = document.getElementById('flt-urg')?.value||'';
+
+  return allItems.filter(i => {
     if (am) {
-      if (userRole==='approver') items = items.filter(i=>i.Status===S.SENT);
-      else if (userRole==='admin') items = items.filter(i=>i.Status===S.APP1);
+      // Approvals mode: only items pending action
+      const pendingStatuses = ['Pendiente revisión','Revisada · En gestión','Autorizada · Pendiente Gerencia','Aprobada por Gerencia'];
+      if (!pendingStatuses.includes(i.Status)) return false;
     }
-    // Outlook-style search: every word must appear somewhere in the record
-    const qn = normalizeStr(q);
-    if (qn) {
-      const words = qn.split(/\s+/).filter(Boolean);
-      items = items.filter(i => {
-        const hay = normalizeStr([
-          i.Title, i.RequesterName, i.RequesterMail, i.Dept,
-          i.Justification, i.OCNumber, i.Buyer, i.GLAccount,
-          i.SelectedVendor, i.Vendor, i.Urgency, i.Status,
-          // also search inside line items descriptions
-          (()=>{ try{ return parseLines(i.LinesJSON||'[]').map(l=>l.desc||'').join(' '); }catch{return '';} })()
-        ].join(' '));
-        return words.every(w => hay.includes(w));
-      });
+    if (dept   && i.Dept     !== dept)   return false;
+    if (status && i.Status   !== status) return false;
+    if (urg    && i.Urgency  !== urg)    return false;
+    if (q) {
+      const fields = [i.Title,i.Dept,i.RequesterName,i.Status,i.Vendor,i.OCNumber,i.Justification,i.GLAccount].join(' ').toLowerCase();
+      const lines  = (() => { try { return JSON.parse(i.LinesJSON||'[]').map(l=>l.desc||'').join(' ').toLowerCase(); } catch{return '';} })();
+      const all    = fields + ' ' + lines;
+      const words  = q.split(/s+/).filter(Boolean);
+      if (!words.every(w => all.includes(w))) return false;
     }
-    if (dept) items = items.filter(i=>i.Dept===dept);
-    if (status) items = items.filter(i=>i.Status===status);
-    if (urg) items = items.filter(i=>i.Urgency===urg);
-    return items;
-  }
+    return true;
+  });
+}
 
   function renderTable(am) {
     const wrap = document.getElementById('list-table-wrap');
