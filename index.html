@@ -825,7 +825,18 @@ async function setupGitHubStorage(ghToken, ghRepo) {
 // CRUD
 async function listItems()           { return await readDB(); }
 async function createItem(fields)    { const d=await readDB(); const n={id:Date.now().toString(),...fields}; d.push(n); await writeDB(d); return n; }
-async function updateItem(id,fields) { const d=await readDB(); const i=d.findIndex(x=>x.id===id); if(i<0) throw new Error('No encontrada'); d[i]={...d[i],...fields}; await writeDB(d); return d[i]; }
+async function updateItem(id,fields) {
+  const d = await readDB(true); // force fresh read to avoid stale SHA
+  // Support both id and _id field names
+  const i = d.findIndex(x => (x.id||x._id) === id || (x.id||x._id) === String(id));
+  if (i < 0) throw new Error('RC no encontrada (id: '+id+')');
+  d[i] = {...d[i], ...fields, UpdatedAt: isoNow()};
+  await writeDB(d);
+  // Update local cache
+  allItems = allItems.map(a => (a._id||a.id)===id ? {...a,...fields,UpdatedAt:isoNow()} : a);
+  if (_dbCache) _dbCache.items = allItems;
+  return d[i];
+}
 async function deleteItem(id)        { await writeDB((await readDB()).filter(x=>x.id!==id)); }
 
 
@@ -1965,7 +1976,7 @@ function renderList(approvalsMode=false) {
   ['flt-q','flt-dept','flt-status','flt-urg'].forEach(id=>{
     setTimeout(()=>{
       const el = document.getElementById(id);
-      if (el) el.addEventListener('input',()=>{saveListState();renderTable(approvalsMode);});
+      if (el) el.addEventListener('input',()=>{clearTimeout(window._st);window._st=setTimeout(()=>{saveListState();renderTable(approvalsMode);},250);});
     },100);
   });
 
