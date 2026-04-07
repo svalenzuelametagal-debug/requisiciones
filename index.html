@@ -1859,7 +1859,13 @@ function renderList(approvalsMode=false) {
       wrap.classList.remove('hidden');
       return;
     }
-    const rows = items.map(i=>{
+    // Paginación: mostrar de a 30
+    const PAGE_SIZE = 30;
+    if (!renderTable._page) renderTable._page = 1;
+    const totalItems = items.length;
+    const pageItems = items.slice(0, renderTable._page * PAGE_SIZE);
+    const hasMore = pageItems.length < totalItems;
+    const rows = pageItems.map(i=>{
       const bc = getBadgeClass(i.Status);
       const ub = getUrgencyBadge(i.Urgency);
       const lines = parseLines(i.LinesJSON);
@@ -3588,6 +3594,7 @@ async function uploadAdjunto(reqTitle, prefix, file) {
 }
 
 async function doAction(item, fields) {
+  invalidateDBCache(); // forzar re-lectura después de escribir
   await updateItem(item._id, { ...fields, UpdatedAt: isoNow() });
 }
 
@@ -4992,7 +4999,8 @@ async function initApp(account) {
   fetchTC();
   initNotifBell();
   // Auto-actualizar TC cada 30 minutos
-  setInterval(() => { fetchTC(true); }, 30 * 60 * 1000);
+  if (window._tcInterval) clearInterval(window._tcInterval);
+  window._tcInterval = setInterval(() => { fetchTC(true); }, 30 * 60 * 1000);
 
   // Verificar inactividad en background (no bloquea UI)
   setTimeout(() => checkInactiveReqs(), 3000);
