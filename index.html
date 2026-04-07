@@ -2955,8 +2955,13 @@ function renderDetail(item) {
     const attachments = parseAttachments(item.AttachmentsJSON||'[]');
     const internalAdj = attachments.filter(a=>a.internal);
     const publicAdj   = attachments.filter(a=>!a.internal);
-    const adjListPub  = publicAdj.map(a=>`<div style="margin-bottom:4px">📎 <a href="${escH(a.webUrl||'#')}" style="color:#0891b2">${escH(a.name)}</a></div>`).join('') || '<span style="color:#999;font-size:12px">Sin adjuntos públicos</span>';
-    const adjListNote = internalAdj.length ? `<div style="margin-top:5px;font-size:10px;color:#9AA5C0">🔒 ${internalAdj.length} adj. interno(s) — visibles desde el link de la RC (no se adjuntan al mail)</div>` : '';
+    const ocPdf = publicAdj.find(a=>a.name&&(a.name.startsWith('📄 OC')||a.name.startsWith('OC —')||a.name.includes('OC —')));
+    const otherAdj = publicAdj.filter(a=>!ocPdf||a!==ocPdf);
+    const adjListPub = ocPdf
+      ? `<div style="margin-bottom:4px;color:#2ea86b;font-weight:700">📎 ${escH(ocPdf.name)} <span style="font-size:10px;font-weight:400;color:#9aa5c0">(se adjunta al mail)</span></div>`
+        + (otherAdj.length ? `<div style="font-size:11px;color:#9aa5c0;margin-top:4px">📎 ${otherAdj.length} archivo(s) adicional(es) en la RC — no se adjuntan al mail al proveedor</div>` : '')
+      : '<span style="color:#f0b030;font-size:12px">⚠ Sin PDF de OC adjunto todavía</span>';
+    const adjListNote = internalAdj.length ? `<div style="margin-top:5px;font-size:10px;color:#9AA5C0">🔒 ${internalAdj.length} adj. interno(s) — solo visibles internamente</div>` : '';
     const adjList = adjListPub + adjListNote;
     const lines = parseLines(item.LinesJSON||'[]');
     const itemsTable = lines.map(l=>`<tr><td style="padding:6px 10px;border-bottom:1px solid #eee">${escH(l.desc||'')}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center">${l.qty||''} ${escH(l.unit||'')}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right">${escH(l.currency||'ARS')} ${l.price?Number(l.price).toLocaleString('es-AR',{minimumFractionDigits:2}):'—'}</td></tr>`).join('');
@@ -2994,8 +2999,10 @@ function renderDetail(item) {
         const msg = document.getElementById('oc-msg').value.trim();
         // Adjuntos internos (🔒) nunca se adjuntan al mail
         // Los usuarios internos acceden via el link de la RC incluido en el cuerpo del mail
-        // Use attachments from item.AttachmentsJSON (OC PDF is already saved there)
-        const publicAttachments = attachments.filter(a=>!a.internal);
+        // Solo adjuntar la NP/OC al proveedor — no todos los archivos de la RC
+        const publicAttachments = attachments.filter(a =>
+          a.name && (a.name.startsWith('📄 OC') || a.name.startsWith('OC —') || a.name.includes('OC —'))
+        );
         const emailAttachments = [];
         const adjLines = [];
         const cfg = getCfg();
