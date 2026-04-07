@@ -3289,46 +3289,87 @@ function renderDetail(item) {
             if (!ocPdfItems.length) {
               toast('⚠ No se encontraron ítems en el PDF para comparar. Verificá que sea una NP de Metagal.', 'error');
             } else if (ocPdfItems.length && rcItemsOC.length) {
-              const diffs3=[]; const updates3=[];
-              for(let i=0;i<Math.max(rcItemsOC.length,ocPdfItems.length);i++){
-                const rc=rcItemsOC[i]; const oc=ocPdfItems[i];
-                if(rc&&oc){
-                  const qD=Math.abs(rc.qty-oc.qty)>0.001;
-                  const pD=Math.abs((rc.price||0)-oc.price)>0.01;
-                  if(qD) diffs3.push('• Ítem '+(i+1)+': cantidad RC='+rc.qty+' / OC='+oc.qty);
-                  if(pD) diffs3.push('• Ítem '+(i+1)+': precio RC='+(rc.price||'—')+' / OC='+oc.price);
-                  if(qD||pD) updates3.push({idx:i,qD,pD,oc});
-                }
-              }
-              if(diffs3.length){
-                const proceed = await new Promise(function(resolve){
-                  showModal(
-                    '<div style="margin-bottom:10px;font-size:13px">'+(npNum2?'<strong>'+escH(npNum2)+'</strong> — ':'')+ocPdfItems.length+' ítem(s) en el PDF</div>'
-                    +'<div style="background:rgba(217,64,64,.1);border:1px solid rgba(217,64,64,.3);border-radius:6px;padding:10px 14px;font-size:12px;margin-bottom:12px">'
-                    +'<div style="font-weight:700;color:var(--red);margin-bottom:6px">⚠ Diferencias vs RC:</div>'
-                    +diffs3.map(function(d){return '<div style="color:var(--orange);margin-bottom:3px">'+escH(d)+'</div>';}).join('')
-                    +'</div><div style="font-size:12px;color:var(--text2)">¿Actualizás la RC con los datos del PDF antes de asignar?</div>',
-                    '📄 PDF vs RC',
-                    [
-                      {label:'✅ Actualizar RC y asignar OC', cls:'btn-primary', action:async function(){
-                        const curL=parseLines(item.LinesJSON||'[]');
-                        const newL=curL.map(function(ln,i){
-                          const u=updates3.find(function(x){return x.idx===i;});
-                          if(!u) return ln;
+              const updates3 = [];
+              let hasDiffs = false;
+              ocPdfItems.forEach(op => {
+                const rc = rcItemsOC.find(r => {
+                  const nd = s => String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+                  return nd(r.desc).includes(nd(op.desc).substring(0,10)) || nd(op.desc).includes(nd(r.desc).substring(0,10));
+                });
+                if (!rc) return;
+                const qD = Math.abs((rc.qty||0) - (op.qty||0)) > 0.001;
+                const pD = Math.abs((rc.price||0) - (op.price||0)) > 0.5;
+                if (qD || pD) hasDiffs = true;
+                updates3.push({idx: rcItemsOC.indexOf(rc), rc, oc: op, qD, pD});
+              });
+
+              // ALWAYS show comparison modal - even when everything matches
+              const rows3 = updates3.map(u => {
+                const qIcon = u.qD ? '⚠' : '✅';
+                const pIcon = u.pD ? '⚠' : '✅';
+                const qColor = u.qD ? '#f0b030' : '#2ea86b';
+                const pColor = u.pD ? '#f0b030' : '#2ea86b';
+                return `<tr>
+                  <td style="padding:6px 8px;font-size:12px;border-bottom:1px solid var(--border)">${escH(u.rc.desc||'')}</td>
+                  <td style="padding:6px 8px;text-align:center;color:${qColor}">${qIcon} RC:${u.rc.qty} / OC:${u.oc.qty}</td>
+                  <td style="padding:6px 8px;text-align:right;color:${pColor}">${pIcon} RC:${Number(u.rc.price||0).toLocaleString('es-AR')} / OC:${Number(u.oc.price||0).toLocaleString('es-AR')}</td>
+                </tr>`;
+              }).join('');
+
+              const headerColor = hasDiffs ? '#f0b030' : '#2ea86b';
+              const headerIcon  = hasDiffs ? '⚠ Hay diferencias entre la OC y la RC' : '✅ La OC coincide con la RC';
+
+              let proceed = false;
+              await new Promise(resolve => {
+                showModal(`
+                  <div style="padding:8px 12px;border-radius:6px;margin-bottom:14px;background:${hasDiffs?'rgba(240,176,48,.1)':'rgba(46,168,107,.1)'};border:1px solid ${headerColor}">
+                    <strong style="color:${headerColor}">${headerIcon}</strong>
+                    ${npNum2 ? `<span style="margin-left:8px;font-size:11px;color:var(--text2)">${npNum2}</span>` : ''}
+                  </div>
+                  <table style="width:100%;border-collapse:collapse;font-size:12px">
+                    <thead><tr style="background:var(--bg3)">
+                      <th style="padding:6px 8px;text-align:left;font-size:11px;color:var(--text2)">Ítem</th>
+                      <th style="padding:6px 8px;text-align:center;font-size:11px;color:var(--text2)">Cantidad</th>
+                      <th style="padding:6px 8px;text-align:right;font-size:11px;color:var(--text2)">Precio</th>
+                    </tr></thead>
+                    <tbody>${rows3 || '<tr><td colspan="3" style="padding:10px;text-align:center;color:var(--text2)">Sin ítems para comparar</td></tr>'}</tbody>
+                  </table>
+                  ${hasDiffs ? `<div style="margin-top:12px;font-size:12px;color:var(--text2)">Al confirmar, se actualizan los ítems de la RC con los valores de la OC.</div>` : `<div style="margin-top:12px;font-size:12px;color:#2ea86b">Todo coincide. Podés continuar sin cambios.</div>`}
+                `,
+                hasDiffs ? '⚠ Diferencias detectadas — Actualizar RC' : '✅ Verificación OK',
+                [
+                  {
+                    label: hasDiffs ? '✅ Actualizar RC y asignar OC' : '✅ Confirmar y asignar OC',
+                    cls:'btn-primary',
+                    cb: async () => {
+                      if (hasDiffs) {
+                        const curL = parseLines(item.LinesJSON||'[]');
+                        const newLines2 = curL.map(function(ln,i) {
+                          const u = updates3.find(function(x){return x.idx===i;});
+                          if (!u) return ln;
                           return Object.assign({},ln,u.qD?{qty:u.oc.qty}:{},u.pD?{price:u.oc.price}:{});
                         });
-                        item.LinesJSON=JSON.stringify(newL);
-                        resolve(true);
-                      }},
-                      {label:'Asignar OC sin cambios', cls:'btn-secondary', action:function(){ resolve(true); }},
-                      {label:'Cancelar', cls:'btn-secondary btn-sm', action:function(){ resolve(false); }}
-                    ]
-                  );
-                });
-                if(!proceed) return false; // return false = don't close outer modal
-              } else {
-                toast('✅ PDF: cantidades y precios coinciden con la RC'+(npNum2?' ('+npNum2+')':''),'success');
-              }
+                        const deliveryUpdate = pdfDelivery ? {DeliveryDate: pdfDelivery} : {};
+                        await doAction(item, {LinesJSON:JSON.stringify(newLines2),...deliveryUpdate,UpdatedAt:isoNow()});
+                        item.LinesJSON = JSON.stringify(newLines2);
+                        if (pdfDelivery) item.DeliveryDate = pdfDelivery;
+                        toast('✅ RC actualizada con datos de la OC', 'success');
+                      } else {
+                        if (pdfDelivery) {
+                          await doAction(item, {DeliveryDate: pdfDelivery, UpdatedAt: isoNow()});
+                          item.DeliveryDate = pdfDelivery;
+                        }
+                        toast('✅ Verificación OK — sin cambios necesarios', 'success');
+                      }
+                      proceed = true;
+                    }
+                  },
+                  {label:'Asignar OC sin cambios', cls:'btn-secondary', cb:()=>{ proceed=true; }}
+                ]);
+              });
+              if (!proceed) return false;
+            } else if (!ocPdfItems.length) {
+              toast('⚠ No se encontraron ítems en el PDF para comparar', 'error');
             }
           } catch(pdfErr2){ console.warn('OC PDF analysis:',pdfErr2.message); toast('Error analizando PDF: '+pdfErr2.message,'error'); }
         }
