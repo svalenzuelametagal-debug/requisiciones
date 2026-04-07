@@ -744,21 +744,27 @@ async function openAttachment(url, filename) {
   }
 }
 
-async function readDB() {
+// DB Cache global
+let _dbCache = null; // {sha, items}
+
+async function readDB(forceRefresh=false) {
   const cfg = getCfg();
-  if (!cfg.ghToken || !cfg.ghRepo) throw new Error('Sin configuracion. Pedile a Santiago el link de activacion.');
-  const url = 'https://api.github.com/repos/' + cfg.ghRepo + '/contents/' + DB_GITHUB_FILE;
-  const res = await fetch(url, { cache: 'no-store', headers: githubHeaders(cfg.ghToken) });
-  if (res.status === 404) return [];
-  if (!res.ok) {
-    const e = await res.json().catch(()=>({}));
-    throw new Error('GitHub ' + res.status + ': ' + (e.message||'error leyendo datos'));
+  if (!cfg.ghRepo || !cfg.ghToken) throw new Error('Sin configuración');
+  const url = `https://api.github.com/repos/${cfg.ghRepo}/contents/${DB_GITHUB_FILE}`;
+  const res = await fetch(url, { headers: githubHeaders(cfg.ghToken), cache: 'no-store' });
+  if (!res.ok) throw new Error(`GitHub ${res.status}: ${res.statusText}`);
+  const meta = await res.json();
+  // Usar cache si el SHA no cambió
+  if (!forceRefresh && _dbCache && _dbCache.sha === meta.sha) {
+    return _dbCache.items;
   }
-  const data = await res.json();
-  const b64 = data.content.replace(/\n/g,'');
-  const bytes = Uint8Array.from(atob(b64), ch => ch.charCodeAt(0));
-  return JSON.parse(new TextDecoder('utf-8').decode(bytes));
+  const bytes = Uint8Array.from(atob(meta.content.replace(/\n/g, '')), c => c.charCodeAt(0));
+  const items = JSON.parse(new TextDecoder('utf-8').decode(bytes)).map(mapItem);
+  _dbCache = { sha: meta.sha, items };
+  return items;
 }
+
+function invalidateDBCache() { _dbCache = null; }
 
 async function writeDB(data) {
   const cfg = getCfg();
@@ -3596,6 +3602,10 @@ async function uploadAdjunto(reqTitle, prefix, file) {
 async function doAction(item, fields) {
   invalidateDBCache(); // forzar re-lectura después de escribir
   await updateItem(item._id, { ...fields, UpdatedAt: isoNow() });
+
+  // Actualizar cache local inmediatamente
+  allItems = allItems.map(i => i._id === item._id ? {...i,...fields, UpdatedAt: isoNow()} : i);
+  if (_dbCache) _dbCache.items = allItems;
 }
 
 // ================================================================
