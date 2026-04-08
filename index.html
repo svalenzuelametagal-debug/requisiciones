@@ -1698,142 +1698,138 @@ function goBack() {
   }
 }
 
-// ── CRUCE AUTOMÁTICO DE ENTREGAS ────────────────────────────
-async function autoCruce() {
-  const cfg = getCfg();
-  if (!cfg.ghRepo || !cfg.ghToken) { toast("Sin configuración de GitHub","error"); return; }
 
-  // Step 1: load historico from cloud
-  toast("📋 Buscando histórico en la nube...","info",3000);
-  let histAB;
+// ── CRUCE AUTOMÁTICO ──────────────────────────────────────
+async function autoCruce() {
+  var cfg = getCfg();
+  if (!cfg.ghRepo || !cfg.ghToken) { toast("Sin config GitHub","error"); return; }
+  toast("📋 Buscando histórico en la nube...","info",4000);
+  var histAB;
   try {
-    const listUrl = `https://api.github.com/repos/${cfg.ghRepo}/contents/historico`;
-    const lr = await fetch(listUrl, { headers: githubHeaders(cfg.ghToken) });
-    if (!lr.ok) throw new Error("Carpeta historico/ no encontrada (HTTP "+lr.status+"). Usá subir_historico.html primero.");
-    const files = await lr.json();
-    const hf = Array.isArray(files) ? files.find(x => /\.(xlsx?m?|xlsb|csv)$/i.test(x.name)) : null;
+    var listUrl = "https://api.github.com/repos/" + cfg.ghRepo + "/contents/historico";
+    var lr = await fetch(listUrl, { headers: githubHeaders(cfg.ghToken) });
+    if (!lr.ok) throw new Error("Carpeta historico/ no encontrada. Subí el archivo con subir_historico.html");
+    var files = await lr.json();
+    var hf = null;
+    if (Array.isArray(files)) {
+      for (var fi=0; fi<files.length; fi++) {
+        if (/\.(xlsx?m?|xlsb|csv)$/i.test(files[fi].name)) { hf=files[fi]; break; }
+      }
+    }
     if (!hf) throw new Error("Sin archivo Excel en historico/");
-    toast("📋 Descargando "+hf.name+"...","info",4000);
-    const fr = await fetch(hf.url, { headers: { Authorization: "token "+cfg.ghToken, Accept: "application/vnd.github.raw" } });
-    if (!fr.ok) throw new Error("Descarga fallida HTTP "+fr.status);
+    toast("📋 Descargando " + hf.name + "...","info",5000);
+    var fr = await fetch(hf.url, { headers: { Authorization: "token "+cfg.ghToken, Accept: "application/vnd.github.raw" } });
+    if (!fr.ok) throw new Error("Descarga fallida HTTP " + fr.status);
     histAB = await fr.arrayBuffer();
   } catch(e) { toast("❌ " + e.message, "error", 8000); return; }
 
-  // Step 2: parse Excel with XLSX
-  toast("📋 Procesando Excel...","info",3000);
-  let histRows = [], histHeaders = [];
+  if (!window.XLSX) { toast("❌ XLSX no cargado — recargá la página","error"); return; }
+  var wb, histRows = [], histHeaders = [];
   try {
-    const XLSX = window.XLSX;
-    if (!XLSX) throw new Error("XLSX no cargado — recargá la página");
-    const wb = XLSX.read(new Uint8Array(histAB), { type:"array", cellDates:true });
-    // Use first sheet that looks like data (skip BD REGISTROS etc)
-    const sheetName = wb.SheetNames.find(s => /2021|recep|entrega/i.test(s)) || wb.SheetNames[0];
-    const ws = wb.Sheets[sheetName];
-    const raw = XLSX.utils.sheet_to_json(ws, { header:1, defval:"", raw:false });
-    // Find header row
-    let hr = 0;
-    for(let i=0;i<Math.min(10,raw.length);i++) { if(raw[i].filter(c=>String(c).trim()).length>5){hr=i;break;} }
-    histHeaders = raw[hr].map(h=>String(h||"").trim());
-    histRows = raw.slice(hr+1).filter(r=>r.some(c=>String(c).trim()));
-  } catch(e) { toast("❌ Error leyendo Excel: "+e.message,"error",8000); return; }
+    wb = window.XLSX.read(new Uint8Array(histAB), { type:"array", cellDates:true });
+    var shName = wb.SheetNames[0];
+    for (var si=0; si<wb.SheetNames.length; si++) {
+      if (/2021|recep|entrega/i.test(wb.SheetNames[si])) { shName=wb.SheetNames[si]; break; }
+    }
+    var ws = wb.Sheets[shName];
+    var raw = window.XLSX.utils.sheet_to_json(ws, { header:1, defval:"", raw:false });
+    var hr = 0;
+    for (var ri=0; ri<Math.min(10,raw.length); ri++) {
+      var nonEmpty = raw[ri].filter(function(c){return String(c).trim()!=="";}).length;
+      if (nonEmpty > 5) { hr=ri; break; }
+    }
+    histHeaders = raw[hr].map(function(h){return String(h||"").trim();});
+    histRows = raw.slice(hr+1).filter(function(r){return r.some(function(c){return String(c).trim()!=="";});});
+  } catch(e) { toast("❌ Error leyendo Excel: " + e.message, "error", 8000); return; }
 
-  // Step 3: find columns
   function findCol(hints) {
-    for(const h of hints) for(let i=0;i<histHeaders.length;i++) if(new RegExp(h,"i").test(histHeaders[i])) return i;
+    for (var h=0; h<hints.length; h++) {
+      var rx = new RegExp(hints[h],"i");
+      for (var i=0; i<histHeaders.length; i++) { if (rx.test(histHeaders[i])) return i; }
+    }
     return -1;
   }
-  const colNP    = findCol(["\\bNP\\b","Nro NP","n.de np","\\bnp\\b"]);
-  const colDate  = findCol(["Fecha"]);
-  const colProv  = findCol(["Proveedor"]);
-  const colDesc  = findCol(["Descripci"]);
-  const colQty   = findCol(["Cant. Ingr","Cant.Ingr","Cant Ingr","Cantidad"]);
-  const colPrice = findCol(["Precio Recep","P. Unit","Precio"]);
+  var colNP    = findCol(["\\bNP\\b","Nro NP","n.de np"]);
+  var colDate  = findCol(["Fecha"]);
+  var colProv  = findCol(["Proveedor"]);
+  var colDesc  = findCol(["Descripci"]);
+  var colQty   = findCol(["Cant. Ingr","Cant.Ingr","Cantidad"]);
+  var colPrice = findCol(["Precio Recep","P. Unit","Precio"]);
+  if (colNP < 0 && colDesc < 0) { toast("❌ No se detectaron columnas en el Excel","error",8000); return; }
 
-  log("Columnas detectadas: NP="+colNP+", Fecha="+colDate+", Prov="+colProv+", Desc="+colDesc);
-  if(colNP<0 && colDesc<0) { toast("❌ No se detectaron columnas NP ni Descripción en el Excel","error",8000); return; }
-
-  // Step 4: parse rows
-  function parseISO(val){
-    if(!val)return"";
-    if(val instanceof Date)return isNaN(val)?"":val.toISOString().slice(0,10);
-    const s=String(val).trim();
-    const m=s.match(/^(\\d{1,2})[\\/\\-.](\\d{1,2})[\\/\\-.](\\d{2,4})$/);
-    if(m){const y=m[3].length===2?"20"+m[3]:m[3];return y+"-"+m[2].padStart(2,"0")+"-"+m[1].padStart(2,"0");}
-    if(/^\\d{4}-\\d{2}-\\d{2}/.test(s))return s.slice(0,10);
-    const n=Number(s);if(!isNaN(n)&&n>40000&&n<60000){const d=new Date(Math.round((n-25569)*86400000));return d.toISOString().slice(0,10);}
-    return"";
+  function parseISO(val) {
+    if (!val) return "";
+    if (val instanceof Date) return isNaN(val) ? "" : val.toISOString().slice(0,10);
+    var s = String(val).trim();
+    var m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
+    if (m) { var y=m[3].length===2?"20"+m[3]:m[3]; return y+"-"+m[2].padStart(2,"0")+"-"+m[1].padStart(2,"0"); }
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,10);
+    var n=Number(s); if(!isNaN(n)&&n>40000&&n<60000){var d=new Date(Math.round((n-25569)*86400000));return d.toISOString().slice(0,10);}
+    return "";
   }
   function getV(row,col){return col>=0?String(row[col]||"").trim():"";}
 
-  // Step 5: cross with allItems
-  let updated=0, matched=0, skipped=0;
-  const toUpdate=[];
-
-  for(const row of histRows){
-    const np    = getV(row,colNP).replace(/\\s+/g,"").toUpperCase();
-    const dateISO = parseISO(getV(row,colDate));
-    const prov  = getV(row,colProv);
-    const desc  = getV(row,colDesc);
-    if(!np && !desc && !prov) continue;
-    if(!dateISO) continue; // need a date to update
-
-    // Find matching RC
-    let rc = null;
-    if(np) {
-      rc = allItems.find(i => {
-        const oc=(i.OCNumber||"").replace(/\\s+/g,"").toUpperCase();
-        return oc===np||oc==="NP"+np||"NP"+oc===np;
+  var toUpdate = [];
+  var matched = 0, skipped = 0;
+  for (var ri2=0; ri2<histRows.length; ri2++) {
+    var row = histRows[ri2];
+    var np = getV(row,colNP).replace(/\s+/g,"").toUpperCase();
+    var dateISO = parseISO(getV(row,colDate));
+    var prov = getV(row,colProv);
+    var desc = getV(row,colDesc);
+    if (!np && !desc && !prov) continue;
+    if (!dateISO) continue;
+    var rc = null;
+    if (np) {
+      rc = allItems.find(function(i) {
+        var oc = (i.OCNumber||"").replace(/\s+/g,"").toUpperCase();
+        return oc===np || oc==="NP"+np || "NP"+oc===np;
       });
     }
-    if(!rc && prov && desc) {
-      const ps = (prov.toLowerCase().split(" ").slice(0,2).join(" ")).substring(0,8);
-      if(ps.length>3) {
-        rc = allItems.find(i=>{
-          const rp=(i.SelectedVendor||i.Vendor||"").toLowerCase();
-          if(!rp.includes(ps.substring(0,5))&&!ps.includes((rp.split(" ")[0]||"x").substring(0,5)))return false;
-          try{
-            const lines=JSON.parse(i.LinesJSON||"[]");
-            const dn=desc.toLowerCase().substring(0,15);
-            return lines.some(l=>{const ld=(l.desc||"").toLowerCase();return ld.includes(dn.substring(0,10))||dn.includes(ld.substring(0,10));});
-          }catch(e){return false;}
+    if (!rc && prov && desc) {
+      var ps = prov.toLowerCase().split(" ").slice(0,2).join(" ").substring(0,8);
+      if (ps.length > 3) {
+        rc = allItems.find(function(i) {
+          var rp = (i.SelectedVendor||i.Vendor||"").toLowerCase();
+          if (rp.indexOf(ps.substring(0,5))<0 && ps.indexOf((rp.split(" ")[0]||"x").substring(0,5))<0) return false;
+          try {
+            var lines = JSON.parse(i.LinesJSON||"[]");
+            var dn = desc.toLowerCase().substring(0,15);
+            return lines.some(function(l){ var ld=(l.desc||"").toLowerCase(); return ld.indexOf(dn.substring(0,10))>=0||dn.indexOf(ld.substring(0,10))>=0; });
+          } catch(e){return false;}
         });
       }
     }
-    if(!rc){skipped++;continue;}
+    if (!rc) { skipped++; continue; }
     matched++;
-    // Only update if missing ReceivedAt or DeliveryDate
-    if(!rc.ReceivedAt || !rc.DeliveryDate) toUpdate.push({rc,dateISO});
+    if (!rc.ReceivedAt || !rc.DeliveryDate) toUpdate.push({rc:rc,dateISO:dateISO});
   }
 
-  if(!toUpdate.length){
+  if (!toUpdate.length) {
     toast("✅ Cruce completo: "+matched+" RCs encontradas, todas ya tienen fechas","success",6000);
     return;
   }
-
   toast("📋 Actualizando "+toUpdate.length+" RC(s)...","info",3000);
-
-  // Step 6: write to DB
   try {
-    const db = await readDB(true);
-    let updCount=0;
-    for(const {rc,dateISO} of toUpdate){
-      const idx=db.findIndex(i=>(i.id||i._id)===(rc._id||rc.id));
-      if(idx<0)continue;
-      if(!db[idx].ReceivedAt) db[idx].ReceivedAt=dateISO+"T00:00:00.000Z";
-      if(!db[idx].DeliveryDate) db[idx].DeliveryDate=dateISO;
-      db[idx].ReceivedNote="Cruce automático";
-      db[idx].UpdatedAt=isoNow();
+    var db = await readDB(true);
+    var updCount = 0;
+    for (var ui=0; ui<toUpdate.length; ui++) {
+      var m2 = toUpdate[ui];
+      var idx = db.findIndex(function(i){return (i.id||i._id)===(m2.rc._id||m2.rc.id);});
+      if (idx < 0) continue;
+      if (!db[idx].ReceivedAt) db[idx].ReceivedAt = m2.dateISO+"T00:00:00.000Z";
+      if (!db[idx].DeliveryDate) db[idx].DeliveryDate = m2.dateISO;
+      db[idx].ReceivedNote = "Cruce automático";
+      db[idx].UpdatedAt = isoNow();
       updCount++;
     }
     await writeDB(db);
-    // Refresh local cache
     allItems = await readDB(true);
     toast("✅ "+updCount+" RC(s) actualizadas con fechas de recepción y entrega","success",8000);
     renderList(false);
-  } catch(e){
-    toast("❌ Error guardando: "+e.message,"error",8000);
-  }
+  } catch(e) { toast("❌ Error guardando: "+e.message,"error",8000); }
 }
+
 function renderList(approvalsMode=false) {
   showView('list');
   const container = document.getElementById('view-list');
@@ -2182,6 +2178,7 @@ function renderList(approvalsMode=false) {
   if(userRole==='admin'||userRole==='approver'){
     document.getElementById('btn-auto-cruce')?.addEventListener('click',()=>autoCruce());
   }
+  document.getElementById('btn-auto-cruce')?.addEventListener('click',function(){autoCruce();});
   document.getElementById('btn-refresh-list').addEventListener('click', doLoad);
   document.getElementById('btn-export-csv').addEventListener('click',()=>{
     const items = getFiltered(approvalsMode);
