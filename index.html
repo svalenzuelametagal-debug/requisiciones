@@ -622,6 +622,7 @@ let currentUser = null;
 let userRole    = 'user';  // 'admin' | 'approver' | 'user'
 
 
+let _navContext = {mode:'list', approvalsMode:false}; // track navigation context
 let allItems    = [];
 let tcData      = {mayorista:'—', minorista:'—'}; // legacy compat
 
@@ -1628,23 +1629,25 @@ function buildNav() {
 // ================================================================
 
 // ── PERSISTIR ESTADO FILTROS ─────────────────────────────────────
-function saveListState() {
+function saveListState(approvalsMode) {
   try {
     const state = {
-      q:      document.getElementById('flt-q')?.value||'',
-      dept:   document.getElementById('flt-dept')?.value||'',
-      status: document.getElementById('flt-status')?.value||'',
-      urg:    document.getElementById('flt-urg')?.value||'',
-      col:    renderList._sortCol||'CreatedAt',
-      dir:    renderList._sortDir||-1,
-      scroll: document.getElementById('list-table-wrap')?.scrollTop||0,
+      q:            document.getElementById('flt-q')?.value||'',
+      dept:         document.getElementById('flt-dept')?.value||'',
+      status:       document.getElementById('flt-status')?.value||'',
+      urg:          document.getElementById('flt-urg')?.value||'',
+      col:          renderList._sortCol||'CreatedAt',
+      dir:          renderList._sortDir||-1,
+      scroll:       document.getElementById('list-table-wrap')?.scrollTop||0,
+      approvalsMode: approvalsMode !== undefined ? approvalsMode : (_navContext.approvalsMode||false),
     };
     sessionStorage.setItem('mgal_ls', JSON.stringify(state));
+    _navContext = {approvalsMode: state.approvalsMode};
   } catch(e){}
 }
 function restoreListState() {
   try {
-    const s = JSON.parse(sessionStorage.getItem('mgal_ls')||'{}');
+    const s=JSON.parse(sessionStorage.getItem('mgal_ls')||'{}');
     const set=(id,v)=>{const el=document.getElementById(id);if(el&&v!==undefined&&v!=='')el.value=v;};
     set('flt-q',     s.q);
     set('flt-dept',  s.dept);
@@ -1652,14 +1655,20 @@ function restoreListState() {
     set('flt-urg',   s.urg);
     if(s.col) renderList._sortCol=s.col;
     if(s.dir) renderList._sortDir=s.dir;
-    // Restore scroll after render
-    if(s.scroll){
-      setTimeout(()=>{
-        const wrap=document.getElementById('list-table-wrap');
-        if(wrap) wrap.scrollTop=s.scroll;
-      },80);
-    }
-  } catch(e){}
+    if(s.scroll){setTimeout(()=>{const w=document.getElementById('list-table-wrap');if(w)w.scrollTop=s.scroll;},100);}
+    return s.approvalsMode||false; // return saved approvalsMode
+  } catch(e){return false;}
+}
+
+// ── GO BACK — respeta el contexto anterior ────────────────────────
+function goBack() {
+  try {
+    const s = JSON.parse(sessionStorage.getItem('mgal_ls')||'{}');
+    const am = s.approvalsMode || false;
+    renderList(am);
+  } catch(e) {
+    renderList(false);
+  }
 }
 function renderList(approvalsMode=false) {
   showView('list');
@@ -1745,6 +1754,8 @@ function renderList(approvalsMode=false) {
           summaryEl.innerHTML = '';
         }
       }
+    // Guardar contexto actual antes de renderizar
+    _navContext.approvalsMode = approvalsMode;
       renderTable(approvalsMode);
   // Restore scroll position after render
   try{
@@ -2265,10 +2276,7 @@ function renderForm(item) {
     renderItems();
   });
 
-  document.getElementById('btn-cancel-form').addEventListener('click',()=>{
-    saveListState();
-    renderList(false);
-  });
+  document.getElementById('btn-cancel-form').addEventListener('click',()=>goBack());
 
   function validate() {
     const dept   = document.getElementById('f-dept').value;
@@ -2691,7 +2699,7 @@ function renderDetail(item) {
     </div>
   `;
 
-  document.getElementById('btn-back-detail').addEventListener('click',()=>{saveListState();renderList(false);});
+  document.getElementById('btn-back-detail').addEventListener('click',()=>goBack());
   document.getElementById('btn-print-req').addEventListener('click',()=>imprimirRequisicion(item));
 
   // Duplicar requisición
