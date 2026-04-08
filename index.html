@@ -1473,78 +1473,7 @@ function exportDashboardExcel(items) {
 
 
 // ── CRUCE ARCHIVO DE ENTREGAS ────────────────────────────────────
-function crossDeliveryFile() {
-  showModal(`
-    <div style="font-size:13px;color:var(--text2);margin-bottom:12px">
-      Subí un archivo CSV o Excel con las entregas del proveedor.<br>
-      <strong>Columnas esperadas:</strong> NP (o N° OC), Descripción, Fecha entrega real
-    </div>
-    <div class="form-group">
-      <label>Archivo de entregas (CSV o Excel)</label>
-      <input type="file" id="delivery-file" accept=".csv,.xlsx,.xls" style="padding:6px"/>
-    </div>
-    <div id="delivery-preview" style="margin-top:12px;font-size:12px"></div>
-  `, '📋 Cruzar archivo de entregas', [
-    {label:'Procesar y cruzar', cls:'btn-primary', action: async()=>{
-      const file = document.getElementById('delivery-file')?.files?.[0];
-      if (!file) { toast('Seleccioná un archivo','error'); return false; }
-      const preview = document.getElementById('delivery-preview');
-      preview.innerHTML = '⌛ Procesando...';
-      try {
-        let rows = [];
-        if (file.name.toLowerCase().endsWith('.csv')) {
-          const text = await file.text();
-          const lines = text.split(/[\r\n]+/).filter(Boolean);
-          const header = lines[0].split(/[;,\t]/).map(h=>h.trim().toLowerCase().replace(/['"]/g,''));
-          rows = lines.slice(1).map(line=>{
-            const cols = line.split(/[;,\t]/).map(c=>c.trim().replace(/['"]/g,''));
-            const obj = {};
-            header.forEach((h,i)=>obj[h]=cols[i]||'');
-            return obj;
-          });
-        } else {
-          preview.innerHTML = '<span style="color:var(--orange)">Excel: instalá SheetJS o convertí a CSV primero.</span>';
-          return false;
-        }
-        // Find NP/OC column
-        const npKey = Object.keys(rows[0]||{}).find(k=>k.includes('np')||k.includes('oc')||k.includes('orden')||k.includes('pedido')) || 'np';
-        const dateKey = Object.keys(rows[0]||{}).find(k=>k.includes('fecha')||k.includes('date')||k.includes('entrega')) || 'fecha';
-        const descKey = Object.keys(rows[0]||{}).find(k=>k.includes('desc')||k.includes('detalle')||k.includes('artículo')||k.includes('articulo')) || 'descripcion';
-        let matched=0, updated=0, results=[];
-        for (const row of rows) {
-          const np = (row[npKey]||'').replace(/\s+/g,'').toUpperCase();
-          const dateRaw = row[dateKey]||'';
-          if (!np) continue;
-          // Find matching RC by OCNumber
-          const rc = allItems.find(i=>(i.OCNumber||'').replace(/\s+/g,'').toUpperCase()===np);
-          if (!rc) { results.push({np,status:'sin RC',color:'var(--text2)'}); continue; }
-          matched++;
-          // Parse date dd/mm/yyyy or yyyy-mm-dd
-          let delivISO = '';
-          if (dateRaw) {
-            const p = dateRaw.split(/[\/\-\.]/);
-            if (p.length===3) delivISO = p[0].length===4 ? dateRaw : p[2]+'-'+p[1].padStart(2,'0')+'-'+p[0].padStart(2,'0');
-          }
-          const alreadyReceived = rc.ReceivedAt;
-          if (!alreadyReceived && delivISO) {
-            // Auto-mark as received
-            await doAction(rc, {ReceivedAt: delivISO+'T00:00:00.000Z', ReceivedNote:'Registrado desde cruce de archivo', UpdatedAt:isoNow()});
-            updated++;
-            results.push({np,status:'✅ Marcado recibido: '+delivISO,color:'var(--green)'});
-          } else if (alreadyReceived) {
-            results.push({np,status:'Ya registrado: '+fmtDT(alreadyReceived),color:'var(--text2)'});
-          } else {
-            results.push({np,status:'Sin fecha en archivo',color:'var(--orange)'});
-          }
-        }
-        preview.innerHTML = `<strong>${rows.length} filas · ${matched} RCs encontradas · ${updated} actualizadas</strong><br><br>`
-          + results.map(r=>`<div style="color:${r.color}">${r.np}: ${r.status}</div>`).join('');
-        if (updated>0) { toast(updated+' RC(s) marcadas como recibidas','success'); await doLoad(); }
-      } catch(e) { preview.innerHTML='<span style="color:var(--red)">Error: '+e.message+'</span>'; return false; }
-    }},
-    {label:'Cancelar', cls:'btn-secondary'}
-  ]);
-}
+
 
 function exportCSV(rows, filename) {
   if (!rows.length) return;
@@ -1810,7 +1739,7 @@ function renderList(approvalsMode=false) {
       <div class="ml-auto d-flex">
         ${(userRole==='admin'||userRole==='approver')?'<button class="btn btn-secondary btn-sm" id="btn-auto-cruce" title="Cruza el histórico Excel de la nube con las RCs">📋 Cruzar Entregas</button>':''}
         <button class="btn btn-secondary btn-sm" id="btn-refresh-list">↻ Actualizar</button>
-        ${(userRole==="admin"||userRole==="approver")?'<button class="btn btn-secondary btn-sm" id="btn-cross-delivery" title="Cruzar archivo de entregas">📋 Cruzar entregas</button>':''}
+        ${(userRole==="admin"||userRole==="approver")?'':''}
         <button class="btn btn-secondary btn-sm" id="btn-export-csv">⬇ CSV</button>
       </div>
     </div>
@@ -2137,7 +2066,6 @@ function renderList(approvalsMode=false) {
     },100);
   });
 
-  document.getElementById('btn-cross-delivery')?.addEventListener('click',()=>crossDeliveryFile());
   if(userRole==='admin'||userRole==='approver'){
     document.getElementById('btn-auto-cruce')?.addEventListener('click',()=>autoCruce());
   }
