@@ -1257,6 +1257,7 @@ function renderNotifPanel() {
   list.querySelectorAll('.notif-item').forEach(el => {
     el.addEventListener('click', () => {
       const item = allItems.find(i => i._id === el.dataset.reqid);
+      saveListState(typeof approvalsMode !== "undefined" ? approvalsMode : false);
       if (item) { renderDetail(item); showView('detail'); }
       document.getElementById('notif-panel').classList.remove('open');
       // Mark as read
@@ -1629,35 +1630,49 @@ function buildNav() {
 // ================================================================
 
 // ── PERSISTIR ESTADO FILTROS ─────────────────────────────────────
-function saveListState(approvalsMode) {
+function saveListState(am) {
   try {
-    const state = {
-      q:            document.getElementById('flt-q')?.value||'',
-      dept:         document.getElementById('flt-dept')?.value||'',
-      status:       document.getElementById('flt-status')?.value||'',
-      urg:          document.getElementById('flt-urg')?.value||'',
-      col:          renderList._sortCol||'CreatedAt',
-      dir:          renderList._sortDir||-1,
-      scroll:       document.getElementById('list-table-wrap')?.scrollTop||0,
-      approvalsMode: approvalsMode !== undefined ? approvalsMode : (_navContext.approvalsMode||false),
+    var q = document.getElementById("flt-q");
+    var dept = document.getElementById("flt-dept");
+    var status = document.getElementById("flt-status");
+    var urg = document.getElementById("flt-urg");
+    var wrap = document.getElementById("list-table-wrap");
+    window._ls = {
+      q:      q      ? q.value      : "",
+      dept:   dept   ? dept.value   : "",
+      status: status ? status.value : "",
+      urg:    urg    ? urg.value    : "",
+      col:    renderList._sortCol || "CreatedAt",
+      dir:    renderList._sortDir || -1,
+      scroll: wrap   ? wrap.scrollTop : 0,
+      am:     am !== undefined ? am : (window._ls ? window._ls.am : false)
     };
-    sessionStorage.setItem('mgal_ls', JSON.stringify(state));
-    _navContext = {approvalsMode: state.approvalsMode};
-  } catch(e){}
+  } catch(e) {}
 }
 function restoreListState() {
   try {
-    const s=JSON.parse(sessionStorage.getItem('mgal_ls')||'{}');
-    const set=(id,v)=>{const el=document.getElementById(id);if(el&&v!==undefined&&v!=='')el.value=v;};
-    set('flt-q',     s.q);
-    set('flt-dept',  s.dept);
-    set('flt-status',s.status);
-    set('flt-urg',   s.urg);
-    if(s.col) renderList._sortCol=s.col;
-    if(s.dir) renderList._sortDir=s.dir;
-    if(s.scroll){setTimeout(()=>{const w=document.getElementById('list-table-wrap');if(w)w.scrollTop=s.scroll;},100);}
-    return s.approvalsMode||false; // return saved approvalsMode
-  } catch(e){return false;}
+    var s = window._ls;
+    if (!s) return false;
+    var set = function(id, v) {
+      var el = document.getElementById(id);
+      if (el && v !== undefined && v !== "") el.value = v;
+    };
+    set("flt-q",     s.q);
+    set("flt-dept",  s.dept);
+    set("flt-status",s.status);
+    set("flt-urg",   s.urg);
+    if (s.col) renderList._sortCol = s.col;
+    if (s.dir) renderList._sortDir = s.dir;
+    if (s.scroll) {
+      requestAnimationFrame(function() {
+        requestAnimationFrame(function() {
+          var w = document.getElementById("list-table-wrap");
+          if (w) w.scrollTop = s.scroll;
+        });
+      });
+    }
+    return s.am || false;
+  } catch(e) { return false; }
 }
 
 // ── GO BACK — respeta el contexto anterior ────────────────────────
@@ -1756,6 +1771,7 @@ function renderList(approvalsMode=false) {
       }
     // Guardar contexto actual antes de renderizar
     _navContext.approvalsMode = approvalsMode;
+    restoreListState(); // filtros ya existen en DOM
       renderTable(approvalsMode);
   // Restore scroll position after render
   try{
@@ -1892,6 +1908,7 @@ function renderList(approvalsMode=false) {
       previewPanel.querySelectorAll('.search-preview-row').forEach(row => {
         row.addEventListener('click', () => {
           const found = allItems.find(x => x._id === row.dataset.id);
+          saveListState(typeof approvalsMode !== "undefined" ? approvalsMode : false);
           if (found) { renderDetail(found); showView('detail'); }
         });
       });
@@ -2514,6 +2531,7 @@ function renderForm(item) {
 // ================================================================
 // VISTA: DETALLE / APROBACIÓN
 // ================================================================
+saveListState(typeof approvalsMode !== "undefined" ? approvalsMode : false);
 function renderDetail(item) {
   // Normalizar siempre al entrar, independientemente del origen del item
   item = { ...item, Status: _normalizeStatus(item.Status) };
@@ -2755,6 +2773,7 @@ function renderDetail(item) {
     if (!confirm(`¿Congelar TC ahora?\nUSD $${(tcU||0).toLocaleString('es-AR',{minimumFractionDigits:2})}${tcE?' | EUR $'+tcE.toLocaleString('es-AR',{minimumFractionDigits:2}):''}\nFecha: ${tcDate}`)) return;
     await doAction(item, { TCusd: tcU, TCeur: tcE, TCDate: tcDate, UpdatedAt: isoNow() });
     toast('TC congelado correctamente 🔒', 'success');
+    saveListState(typeof approvalsMode !== "undefined" ? approvalsMode : false);
     renderDetail({...item, TCusd: tcU, TCeur: tcE, TCDate: tcDate});
   });
 
@@ -2768,6 +2787,7 @@ function renderDetail(item) {
         const newGL = document.getElementById('gl-edit-input').value.trim();
         await doAction(item, {GLAccount: newGL, GLCorregido: true, UpdatedAt: isoNow()});
         toast('Cuenta GL actualizada','success');
+        saveListState(typeof approvalsMode !== "undefined" ? approvalsMode : false);
         renderDetail({...item, GLAccount: newGL, GLCorregido: true});
       }},
       {label:'Cancelar', cls:'btn-secondary'}]
@@ -2805,6 +2825,7 @@ function renderDetail(item) {
         await doAction(item, {AttachmentsJSON: JSON.stringify(newAttach), ...extraFields, UpdatedAt: isoNow()});
         if (revertOC) toast('OC eliminada — requisición vuelve a estado "Lista para OC"','success');
         else toast('Adjunto eliminado','success');
+        saveListState(typeof approvalsMode !== "undefined" ? approvalsMode : false);
         renderDetail({...item, ...extraFields, AttachmentsJSON: JSON.stringify(newAttach)});
       });
     });
@@ -2899,6 +2920,7 @@ function renderDetail(item) {
 
           if (diffs.length > 0) {
             const msg = '📄 ' + files[k].name + '\n\n⚠ Posibles diferencias vs RC:\n\n' + diffs.join('\n') + '\n\n¿Querés revisar la RC?';
+            saveListState(typeof approvalsMode !== "undefined" ? approvalsMode : false);
             if (confirm(msg)) { renderDetail(item); }
           } else {
             toast('✅ ' + files[k].name + ' coincide con la RC', 'success');
@@ -2976,6 +2998,7 @@ function renderDetail(item) {
                 await doAction(item,{LinesJSON:JSON.stringify(newLines2),UpdatedAt:isoNow()});
                 item.LinesJSON=JSON.stringify(newLines2);
                 toast('✅ RC actualizada con los datos del PDF','success');
+                saveListState(typeof approvalsMode !== "undefined" ? approvalsMode : false);
                 renderDetail({...item,AttachmentsJSON:JSON.stringify(allAttach)});
               }},
               {label:'No, dejar como está',cls:'btn-secondary'}
@@ -2986,6 +3009,7 @@ function renderDetail(item) {
       }
 
       // Refresh detail view
+      saveListState(typeof approvalsMode !== "undefined" ? approvalsMode : false);
       renderDetail({...item, AttachmentsJSON: JSON.stringify(allAttach)});
     } catch(err) {
       statusEl.textContent = '❌ Error: ' + err.message;
@@ -3001,6 +3025,7 @@ function renderDetail(item) {
     await notificar({...item, Status: S.SENT}, '♻ Requisición reactivada', `Reactivada por ${currentUser.username}`, [item.RequesterMail, ROLES_APPROVER[0]]);
     toast('Requisición reactivada y enviada para revisión', 'success');
     const newItem = {...item, Status: S.SENT};
+    saveListState(typeof approvalsMode !== "undefined" ? approvalsMode : false);
     renderDetail(newItem);
   });
   if (canEdit) document.getElementById('btn-edit-req')?.addEventListener('click',()=>renderForm(item));
@@ -3973,18 +3998,21 @@ function renderFinanzasView() {
     dc.querySelectorAll('.fin-detail-btn').forEach(btn=>{
       btn.addEventListener('click',()=>{
         const found = allData.find(i=>i._id===btn.dataset.id);
+        saveListState(typeof approvalsMode !== "undefined" ? approvalsMode : false);
         if (found) { renderDetail(found); showView('detail'); }
       });
     });
     dc.querySelectorAll('tr[data-fin-id]').forEach(row=>{
       row.addEventListener('dblclick',()=>{
         const found=allData.find(i=>i._id===row.dataset.finId);
+        saveListState(typeof approvalsMode !== "undefined" ? approvalsMode : false);
         if(found){renderDetail(found);showView('detail');}
       });
     });
     dc.querySelectorAll('tr[data-fin-id]').forEach(row=>{
       row.addEventListener('dblclick',()=>{
         const found = allData.find(i=>i._id===row.dataset.finId);
+        saveListState(typeof approvalsMode !== "undefined" ? approvalsMode : false);
         if(found){renderDetail(found);showView('detail');}
       });
     });
@@ -4173,6 +4201,7 @@ function renderGerenteView() {
       ['click','dblclick'].forEach(evt=>el.addEventListener(evt,()=>{
         const id = el.dataset.id;
         const found = all.find(i=>i._id===id);
+        saveListState(typeof approvalsMode !== "undefined" ? approvalsMode : false);
         if(found){renderDetail(found);showView('detail');}
       }));
     });
@@ -4447,6 +4476,7 @@ function renderDashboard() {
       <div style="overflow-x:auto">
       <table>
         <thead><tr><th>N° Req.</th><th>Dept.</th><th>Solicitante</th><th>Estado</th><th>Urgencia</th><th>Creada</th><th></th></tr></thead>
+        saveListState(typeof approvalsMode !== "undefined" ? approvalsMode : false);
         <tbody>${rows.map(r=>`<tr style="cursor:pointer" title="Clic para ver detalle" onclick="document.getElementById('_drillmodal').remove();renderDetail(allItems.find(x=>x.Title==='${escH(r.Title)}')||${JSON.stringify({})});showView('detail');">
           <td class="num" style="color:var(--accent)">${escH(r.Title)}</td>
           <td>${escH(r.Dept)}</td>
@@ -5064,6 +5094,7 @@ async function initApp(account) {
     const _allItems = await readDB().then(r=>r.map(mapItem)).catch(()=>[]);
     const _target = _allItems.find(x => x.Title === decodeURIComponent(_reqParam));
     if (_target) {
+      saveListState(typeof approvalsMode !== "undefined" ? approvalsMode : false);
       renderDetail(_target);
       showView('detail');
       return;
@@ -5172,6 +5203,7 @@ function renderReport() {
         ${equiv>0&&tcU?`<span style="font-size:15px;font-weight:800;color:#E8311A;font-family:var(--mono)">≈ $${n0(equiv)}</span>`:''}
       </div>`:''}
     `;
+    saveListState(typeof approvalsMode !== "undefined" ? approvalsMode : false);
     showModal(body, '📋 '+item.Title, [{label:'Ver detalle completo →', cls:'btn-primary', action:()=>{renderDetail(item); showView('detail');}}, {label:'Cerrar', cls:'btn-secondary'}]);
   }
 
@@ -5505,6 +5537,7 @@ function renderReport() {
           e.stopPropagation(); // don't trigger row click
           const title = btn.dataset.title;
           const found = window.rptItems && window.rptItems.find(x=>x.Title===title);
+          saveListState(typeof approvalsMode !== "undefined" ? approvalsMode : false);
           if (found) { renderDetail(found); showView('detail'); }
         });
       });
