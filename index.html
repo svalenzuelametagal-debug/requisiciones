@@ -570,6 +570,8 @@ const S = {
   APPFIN:   'OK Financiero',
   OC:       'OC Asignada',
   INACTIVE: 'Inactiva',
+  PENDCANCEL: 'Pendiente de cancelación',
+  ANNULLED:   'Anulada',
 };
 
 const STATUS_BADGE = {
@@ -1382,6 +1384,12 @@ function mapItem(raw) {
     LinesJSON:    raw.LinesJSON||'[]',
     AttachmentsJSON:raw.AttachmentsJSON||'[]',
     CommentsJSON:   raw.CommentsJSON||'[]',
+    CancelNote: fixEncoding(raw.CancelNote||''),
+    CancelBy:   raw.CancelBy||'',
+    CancelAt:   raw.CancelAt||'',
+    AnnulNote:  fixEncoding(raw.AnnulNote||''),
+    AnnulBy:    raw.AnnulBy||'',
+    AnnulAt:    raw.AnnulAt||'',
     GerAt:          raw.GerAt||'',
     GerBy:          raw.GerBy||'',
     GerNote:        fixEncoding(raw.GerNote||''),
@@ -2546,7 +2554,12 @@ function renderDetail(item) {
   const bc = getBadgeClass(item.Status);
   const ub = getUrgencyBadge(item.Urgency);
 
-  const canReactivate = userRole==='admin' && item.Status === S.INACTIVE;
+  const canReactivate    = userRole==='admin' && item.Status === S.INACTIVE;
+  const canRequestCancel = item.RequesterMail===currentUser?.username &&
+    ![S.DRAFT,S.INACTIVE,S.ANNULLED,S.PENDCANCEL].includes(item.Status);
+  const canConfirmAnnul  = (userRole==='admin'||userRole==='approver') && item.Status===S.PENDCANCEL;
+  const canAnnulDirect   = (userRole==='admin'||userRole==='approver') &&
+    ![S.DRAFT,S.ANNULLED,S.INACTIVE].includes(item.Status);
     const canEdit       = canEditDraft(item);
   const canApproveN1  = (userRole==='approver'||userRole==='admin') && item.Status===S.SENT;
   const canApproveN2  = userRole==='admin' && item.Status===S.APP1;
@@ -2594,6 +2607,10 @@ function renderDetail(item) {
   let actionBtns = `<button class="btn btn-secondary btn-sm" id="btn-print-req" title="Imprimir / Guardar PDF">🖨 PDF</button>`;
   actionBtns += `<button class="btn btn-secondary btn-sm" id="btn-dup-req" title="Duplicar como nuevo borrador">⧉ Duplicar</button>`;
   if (canReactivate) actionBtns += `<button class="btn btn-warning" id="btn-reactivate-req">↩ Reactivar requisición</button>`;
+  if (canRequestCancel) actionBtns += '<button class="btn" id="btn-request-cancel" style="background:#f0b030;color:#000">🚫 Solicitar cancelación</button>';
+  if (canConfirmAnnul)  actionBtns += '<button class="btn" id="btn-confirm-annul" style="background:#d94040;color:#fff">✖ Confirmar anulación</button>';
+  if (canConfirmAnnul)  actionBtns += '<button class="btn btn-secondary" id="btn-reject-cancel">↩ Rechazar cancelación</button>';
+  if (canAnnulDirect)   actionBtns += '<button class="btn" id="btn-annul-direct" style="background:#d94040;color:#fff;font-size:11px;padding:6px 12px">✖ Anular directamente</button>';
   // Congelar TC manualmente para reqs sin TC guardado que tienen USD/EUR
   const itemLines = parseLines(item.LinesJSON||'[]');
   const hasUSD = itemLines.some(l=>l.currency==='USD'||l.currency==='EUR');
