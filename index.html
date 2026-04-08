@@ -680,23 +680,17 @@ const DB_GITHUB_FILE = 'requisiciones.json';
 function getCfg() {
   try {
     var stored = JSON.parse(localStorage.getItem("mgal_cfg") || "{}");
-    // SIEMPRE usar token embebido si el de localStorage está vacío o es inválido
-    if (!stored.ghToken || stored.ghToken.length < 10) {
-      if (CFG.GH_TOKEN && !CFG.GH_TOKEN.startsWith("__")) {
-        stored.ghToken = CFG.GH_TOKEN;
-      }
+    if (!stored.ghToken && CFG.GH_TOKEN && !CFG.GH_TOKEN.startsWith("__")) {
+      stored.ghToken = CFG.GH_TOKEN;
     }
-    if (!stored.ghRepo || stored.ghRepo.startsWith("__")) {
-      if (CFG.GH_REPO && !CFG.GH_REPO.startsWith("__")) {
-        stored.ghRepo = CFG.GH_REPO;
-      }
+    if (!stored.ghRepo && CFG.GH_REPO && !CFG.GH_REPO.startsWith("__")) {
+      stored.ghRepo = CFG.GH_REPO;
     }
     return stored;
   } catch(e) {
-    // Si localStorage falla, devolver config embebida directamente
     return {
-      ghToken: (CFG.GH_TOKEN && !CFG.GH_TOKEN.startsWith("__")) ? CFG.GH_TOKEN : "",
-      ghRepo:  (CFG.GH_REPO  && !CFG.GH_REPO.startsWith("__"))  ? CFG.GH_REPO  : ""
+      ghToken: CFG.GH_TOKEN || "",
+      ghRepo:  CFG.GH_REPO  || ""
     };
   }
 }
@@ -759,16 +753,6 @@ async function openAttachment(url, filename) {
 let _dbCache = null; // {sha, items}
 
 async function readDB(forceRefresh=false) {
-  // Garantizar token siempre disponible
-  var cfg = getCfg();
-  if (!cfg.ghToken || cfg.ghToken.length < 10) {
-    if (CFG.GH_TOKEN && !CFG.GH_TOKEN.startsWith("__")) {
-      cfg.ghToken = CFG.GH_TOKEN;
-      try { localStorage.setItem("mgal_cfg", JSON.stringify(cfg)); } catch(e2) {}
-    } else {
-      throw new Error("Sin token de acceso configurado");
-    }
-  }
 
   const cfg = getCfg();
   if (!cfg.ghRepo || !cfg.ghToken) throw new Error('Sin configuración');
@@ -5098,20 +5082,7 @@ async function initApp(account) {
   document.getElementById('tc-badge').addEventListener('click', showTCEditor);
 
   buildNav();
-  // Al iniciar: verificar y auto-reparar token
-  (function validateToken() {
-    try {
-      var cfg = getCfg();
-      if (!cfg.ghToken || cfg.ghToken.length < 10) {
-        if (CFG.GH_TOKEN && !CFG.GH_TOKEN.startsWith("__")) {
-          var c2 = JSON.parse(localStorage.getItem("mgal_cfg") || "{}");
-          c2.ghToken = CFG.GH_TOKEN;
-          localStorage.setItem("mgal_cfg", JSON.stringify(c2));
-        }
-      }
-    } catch(e) {}
-  })();
-    fetchTC();
+  fetchTC();
   initNotifBell();
   // Auto-actualizar TC cada 30 minutos
   if (window._tcInterval) clearInterval(window._tcInterval);
