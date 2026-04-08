@@ -680,10 +680,19 @@ const DB_GITHUB_FILE = 'requisiciones.json';
 function getCfg() {
   try {
     var s = JSON.parse(localStorage.getItem("mgal_cfg") || "{}");
-    if (!s.ghToken && CFG.GH_TOKEN && CFG.GH_TOKEN.indexOf("__") !== 0) s.ghToken = CFG.GH_TOKEN;
-    if (!s.ghRepo  && CFG.GH_REPO  && CFG.GH_REPO.indexOf("__")  !== 0) s.ghRepo  = CFG.GH_REPO;
+    if (!s.ghToken && CFG.GH_TOKEN && CFG.GH_TOKEN.indexOf("__") !== 0) {
+      s.ghToken = CFG.GH_TOKEN;
+    }
+    if (!s.ghRepo && CFG.GH_REPO && CFG.GH_REPO.indexOf("__") !== 0) {
+      s.ghRepo = CFG.GH_REPO;
+    }
     return s;
-  } catch(e) { return {}; }
+  } catch(e) {
+    return {
+      ghToken: (CFG.GH_TOKEN && CFG.GH_TOKEN.indexOf("__") !== 0) ? CFG.GH_TOKEN : "",
+      ghRepo:  (CFG.GH_REPO  && CFG.GH_REPO.indexOf("__")  !== 0) ? CFG.GH_REPO  : ""
+    };
+  }
 }
 function saveCfg(obj) {
   localStorage.setItem('mgal_cfg', JSON.stringify({...getCfg(),...obj}));
@@ -1697,7 +1706,7 @@ function renderList(approvalsMode=false) {
       </div>
       <div class="ml-auto d-flex">
         <button class="btn btn-secondary btn-sm" id="btn-refresh-list">↻ Actualizar</button>
-        <button class="btn btn-secondary btn-sm" id="btn-cross-delivery" title="Cruzar archivo de entregas">📋 Cruzar entregas</button>
+        ${(userRole==="admin"||userRole==="approver")?'<button class="btn btn-secondary btn-sm" id="btn-cross-delivery" title="Cruzar archivo de entregas">📋 Cruzar entregas</button>':''}
         <button class="btn btn-secondary btn-sm" id="btn-export-csv">⬇ CSV</button>
       </div>
     </div>
