@@ -678,20 +678,16 @@ async function getToken() {
 const DB_GITHUB_FILE = 'requisiciones.json';
 
 function getCfg() {
+  // El token y repo SIEMPRE vienen del código embebido (CFG)
+  // Así ningún usuario puede tener un token viejo/inválido en localStorage
   try {
     var s = JSON.parse(localStorage.getItem("mgal_cfg") || "{}");
-    if (!s.ghToken && CFG.GH_TOKEN && CFG.GH_TOKEN.indexOf("__") !== 0) {
-      s.ghToken = CFG.GH_TOKEN;
-    }
-    if (!s.ghRepo && CFG.GH_REPO && CFG.GH_REPO.indexOf("__") !== 0) {
-      s.ghRepo = CFG.GH_REPO;
-    }
+    // SIEMPRE sobreescribir token y repo con los embebidos
+    s.ghToken = CFG.GH_TOKEN || s.ghToken || "";
+    s.ghRepo  = CFG.GH_REPO  || s.ghRepo  || "";
     return s;
   } catch(e) {
-    return {
-      ghToken: (CFG.GH_TOKEN && CFG.GH_TOKEN.indexOf("__") !== 0) ? CFG.GH_TOKEN : "",
-      ghRepo:  (CFG.GH_REPO  && CFG.GH_REPO.indexOf("__")  !== 0) ? CFG.GH_REPO  : ""
-    };
+    return { ghToken: CFG.GH_TOKEN || "", ghRepo: CFG.GH_REPO || "" };
   }
 }
 function saveCfg(obj) {
