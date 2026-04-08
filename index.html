@@ -679,20 +679,11 @@ const DB_GITHUB_FILE = 'requisiciones.json';
 
 function getCfg() {
   try {
-    var stored = JSON.parse(localStorage.getItem("mgal_cfg") || "{}");
-    if (!stored.ghToken && CFG.GH_TOKEN && !CFG.GH_TOKEN.startsWith("__")) {
-      stored.ghToken = CFG.GH_TOKEN;
-    }
-    if (!stored.ghRepo && CFG.GH_REPO && !CFG.GH_REPO.startsWith("__")) {
-      stored.ghRepo = CFG.GH_REPO;
-    }
-    return stored;
-  } catch(e) {
-    return {
-      ghToken: CFG.GH_TOKEN || "",
-      ghRepo:  CFG.GH_REPO  || ""
-    };
-  }
+    var s = JSON.parse(localStorage.getItem("mgal_cfg") || "{}");
+    if (!s.ghToken && CFG.GH_TOKEN && CFG.GH_TOKEN.indexOf("__") !== 0) s.ghToken = CFG.GH_TOKEN;
+    if (!s.ghRepo  && CFG.GH_REPO  && CFG.GH_REPO.indexOf("__")  !== 0) s.ghRepo  = CFG.GH_REPO;
+    return s;
+  } catch(e) { return {}; }
 }
 function saveCfg(obj) {
   localStorage.setItem('mgal_cfg', JSON.stringify({...getCfg(),...obj}));
