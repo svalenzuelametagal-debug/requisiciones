@@ -1980,6 +1980,7 @@ function renderList(approvalsMode=false) {
     },100);
   });
 
+  document.getElementById('btn-cross-delivery')?.addEventListener('click',()=>crossDeliveryFile());
   document.getElementById('btn-refresh-list').addEventListener('click', doLoad);
   document.getElementById('btn-export-csv').addEventListener('click',()=>{
     const items = getFiltered(approvalsMode);
