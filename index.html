@@ -1630,23 +1630,35 @@ function buildNav() {
 // ── PERSISTIR ESTADO FILTROS ─────────────────────────────────────
 function saveListState() {
   try {
-    sessionStorage.setItem('mgal_ls', JSON.stringify({
+    const state = {
       q:      document.getElementById('flt-q')?.value||'',
       dept:   document.getElementById('flt-dept')?.value||'',
       status: document.getElementById('flt-status')?.value||'',
       urg:    document.getElementById('flt-urg')?.value||'',
       col:    renderList._sortCol||'CreatedAt',
-      dir:    renderList._sortDir||-1
-    }));
+      dir:    renderList._sortDir||-1,
+      scroll: document.getElementById('list-table-wrap')?.scrollTop||0,
+    };
+    sessionStorage.setItem('mgal_ls', JSON.stringify(state));
   } catch(e){}
 }
 function restoreListState() {
   try {
     const s = JSON.parse(sessionStorage.getItem('mgal_ls')||'{}');
-    const set = (id,v) => { const el=document.getElementById(id); if(el&&v) el.value=v; };
-    set('flt-q', s.q); set('flt-dept', s.dept); set('flt-status', s.status); set('flt-urg', s.urg);
-    if (s.col) renderList._sortCol = s.col;
-    if (s.dir) renderList._sortDir = s.dir;
+    const set=(id,v)=>{const el=document.getElementById(id);if(el&&v!==undefined&&v!=='')el.value=v;};
+    set('flt-q',     s.q);
+    set('flt-dept',  s.dept);
+    set('flt-status',s.status);
+    set('flt-urg',   s.urg);
+    if(s.col) renderList._sortCol=s.col;
+    if(s.dir) renderList._sortDir=s.dir;
+    // Restore scroll after render
+    if(s.scroll){
+      setTimeout(()=>{
+        const wrap=document.getElementById('list-table-wrap');
+        if(wrap) wrap.scrollTop=s.scroll;
+      },80);
+    }
   } catch(e){}
 }
 function renderList(approvalsMode=false) {
