@@ -1404,7 +1404,7 @@ function mapItem(raw) {
     FinBy:          raw.FinBy||'',
     FinNote:        fixEncoding(raw.FinNote||''),
     RequiereGerencia: raw.RequiereGerencia||false,
-    SelectedVendor: (window._ocPdfVendor||raw.SelectedVendor||''),
+    SelectedVendor:   raw.SelectedVendor||'',
     VendorCriteria:   raw.VendorCriteria||'',
     TCusd:            raw.TCusd||null,
     TCeur:            raw.TCeur||null,
@@ -3049,7 +3049,7 @@ function renderDetail(item) {
                 const newLines2 = curLines.map(function(ln,i){
                   const u=updates2.find(function(x){return x.idx===i&&x.type==='update';});
                   if(!u) return ln;
-                  return Object.assign({},ln,u.qD?{qty:parseFloat(u.oc.qty)||ln.qty}:{},u.pD?{price:parseFloat(u.oc.price)||ln.price}:{});
+                  return Object.assign({},ln,u.qD?{qty:u.oc.qty}:{},u.pD?{price:u.oc.price}:{});
                 });
                 await doAction(item,{LinesJSON:JSON.stringify(newLines2),UpdatedAt:isoNow()});
                 item.LinesJSON=JSON.stringify(newLines2);
@@ -3298,7 +3298,6 @@ function renderDetail(item) {
   }
   if (canAssignOC) {
     document.getElementById('btn-assign-oc').addEventListener('click', async ()=>{
-  window._ocPdfVendor=null;
       const now = new Date().toISOString().slice(0,10);
       const year = new Date().getFullYear();
       // Auto-suggest next OC number
@@ -3399,13 +3398,6 @@ function renderDetail(item) {
               // Also update n2-proveedor if visible
               const n2El = document.getElementById('n2-proveedor');
               if (n2El && !n2El.value) n2El.value = pdfVendor;
-              if(pdfVendor){
-                const vEl=document.getElementById('oc-vendor')||document.getElementById('oc-buyer');
-                if(vEl&&!vEl.value) vEl.value=pdfVendor;
-                // Also set SelectedVendor when OC is saved
-                window._pdfVendor=pdfVendor;
-              }
-              window._ocPdfVendor = pdfVendor;
               toast('🏭 Proveedor detectado: '+pdfVendor, 'success');
             }
             // Extract delivery date: in Metagal NPs the emission date appears first,
@@ -3434,28 +3426,16 @@ function renderDetail(item) {
               const updates3 = [];
               let hasDiffs = false;
               ocPdfItems.forEach(op => {
-  // Match by description (normalize)
-  const nd = s => String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/\s+/g," ").trim();
-  const opDesc = nd(op.desc);
-  let rcLine = rcItemsOC.find(r => {
-    const rdesc = nd(r.desc||"");
-    return rdesc.length>3 && (rdesc.includes(opDesc.substring(0,12)) || opDesc.includes(rdesc.substring(0,12)));
-  });
-  // If no match by desc, use first item if only one
-  if (!rcLine && rcItemsOC.length === 1) rcLine = rcItemsOC[0];
-  if (!rcLine) return;
-
-  const opQty   = parseFloat(op.qty)   || 0;
-  const opPrice = parseFloat(op.price) || 0;
-  const rcQty   = parseFloat(rcLine.qty)   || 0;
-  const rcPrice = parseFloat(rcLine.price) || 0;
-
-  const qD = Math.abs(opQty - rcQty) > 0.01;
-  const pD = rcPrice > 0 ? Math.abs(opPrice - rcPrice) / rcPrice > 0.005 : opPrice > 0;
-
-  if (qD || pD) hasDiffs = true;
-  updates3.push({idx: rcItemsOC.indexOf(rcLine), rc: rcLine, oc: op, qD, pD});
-});;
+                const rc = rcItemsOC.find(r => {
+                  const nd = s => String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+                  return nd(r.desc).includes(nd(op.desc).substring(0,10)) || nd(op.desc).includes(nd(r.desc).substring(0,10));
+                });
+                if (!rc) return;
+                const qD = Math.abs((rc.qty||0) - (op.qty||0)) > 0.001;
+                const pD = Math.abs((rc.price||0) - (op.price||0)) > 0.5;
+                if (qD || pD) hasDiffs = true;
+                updates3.push({idx: rcItemsOC.indexOf(rc), rc, oc: op, qD, pD});
+              });
 
               // ALWAYS show comparison modal - even when everything matches
               const rows3 = updates3.map(u => {
@@ -3504,7 +3484,7 @@ function renderDetail(item) {
                           return Object.assign({},ln,u.qD?{qty:u.oc.qty}:{},u.pD?{price:u.oc.price}:{});
                         });
                         const deliveryUpdate = pdfDelivery ? {DeliveryDate: pdfDelivery} : {};
-                        await doAction(item, {LinesJSON:JSON.stringify(newLines2),...(window._ocPdfVendor?{SelectedVendor:window._ocPdfVendor,VendorCriteria:"Según NP/OC"}:{}),,...deliveryUpdate,UpdatedAt:isoNow()});
+                        await doAction(item, {LinesJSON:JSON.stringify(newLines2),...deliveryUpdate,UpdatedAt:isoNow()});
                         item.LinesJSON = JSON.stringify(newLines2);
                         if (pdfDelivery) item.DeliveryDate = pdfDelivery;
                         toast('✅ RC actualizada con datos de la OC', 'success');
