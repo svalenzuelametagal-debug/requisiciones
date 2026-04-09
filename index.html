@@ -3382,7 +3382,7 @@ function renderDetail(item) {
               });
               pdfText+=lineStr2+'\n';
             }
-            const npM = pdfText.match(/NOTA DE PEDIDO\s*No\.?\s*0*(\d+)/i);
+            const npM = pdfText.match(/(?:NOTA\s+DE\s+PEDIDO|N\.?\s*P\.?|NP)\s*[Nn]o?\.?\s*0*(\d+)/i);
             const npNum2 = npM ? 'NP '+npM[1] : '';
             // Extract vendor name: appears after "Señores PROVEEDOR XXXX / NAME" 
             let pdfVendor = '';
