@@ -2790,6 +2790,15 @@ function renderDetail(item) {
   });
 
   // Editar Cuenta GL (gerente y admin)
+  document.getElementById('btn-edit-vendor')?.addEventListener('click',function(){
+    showModal('<div class="form-group"><label>Proveedor</label><input type="text" id="edit-vendor-input" value="'+escH(item.SelectedVendor||item.Vendor||'')+'"></div>','Editar proveedor',[{label:'Guardar',cls:'btn-primary',action:async function(){${(!item.OCNumber&&(userRole==='admin'||userRole==='approver'))?'<button id="btn-edit-vendor" style="margin-left:6px;padding:1px 8px;font-size:11px;background:#2a3140;color:#e0e8f0;border:1px solid #3a4150;border-radius:4px;cursor:pointer">✏</button>':''} 
+      var nv=document.getElementById('edit-vendor-input').value.trim();
+      if(!nv){toast('Ingresá el proveedor','error');return;}
+      await doAction(item,{SelectedVendor:nv,UpdatedAt:isoNow()});
+      toast('Proveedor actualizado','success');
+      renderDetail(mapItem(Object.assign({},item,{SelectedVendor:nv})));
+    }},{label:'Cancelar',cls:'btn-secondary',action:function(){}}]);
+  });
   document.getElementById('btn-edit-gl')?.addEventListener('click', ()=>{
     const cur = item.GLAccount||'';
     showModal(
@@ -3272,6 +3281,10 @@ function renderDetail(item) {
         <div class="form-group mb-3"><label>Fecha OC</label><input type="date" id="oc-date" value="${now}"/></div>
         <div class="form-group mb-3"><label>📅 Fecha estimada de entrega (opcional)</label><input type="date" id="oc-delivery" value="${item.NeedBy||''}"/></div>
         <div class="form-group mb-3"><label>Comprador *</label><input type="text" id="oc-buyer" value="${currentUser.name||currentUser.username}"/></div>
+<div class="form-group" style="margin-top:8px">
+<label>Proveedor</label>
+<input type="text" id="oc-vendor" placeholder="Se auto-completa desde la NP" style="width:100%;padding:7px;background:#0f2340;border:1px solid #2a3140;border-radius:5px;color:#e0e8f0;font-size:12px">
+</div>
         <div class="form-group mb-3"><label>Cuenta Contable (GL) *</label><input type="text" id="oc-gl" value="${escH(item.GLAccount||'')}" placeholder="Ej: 6.1.01.001"/></div>
         <div class="form-group mb-3"><label>Observaciones OC (opcional)</label><textarea id="oc-obs" rows="2" placeholder="Notas adicionales sobre la OC…"></textarea></div>
         <div class="form-group">
@@ -3444,7 +3457,7 @@ function renderDetail(item) {
                         const newLines2 = curL.map(function(ln,i) {
                           const u = updates3.find(function(x){return x.idx===i;});
                           if (!u) return ln;
-                          return Object.assign({},ln,u.qD?{qty:u.oc.qty}:{},u.pD?{price:u.oc.price}:{});
+                          return Object.assign({},ln,u.qD?{qty:parseFloat(u.oc.qty)||ln.qty}:{},u.pD?{price:parseFloat(u.oc.price)||ln.price}:{});
                         });
                         const deliveryUpdate = pdfDelivery ? {DeliveryDate: pdfDelivery} : {};
                         await doAction(item, {LinesJSON:JSON.stringify(newLines2),...(window._ocPdfVendor?{SelectedVendor:window._ocPdfVendor}:{}),...deliveryUpdate,UpdatedAt:isoNow()});
