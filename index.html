@@ -3398,6 +3398,12 @@ function renderDetail(item) {
               // Also update n2-proveedor if visible
               const n2El = document.getElementById('n2-proveedor');
               if (n2El && !n2El.value) n2El.value = pdfVendor;
+              if(pdfVendor){
+                const vEl=document.getElementById('oc-vendor')||document.getElementById('oc-buyer');
+                if(vEl&&!vEl.value) vEl.value=pdfVendor;
+                // Also set SelectedVendor when OC is saved
+                window._pdfVendor=pdfVendor;
+              }
               toast('🏭 Proveedor detectado: '+pdfVendor, 'success');
             }
             // Extract delivery date: in Metagal NPs the emission date appears first,
