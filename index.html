@@ -1633,99 +1633,55 @@ function goBack() {
 
 
 
-// ── CRUCE AUTOMÁTICO ────────────────────────────────────────
-async function autoCruce() {
+
+// CRUCE AUTOMATICO
+async function autoCruce(){
   var cfg=getCfg();
-  if(!cfg.ghRepo||!cfg.ghToken){toast("Sin config","error");return;}
-  toast("Buscando historico en la nube...","info",4000);
-  var histAB;
+  if(!cfg.ghRepo||!cfg.ghToken){toast("Sin configuracion","error");return;}
+  toast("Buscando historico...","info",4000);
   try{
     var lr=await fetch("https://api.github.com/repos/"+cfg.ghRepo+"/contents/historico",{headers:githubHeaders(cfg.ghToken)});
-    if(!lr.ok)throw new Error("Carpeta historico/ no encontrada. Subila con subir_historico.html");
+    if(!lr.ok)throw new Error("Carpeta historico/ no encontrada (HTTP "+lr.status+"). Subi el archivo con subir_historico.html");
     var files=await lr.json();
     var hf=null;
-    if(Array.isArray(files)){for(var fi=0;fi<files.length;fi++){if(/\.(xlsx?m?|xlsb|csv)$/i.test(files[fi].name)){hf=files[fi];break;}}}
+    for(var fi=0;fi<files.length;fi++){if(/\.(xlsx?m?|xlsb|csv)$/i.test(files[fi].name)){hf=files[fi];break;}}
     if(!hf)throw new Error("Sin archivo Excel en historico/");
     toast("Descargando "+hf.name+"...","info",5000);
     var fr=await fetch(hf.url,{headers:{Authorization:"token "+cfg.ghToken,Accept:"application/vnd.github.raw"}});
     if(!fr.ok)throw new Error("Descarga fallida HTTP "+fr.status);
-    histAB=await fr.arrayBuffer();
-  }catch(e){toast("Error: "+e.message,"error",8000);return;}
-  if(!window.XLSX){toast("XLSX no cargado, recarga la pagina","error");return;}
-  var histRows=[],histHeaders=[];
-  try{
+    var histAB=await fr.arrayBuffer();
+    if(!window.XLSX){toast("XLSX no cargado, recarga la pagina","error");return;}
     var wb=window.XLSX.read(new Uint8Array(histAB),{type:"array",cellDates:true});
     var sn=wb.SheetNames[0];
     for(var si=0;si<wb.SheetNames.length;si++){if(/2021|recep|entrega/i.test(wb.SheetNames[si])){sn=wb.SheetNames[si];break;}}
-    var ws=wb.Sheets[sn];
-    var raw=window.XLSX.utils.sheet_to_json(ws,{header:1,defval:"",raw:false});
+    var raw=window.XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,defval:"",raw:false});
     var hr=0;
     for(var ri=0;ri<Math.min(10,raw.length);ri++){if(raw[ri].filter(function(c){return String(c).trim()!=="";}).length>5){hr=ri;break;}}
-    histHeaders=raw[hr].map(function(h){return String(h||"").trim();});
-    histRows=raw.slice(hr+1).filter(function(r){return r.some(function(c){return String(c).trim()!=="";});});
-  }catch(e){toast("Error leyendo Excel: "+e.message,"error",8000);return;}
-  function findCol(hints){for(var h=0;h<hints.length;h++){var rx=new RegExp(hints[h],"i");for(var i=0;i<histHeaders.length;i++){if(rx.test(histHeaders[i]))return i;}}return -1;}
-  var colNP=findCol(["\\bNP\\b","Nro NP","n.de np"]);
-  var colDate=findCol(["Fecha"]);
-  var colProv=findCol(["Proveedor"]);
-  var colDesc=findCol(["Descripci"]);
-  if(colNP<0&&colDesc<0){toast("No se detectaron columnas NP ni Descripcion","error",8000);return;}
-  function pISO(val){
-    if(!val)return"";
-    if(val instanceof Date)return isNaN(val)?"":val.toISOString().slice(0,10);
-    var s=String(val).trim();
-    var m=s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
-    if(m){var y=m[3].length===2?"20"+m[3]:m[3];return y+"-"+m[2].padStart(2,"0")+"-"+m[1].padStart(2,"0");}
-    if(/^\d{4}-\d{2}-\d{2}/.test(s))return s.slice(0,10);
-    var n=Number(s);if(!isNaN(n)&&n>40000&&n<60000){var d=new Date(Math.round((n-25569)*86400000));return d.toISOString().slice(0,10);}
-    return"";
-  }
-  function gv(row,col){return col>=0?String(row[col]||"").trim():"";}
-  var toUpd=[],matched=0;
-  for(var ri2=0;ri2<histRows.length;ri2++){
-    var row=histRows[ri2];
-    var np=gv(row,colNP).replace(/\s+/g,"").toUpperCase();
-    var dateISO=pISO(gv(row,colDate));
-    var prov=gv(row,colProv);
-    var desc=gv(row,colDesc);
-    if(!np&&!desc&&!prov)continue;
-    if(!dateISO)continue;
-    var rc=null;
-    // Solo buscar en RCs que tienen OC asignada
+    var hdrs=raw[hr].map(function(h){return String(h||"").trim();});
+    var rows=raw.slice(hr+1).filter(function(r){return r.some(function(c){return String(c).trim()!=="";});});
+    function fc(hints){for(var h=0;h<hints.length;h++){var rx=new RegExp(hints[h],"i");for(var i=0;i<hdrs.length;i++){if(rx.test(hdrs[i]))return i;}}return -1;}
+    var colNP=fc(["\\bNP\\b","Nro NP"]);var colDate=fc(["Fecha"]);var colProv=fc(["Proveedor"]);var colDesc=fc(["Descripci"]);
+    if(colNP<0&&colDesc<0){toast("No se detectaron columnas NP ni Descripcion","error",8000);return;}
+    function pISO(v){if(!v)return"";if(v instanceof Date)return isNaN(v)?"":v.toISOString().slice(0,10);var s=String(v).trim();var m=s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);if(m){var y=m[3].length===2?"20"+m[3]:m[3];return y+"-"+m[2].padStart(2,"0")+"-"+m[1].padStart(2,"0");}if(/^\d{4}-\d{2}-\d{2}/.test(s))return s.slice(0,10);return"";}
+    function gv(row,col){return col>=0?String(row[col]||"").trim():"";}
     var rcPool=allItems.filter(function(i){return i.OCNumber&&i.OCNumber.trim()!=="";});
-    if(np){rc=rcPool.find(function(i){var oc=(i.OCNumber||"").replace(/\s+/g,"").toUpperCase();return oc===np||oc==="NP"+np||"NP"+oc===np;});}
-    if(!rc&&prov&&desc){
-      var ps=prov.toLowerCase().split(" ").slice(0,2).join(" ").substring(0,8);
-      if(ps.length>3){rc=rcPool.find(function(i){
-        var rp=(i.SelectedVendor||i.Vendor||"").toLowerCase();
-        if(rp.indexOf(ps.substring(0,5))<0&&ps.indexOf((rp.split(" ")[0]||"x").substring(0,5))<0)return false;
-        try{var lines=JSON.parse(i.LinesJSON||"[]");var dn=desc.toLowerCase().substring(0,15);return lines.some(function(l){var ld=(l.desc||"").toLowerCase();return ld.indexOf(dn.substring(0,10))>=0||dn.indexOf(ld.substring(0,10))>=0;});}catch(e){return false;}
-      });}
+    var toUpd=[],matched=0;
+    for(var ri2=0;ri2<rows.length;ri2++){
+      var row=rows[ri2];var np=gv(row,colNP).replace(/\s+/g,"").toUpperCase();var dateISO=pISO(gv(row,colDate));var prov=gv(row,colProv);var desc=gv(row,colDesc);
+      if(!np&&!desc&&!prov)continue;if(!dateISO)continue;
+      var rc=null;
+      if(np)rc=rcPool.find(function(i){var oc=(i.OCNumber||"").replace(/\s+/g,"").toUpperCase();return oc===np||oc==="NP"+np||"NP"+oc===np;});
+      if(!rc&&prov&&desc){var ps=prov.toLowerCase().split(" ").slice(0,2).join(" ").substring(0,8);if(ps.length>3)rc=rcPool.find(function(i){var rp=(i.SelectedVendor||i.Vendor||"").toLowerCase();if(rp.indexOf(ps.substring(0,5))<0&&ps.indexOf((rp.split(" ")[0]||"x").substring(0,5))<0)return false;try{var lines=JSON.parse(i.LinesJSON||"[]");var dn=desc.toLowerCase().substring(0,15);return lines.some(function(l){var ld=(l.desc||"").toLowerCase();return ld.indexOf(dn.substring(0,10))>=0||dn.indexOf(ld.substring(0,10))>=0;});}catch(e){return false;}});}
+      if(!rc)continue;matched++;
+      if(!rc.ReceivedAt||!rc.DeliveryDate)toUpd.push({rc:rc,dateISO:dateISO});
     }
-    if(!rc)continue;
-    matched++;
-    if(!rc.ReceivedAt||!rc.DeliveryDate)toUpd.push({rc:rc,dateISO:dateISO});
-  }
-  if(!toUpd.length){toast("Cruce completo: "+matched+" RCs encontradas, todas tienen fechas","success",6000);return;}
-  toast("Actualizando "+toUpd.length+" RCs...","info",3000);
-  try{
-    var db=await readDB(true);
-    var cnt=0;
-    for(var ui=0;ui<toUpd.length;ui++){
-      var m2=toUpd[ui];
-      var idx=db.findIndex(function(i){return(i.id||i._id)===(m2.rc._id||m2.rc.id);});
-      if(idx<0)continue;
-      if(!db[idx].ReceivedAt)db[idx].ReceivedAt=m2.dateISO+"T00:00:00.000Z";
-      if(!db[idx].DeliveryDate)db[idx].DeliveryDate=m2.dateISO;
-      db[idx].ReceivedNote="Cruce automatico";
-      db[idx].UpdatedAt=isoNow();
-      cnt++;
-    }
-    await writeDB(db);
-    allItems=await readDB(true);
-    toast(cnt+" RCs actualizadas con fechas de recepcion y entrega","success",8000);
-    renderList(false);
-  }catch(e){toast("Error guardando: "+e.message,"error",8000);}
+    if(!toUpd.length){toast("Cruce completo: "+matched+" RCs encontradas, todas tienen fechas","success",6000);return;}
+    toast("Actualizando "+toUpd.length+" RCs...","info",3000);
+    var db=await readDB(true);var cnt=0;
+    for(var ui=0;ui<toUpd.length;ui++){var m2=toUpd[ui];var idx=db.findIndex(function(i){return(i.id||i._id)===(m2.rc._id||m2.rc.id);});if(idx<0)continue;if(!db[idx].ReceivedAt)db[idx].ReceivedAt=m2.dateISO+"T00:00:00.000Z";if(!db[idx].DeliveryDate)db[idx].DeliveryDate=m2.dateISO;db[idx].ReceivedNote="Cruce automatico";db[idx].UpdatedAt=isoNow();cnt++;}
+    await writeDB(db);allItems=await readDB(true);
+    toast(cnt+" RCs actualizadas con fechas de recepcion y entrega","success",8000);renderList(false);
+  }catch(e){toast("Error: "+e.message,"error",8000);}
 }
 
 function renderList(approvalsMode=false) {
@@ -3049,7 +3005,7 @@ function renderDetail(item) {
                 const newLines2 = curLines.map(function(ln,i){
                   const u=updates2.find(function(x){return x.idx===i&&x.type==='update';});
                   if(!u) return ln;
-                  return Object.assign({},ln,u.qD?{qty:u.oc.qty}:{},u.pD?{price:u.oc.price}:{});
+                  return Object.assign({},ln,u.qD?{qty:parseFloat(u.oc.qty)||ln.qty}:{},u.pD?{price:parseFloat(u.oc.price)||ln.price}:{});
                 });
                 await doAction(item,{LinesJSON:JSON.stringify(newLines2),UpdatedAt:isoNow()});
                 item.LinesJSON=JSON.stringify(newLines2);
@@ -3425,17 +3381,24 @@ function renderDetail(item) {
             } else if (ocPdfItems.length && rcItemsOC.length) {
               const updates3 = [];
               let hasDiffs = false;
-              ocPdfItems.forEach(op => {
-                const rc = rcItemsOC.find(r => {
-                  const nd = s => String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
-                  return nd(r.desc).includes(nd(op.desc).substring(0,10)) || nd(op.desc).includes(nd(r.desc).substring(0,10));
-                });
-                if (!rc) return;
-                const qD = Math.abs((rc.qty||0) - (op.qty||0)) > 0.001;
-                const pD = Math.abs((rc.price||0) - (op.price||0)) > 0.5;
-                if (qD || pD) hasDiffs = true;
-                updates3.push({idx: rcItemsOC.indexOf(rc), rc, oc: op, qD, pD});
-              });
+              ocPdfItems.forEach(function(op) {
+  var nd = function(s){return String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/\s+/g," ").trim();};
+  var opDesc = nd(op.desc);
+  var rcLine = rcItemsOC.find(function(r){
+    var rd = nd(r.desc||"");
+    return rd.length>3&&(rd.indexOf(opDesc.substring(0,12))>=0||opDesc.indexOf(rd.substring(0,12))>=0);
+  });
+  if (!rcLine && rcItemsOC.length===1) rcLine=rcItemsOC[0];
+  if (!rcLine) return;
+  var opQty=parseFloat(op.qty)||0;
+  var opPrice=parseFloat(op.price)||0;
+  var rcQty=parseFloat(rcLine.qty)||0;
+  var rcPrice=parseFloat(rcLine.price)||0;
+  var qD=Math.abs(opQty-rcQty)>0.01;
+  var pD=rcPrice>0?Math.abs(opPrice-rcPrice)/rcPrice>0.005:(opPrice>0);
+  if(qD||pD) hasDiffs=true;
+  updates3.push({idx:rcItemsOC.indexOf(rcLine),rc:rcLine,oc:op,qD:qD,pD:pD});
+});;
 
               // ALWAYS show comparison modal - even when everything matches
               const rows3 = updates3.map(u => {
@@ -3484,7 +3447,7 @@ function renderDetail(item) {
                           return Object.assign({},ln,u.qD?{qty:u.oc.qty}:{},u.pD?{price:u.oc.price}:{});
                         });
                         const deliveryUpdate = pdfDelivery ? {DeliveryDate: pdfDelivery} : {};
-                        await doAction(item, {LinesJSON:JSON.stringify(newLines2),...deliveryUpdate,UpdatedAt:isoNow()});
+                        await doAction(item, {LinesJSON:JSON.stringify(newLines2),...(window._ocPdfVendor?{SelectedVendor:window._ocPdfVendor}:{}),...deliveryUpdate,UpdatedAt:isoNow()});
                         item.LinesJSON = JSON.stringify(newLines2);
                         if (pdfDelivery) item.DeliveryDate = pdfDelivery;
                         toast('✅ RC actualizada con datos de la OC', 'success');
