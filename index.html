@@ -3417,7 +3417,7 @@ function renderDetail(item) {
             const ocPdfItems = []; let im2;
             while((im2=itemRx2.exec(pdfText))!==null){
               let desc2=im2[2].trim().replace(/\s+(PIEZA|UN|KG|LT|MT|M2|SET|JGO|PAR|LTS|CJ|PC|BOX)\s*(?:\(NO\s*FRACCION\.?\))?\s*$/i,'').trim();
-              ocPdfItems.push({num:parseInt(im[1]),desc:desc2,qty:parseFloat(im2[3]),price:parseFloat(im2[4])});
+              ocPdfItems.push({num:parseInt(im2[1]),desc:desc2,qty:parseFloat(im2[3]),price:parseFloat(im2[4])});
             }
             const rcItemsOC = parseLines(item.LinesJSON||'[]');
             if (!ocPdfItems.length) {
