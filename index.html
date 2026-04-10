@@ -143,30 +143,7 @@ const msal = {
 </script>
 
 <style>
-:root {
-  --bg0: #0d0f11;
-  --bg1: #13171b;
-  --bg2: #1a1f25;
-  --bg3: #222830;
-  --bg4: #2c3340;
-  --border: #2e3542;
-  --border-hi: #404d5e;
-  --text0: #e8ecf0;
-  --text1: #b0bac6;
-  --text2: #6e7e92;
-  --accent: #e8a020;
-  --accent-dim: #a06e10;
-  --accent2: #3a8fd4;
-  --accent2-dim: #1e5a8a;
-  --green: #2ea86b;
-  --red: #d94040;
-  --orange: #e0621a;
-  --yellow: #d4a017;
-  --mono: 'Consolas', 'Courier New', monospace;
-  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
-  --radius: 4px;
-  --shadow: 0 2px 12px rgba(0,0,0,0.5);
-}
+:root{--bg:#f0f2f5;--bg2:#ffffff;--bg3:#e8eaed;--text:#1a2332;--text2:#5a6a7a;--border:#d0d7de;--accent:#0070f2;--accent2:#0854a0;--green:#1a7f37;--orange:#d97706;--red:#cf222e;--yellow:#f0b030;}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{font-size:14px;background:var(--bg0);color:var(--text0);font-family:var(--sans)}
 body{min-height:100vh;display:flex;flex-direction:column}
@@ -1998,30 +1975,30 @@ function renderList(approvalsMode=false) {
   if(bellBtn){
     bellBtn.onclick=function(e){
       e.stopPropagation();
-      var existing=document.getElementById('notif-dropdown');
-      if(existing){existing.remove();return;}
-      var vencidas=allItems.filter(function(i){
-        return i.Status==='OC Asignada'&&i.DeliveryDate&&new Date(i.DeliveryDate)<new Date();
-      });
-      var sinOC=allItems.filter(function(i){
-        return i.NeedBy&&!i.OCNumber&&new Date(i.NeedBy)<new Date()&&i.Status!=='Borrador'&&i.Status!=='Anulada';
-      });
-      var all=[].concat(
-        vencidas.map(function(i){return{i:i,type:'Entrega vencida'};}),
-        sinOC.map(function(i){return{i:i,type:'Fecha necesaria vencida sin OC'};})
-      );
-      var d=document.createElement('div');
-      d.id='notif-dropdown';
-      d.style.cssText='position:absolute;top:40px;right:0;width:320px;background:#1a1f2e;border:1px solid #2a3140;border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,.5);z-index:9999;overflow:hidden';
-      var hdr='<div style="padding:12px 16px;border-bottom:1px solid #2a3140;font-size:12px;font-weight:700;color:#f0b030">Notificaciones ('+(all.length+'')+')</div>';
+      var ex=document.getElementById('notif-drop');
+      if(ex){ex.remove();return;}
+      var vencidas=allItems.filter(function(i){return i.NeedBy&&!i.OCNumber&&new Date(i.NeedBy)<new Date()&&i.Status!=='Borrador'&&i.Status!=='Anulada';});
+      var entVenc=allItems.filter(function(i){return i.Status==='OC Asignada'&&i.DeliveryDate&&new Date(i.DeliveryDate)<new Date()&&!i.ReceivedAt;});
+      var all=[].concat(vencidas.map(function(i){return{i:i,tipo:'Fecha necesaria vencida'};}),entVenc.map(function(i){return{i:i,tipo:'Entrega vencida sin recepcion'};}));
+      var drop=document.createElement('div');
+      drop.id='notif-drop';
+      drop.style.cssText='position:absolute;top:44px;right:8px;width:340px;background:#fff;border:1px solid #d0d7de;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.15);z-index:9999;overflow:hidden;font-family:Arial,sans-serif';
+      var hdr='<div style="padding:10px 16px;border-bottom:1px solid #e8eaed;font-size:13px;font-weight:700;color:#1a2332;background:#f8f9fa">'
+        +'Notificaciones'+(all.length?' ('+all.length+')':'')+'</div>';
       var items=all.length?all.map(function(n){
-        return '<div onclick="renderDetail(mapItem(allItems.find(function(x){return x.id===\''+( n.i.id||n.i._id)+'\'||x._id===\''+( n.i.id||n.i._id)+'\';})));document.getElementById(\'notif-dropdown\')?.remove();" style="padding:10px 16px;border-bottom:1px solid #1e2537;cursor:pointer;transition:background .15s" onmouseover="this.style.background=\'#243050\'" onmouseout="this.style.background=\'\'">'+'<div style="font-size:12px;font-weight:600;color:#e0e8f0">'+n.i.Title+'</div>'+'<div style="font-size:11px;color:'+(n.type.indexOf('Entrega')>=0?'#d94040':'#f0b030')+'">' + n.type+'</div>'+'</div>';
-      }).join(''):'<div style="padding:16px;font-size:12px;color:#9aa5c0;text-align:center">Sin notificaciones pendientes</div>';
-      d.innerHTML=hdr+items;
-      // Position relative to bell
-      bellBtn.style.position='relative';
-      bellBtn.appendChild(d);
-      document.addEventListener('click',function close(){d.remove();document.removeEventListener('click',close);},{once:true});
+        var id=n.i.id||n.i._id||'';
+        return '<div onclick="(function(){var it=allItems.find(function(x){return x.id===\''+id+'\' || x._id===\''+id+'\';});if(it)renderDetail(mapItem(it));var d=document.getElementById(\'notif-drop\');if(d)d.remove();})();" '
+          +'style="padding:10px 16px;border-bottom:1px solid #f0f2f5;cursor:pointer;" '
+          +'onmouseover="this.style.background=\'#f0f2f5\'" onmouseout="this.style.background=\'\'">'
+          +'<div style="font-size:12px;font-weight:600;color:#1a2332">'+n.i.Title+'</div>'
+          +'<div style="font-size:11px;color:'+(n.tipo.indexOf('Entrega')>=0?'#cf222e':'#d97706')+'">'+n.tipo+'</div>'
+          +'</div>';
+      }).join(''):('<div style="padding:16px;font-size:12px;color:#5a6a7a;text-align:center">Sin notificaciones</div>');
+      drop.innerHTML=hdr+items;
+      var nav=document.getElementById('nav')||document.body;
+      nav.style.position='relative';
+      nav.appendChild(drop);
+      setTimeout(function(){document.addEventListener('click',function cl(){var d=document.getElementById('notif-drop');if(d)d.remove();document.removeEventListener('click',cl);});},10);
     };
   }
   document.getElementById('btn-refresh-list').addEventListener('click', doLoad);
