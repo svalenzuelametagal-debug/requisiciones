@@ -1448,7 +1448,7 @@ function exportDashboardExcel(items) {
     'Cuenta GL': i.GLAccount||'',
     'Justificación': i.Justification||'',
     'Creada': fmtDT(i.CreatedAt),
-    'Entrega OC': i.DeliveryDate?fmt(i.DeliveryDate):'',
+    'Entrega OC': i.DeliveryDate?(i.OCNumber&&i.DeliveryDate?fmt(i.DeliveryDate):'—'):'',
     'Recibido': i.ReceivedAt?fmtDT(i.ReceivedAt):'',
     'ARS': parseLines(i.LinesJSON||'[]').filter(l=>l.currency==='ARS').reduce((s,l)=>s+(l.qty||0)*(l.price||0),0),
     'USD': parseLines(i.LinesJSON||'[]').filter(l=>l.currency==='USD').reduce((s,l)=>s+(l.qty||0)*(l.price||0),0),
@@ -1913,7 +1913,7 @@ function renderList(approvalsMode=false) {
         <td style="font-family:var(--mono);font-size:12px;color:var(--accent2)">${i.OCNumber||'\u2014'}</td>
         <td>${lines.length} ítem(s)</td>
         <td>${fmt(i.NeedBy)}</td>
-        <td>${i.DeliveryDate?`<span style="color:var(--green);font-weight:600">${fmt(i.DeliveryDate)}</span>`:'—'}</td>
+        <td>${i.DeliveryDate?`<span style="color:var(--green);font-weight:600">${(i.OCNumber&&i.DeliveryDate?fmt(i.DeliveryDate):'—')}</span>`:'—'}</td>
         <td>${fmt(i.CreatedAt)}</td>
         <td class="text-muted" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escH(i.Justification).substring(0,60)}</td>
         <td style="white-space:nowrap">
@@ -3340,6 +3340,7 @@ function renderDetail(item) {
             const dateMatches = pdfText.match(/\b(\d{2}[\/\-]\d{2}[\/\-]\d{4})\b/g);
             const pdfDelivery = dateMatches ? (()=>{
               const isoDate = d => { const p=d.split(/[\/\-]/); return p.length===3?p[2]+'-'+p[1]+'-'+p[0]:''; };
+              window._ocPdfDelivery=pdfDelivery;
               const allDates = [...new Set(dateMatches.map(isoDate).filter(Boolean))].sort();
               const ocIso = isoDate(date); // OC emission date
               // Return the latest date that is not the emission date
@@ -3454,12 +3455,15 @@ function renderDetail(item) {
         const tcOCeur = tcManual.eur_venta || null;
         const delivery = document.getElementById('oc-delivery')?.value || '';
         const fields = {Status:S.OC, OCNumber:num, OCDate:date, Buyer:buyer, GLAccount:gl,
+            SelectedVendor: (window._ocPdfVendor||(document.getElementById('oc-vendor')?.value||'').trim()||item.SelectedVendor||item.Vendor||'').trim(),
+            DeliveryDate: document.getElementById('oc-delivery')?.value||window._ocPdfDelivery||item.DeliveryDate||'',
           Lvl2At:item.Lvl2At||isoNow(), Lvl2By:item.Lvl2By||currentUser.username,
           Lvl2Note:obs||item.Lvl2Note||'',
           TCusd: tcOCusd, TCeur: tcOCeur, TCDate: date,
           LinesJSON: item.LinesJSON,
           DeliveryDate: delivery || item.NeedBy || '',
           AttachmentsJSON: JSON.stringify(existingAttach)};
+          window._ocPdfVendor=null; window._ocPdfDelivery=null;
         await doAction(item, fields);
         const updated = {...item, ...fields};
         await notificar(updated,`🛒 OC Asignada: ${num}`,`Comprador: ${buyer}${obs?' — '+obs:''}. Fecha: ${fmt(date)}`,[item.RequesterMail, ...(item.RequesterMail!==ROLES_APPROVER[0]?[ROLES_APPROVER[0]]:[])]);
