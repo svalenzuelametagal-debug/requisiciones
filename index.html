@@ -3439,7 +3439,7 @@ function renderDetail(item) {
           Lvl2Note:obs||item.Lvl2Note||'',
           TCusd: tcOCusd, TCeur: tcOCeur, TCDate: date,
           LinesJSON: item.LinesJSON,
-          DeliveryDate: delivery || item.NeedBy || '',
+
           AttachmentsJSON: JSON.stringify(existingAttach)};
           window._ocPdfVendor=null; window._ocPdfDelivery=null;
         await doAction(item, fields);
