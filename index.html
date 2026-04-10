@@ -806,6 +806,7 @@ async function updateItem(id,fields) {
   const d = await readDB(true); // force fresh read to avoid stale SHA
   // Support both id and _id field names
   console.log('updateItem: looking for id='+id+' in '+d.length+' items, first id='+(d[0]?d[0].id||d[0]._id:'none'));
+  console.log('updateItem: looking for id='+id+' in '+d.length+' items, first id='+(d[0]?d[0].id||d[0]._id:'none'));
   const i = d.findIndex(x => (x.id||x._id) === id || (x.id||x._id) === String(id));
   if (i < 0) throw new Error('RC no encontrada (id: '+id+')');
   d[i] = {...d[i], ...fields, UpdatedAt: isoNow()};
