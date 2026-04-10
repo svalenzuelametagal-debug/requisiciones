@@ -437,7 +437,6 @@ tr:hover td{background:var(--bg2)}
 .delivery-match-warn{color:var(--orange);font-weight:700}
 .delivery-match-err{color:var(--red)}
 </style>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
 
@@ -571,8 +570,6 @@ const S = {
   APPFIN:   'OK Financiero',
   OC:       'OC Asignada',
   INACTIVE: 'Inactiva',
-  PENDCANCEL: 'Pendiente de cancelación',
-  ANNULLED:   'Anulada',
 };
 
 const STATUS_BADGE = {
@@ -600,8 +597,6 @@ const STATUS_BADGE = {
   [S.APPFIN]:   'badge-app2',
   [S.OC]:       'badge-oc',
   [S.INACTIVE]: 'badge-draft',
-  'Pendiente de cancelación': 'badge-warning',
-  'Anulada': 'badge-critical',
 };
 
 // ================================================================
@@ -627,7 +622,6 @@ let currentUser = null;
 let userRole    = 'user';  // 'admin' | 'approver' | 'user'
 
 
-let _navContext = {mode:'list', approvalsMode:false}; // track navigation context
 let allItems    = [];
 let tcData      = {mayorista:'—', minorista:'—'}; // legacy compat
 
@@ -683,17 +677,17 @@ async function getToken() {
 const DB_GITHUB_FILE = 'requisiciones.json';
 
 function getCfg() {
-  // El token y repo SIEMPRE vienen del código embebido (CFG)
-  // Así ningún usuario puede tener un token viejo/inválido en localStorage
   try {
-    var s = JSON.parse(localStorage.getItem("mgal_cfg") || "{}");
-    // SIEMPRE sobreescribir token y repo con los embebidos
-    s.ghToken = CFG.GH_TOKEN || s.ghToken || "";
-    s.ghRepo  = CFG.GH_REPO  || s.ghRepo  || "";
-    return s;
-  } catch(e) {
-    return { ghToken: CFG.GH_TOKEN || "", ghRepo: CFG.GH_REPO || "" };
-  }
+    const stored = JSON.parse(localStorage.getItem('mgal_cfg')||'{}');
+    // Si no hay token guardado, usar el embebido en CFG (funciona en cualquier browser)
+    if (!stored.ghToken && CFG.GH_TOKEN && !CFG.GH_TOKEN.startsWith('__')) {
+      stored.ghToken = CFG.GH_TOKEN;
+    }
+    if (!stored.ghRepo && CFG.GH_REPO && !CFG.GH_REPO.startsWith('__')) {
+      stored.ghRepo = CFG.GH_REPO;
+    }
+    return stored;
+  } catch(e) { return {}; }
 }
 function saveCfg(obj) {
   localStorage.setItem('mgal_cfg', JSON.stringify({...getCfg(),...obj}));
@@ -754,7 +748,6 @@ async function openAttachment(url, filename) {
 let _dbCache = null; // {sha, items}
 
 async function readDB(forceRefresh=false) {
-
   const cfg = getCfg();
   if (!cfg.ghRepo || !cfg.ghToken) throw new Error('Sin configuración');
   const url = `https://api.github.com/repos/${cfg.ghRepo}/contents/${DB_GITHUB_FILE}`;
@@ -1263,7 +1256,6 @@ function renderNotifPanel() {
   list.querySelectorAll('.notif-item').forEach(el => {
     el.addEventListener('click', () => {
       const item = allItems.find(i => i._id === el.dataset.reqid);
-      saveListState(typeof approvalsMode !== "undefined" ? approvalsMode : false);
       if (item) { renderDetail(item); showView('detail'); }
       document.getElementById('notif-panel').classList.remove('open');
       // Mark as read
@@ -1312,18 +1304,14 @@ function toast(msg, type='info', dur=4000) {
 function fmt(date) {
   if (!date) return '—';
   try {
-    var d = new Date(date);
-    if (isNaN(d.getTime())) return '—';
-    return d.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
-  } catch(e) { return '—'; }
+    return new Date(date).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
+  } catch{return '—';}
 }
 function fmtDT(date) {
   if (!date) return '—';
   try {
-    var d = new Date(date);
-    if (isNaN(d.getTime())) return '—';
-    return d.toLocaleString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
-  } catch(e) { return '—'; }
+    return new Date(date).toLocaleString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  } catch{return '—';}
 }
 function isoNow() { return new Date().toISOString(); }
 function escH(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
@@ -1389,12 +1377,6 @@ function mapItem(raw) {
     LinesJSON:    raw.LinesJSON||'[]',
     AttachmentsJSON:raw.AttachmentsJSON||'[]',
     CommentsJSON:   raw.CommentsJSON||'[]',
-    CancelNote: fixEncoding(raw.CancelNote||''),
-    CancelBy:   raw.CancelBy||'',
-    CancelAt:   raw.CancelAt||'',
-    AnnulNote:  fixEncoding(raw.AnnulNote||''),
-    AnnulBy:    raw.AnnulBy||'',
-    AnnulAt:    raw.AnnulAt||'',
     GerAt:          raw.GerAt||'',
     GerBy:          raw.GerBy||'',
     GerNote:        fixEncoding(raw.GerNote||''),
@@ -1477,7 +1459,78 @@ function exportDashboardExcel(items) {
 
 
 // ── CRUCE ARCHIVO DE ENTREGAS ────────────────────────────────────
-
+function crossDeliveryFile() {
+  showModal(`
+    <div style="font-size:13px;color:var(--text2);margin-bottom:12px">
+      Subí un archivo CSV o Excel con las entregas del proveedor.<br>
+      <strong>Columnas esperadas:</strong> NP (o N° OC), Descripción, Fecha entrega real
+    </div>
+    <div class="form-group">
+      <label>Archivo de entregas (CSV o Excel)</label>
+      <input type="file" id="delivery-file" accept=".csv,.xlsx,.xls" style="padding:6px"/>
+    </div>
+    <div id="delivery-preview" style="margin-top:12px;font-size:12px"></div>
+  `, '📋 Cruzar archivo de entregas', [
+    {label:'Procesar y cruzar', cls:'btn-primary', action: async()=>{
+      const file = document.getElementById('delivery-file')?.files?.[0];
+      if (!file) { toast('Seleccioná un archivo','error'); return false; }
+      const preview = document.getElementById('delivery-preview');
+      preview.innerHTML = '⌛ Procesando...';
+      try {
+        let rows = [];
+        if (file.name.toLowerCase().endsWith('.csv')) {
+          const text = await file.text();
+          const lines = text.split(/[\r\n]+/).filter(Boolean);
+          const header = lines[0].split(/[;,\t]/).map(h=>h.trim().toLowerCase().replace(/['"]/g,''));
+          rows = lines.slice(1).map(line=>{
+            const cols = line.split(/[;,\t]/).map(c=>c.trim().replace(/['"]/g,''));
+            const obj = {};
+            header.forEach((h,i)=>obj[h]=cols[i]||'');
+            return obj;
+          });
+        } else {
+          preview.innerHTML = '<span style="color:var(--orange)">Excel: instalá SheetJS o convertí a CSV primero.</span>';
+          return false;
+        }
+        // Find NP/OC column
+        const npKey = Object.keys(rows[0]||{}).find(k=>k.includes('np')||k.includes('oc')||k.includes('orden')||k.includes('pedido')) || 'np';
+        const dateKey = Object.keys(rows[0]||{}).find(k=>k.includes('fecha')||k.includes('date')||k.includes('entrega')) || 'fecha';
+        const descKey = Object.keys(rows[0]||{}).find(k=>k.includes('desc')||k.includes('detalle')||k.includes('artículo')||k.includes('articulo')) || 'descripcion';
+        let matched=0, updated=0, results=[];
+        for (const row of rows) {
+          const np = (row[npKey]||'').replace(/\s+/g,'').toUpperCase();
+          const dateRaw = row[dateKey]||'';
+          if (!np) continue;
+          // Find matching RC by OCNumber
+          const rc = allItems.find(i=>(i.OCNumber||'').replace(/\s+/g,'').toUpperCase()===np);
+          if (!rc) { results.push({np,status:'sin RC',color:'var(--text2)'}); continue; }
+          matched++;
+          // Parse date dd/mm/yyyy or yyyy-mm-dd
+          let delivISO = '';
+          if (dateRaw) {
+            const p = dateRaw.split(/[\/\-\.]/);
+            if (p.length===3) delivISO = p[0].length===4 ? dateRaw : p[2]+'-'+p[1].padStart(2,'0')+'-'+p[0].padStart(2,'0');
+          }
+          const alreadyReceived = rc.ReceivedAt;
+          if (!alreadyReceived && delivISO) {
+            // Auto-mark as received
+            await doAction(rc, {ReceivedAt: delivISO+'T00:00:00.000Z', ReceivedNote:'Registrado desde cruce de archivo', UpdatedAt:isoNow()});
+            updated++;
+            results.push({np,status:'✅ Marcado recibido: '+delivISO,color:'var(--green)'});
+          } else if (alreadyReceived) {
+            results.push({np,status:'Ya registrado: '+fmtDT(alreadyReceived),color:'var(--text2)'});
+          } else {
+            results.push({np,status:'Sin fecha en archivo',color:'var(--orange)'});
+          }
+        }
+        preview.innerHTML = `<strong>${rows.length} filas · ${matched} RCs encontradas · ${updated} actualizadas</strong><br><br>`
+          + results.map(r=>`<div style="color:${r.color}">${r.np}: ${r.status}</div>`).join('');
+        if (updated>0) { toast(updated+' RC(s) marcadas como recibidas','success'); await doLoad(); }
+      } catch(e) { preview.innerHTML='<span style="color:var(--red)">Error: '+e.message+'</span>'; return false; }
+    }},
+    {label:'Cancelar', cls:'btn-secondary'}
+  ]);
+}
 
 function exportCSV(rows, filename) {
   if (!rows.length) return;
@@ -1575,131 +1628,39 @@ function buildNav() {
 // ================================================================
 
 // ── PERSISTIR ESTADO FILTROS ─────────────────────────────────────
-function saveListState(am) {
+function saveListState() {
   try {
-    var q = document.getElementById("flt-q");
-    var dept = document.getElementById("flt-dept");
-    var status = document.getElementById("flt-status");
-    var urg = document.getElementById("flt-urg");
-    var wrap = document.getElementById("list-table-wrap");
-    window._ls = {
-      q:      q      ? q.value      : "",
-      dept:   dept   ? dept.value   : "",
-      status: status ? status.value : "",
-      urg:    urg    ? urg.value    : "",
-      col:    renderList._sortCol || "CreatedAt",
-      dir:    renderList._sortDir || -1,
-      scroll: wrap   ? wrap.scrollTop : 0,
-      am:     am !== undefined ? am : (window._ls ? window._ls.am : false)
+    const state = {
+      q:      document.getElementById('flt-q')?.value||'',
+      dept:   document.getElementById('flt-dept')?.value||'',
+      status: document.getElementById('flt-status')?.value||'',
+      urg:    document.getElementById('flt-urg')?.value||'',
+      col:    renderList._sortCol||'CreatedAt',
+      dir:    renderList._sortDir||-1,
+      scroll: document.getElementById('list-table-wrap')?.scrollTop||0,
     };
-  } catch(e) {}
+    sessionStorage.setItem('mgal_ls', JSON.stringify(state));
+  } catch(e){}
 }
 function restoreListState() {
   try {
-    var s = window._ls;
-    if (!s) return false;
-    var set = function(id, v) {
-      var el = document.getElementById(id);
-      if (el && v !== undefined && v !== "") el.value = v;
-    };
-    set("flt-q",     s.q);
-    set("flt-dept",  s.dept);
-    set("flt-status",s.status);
-    set("flt-urg",   s.urg);
-    if (s.col) renderList._sortCol = s.col;
-    if (s.dir) renderList._sortDir = s.dir;
-    if (s.scroll) {
-      requestAnimationFrame(function() {
-        requestAnimationFrame(function() {
-          var w = document.getElementById("list-table-wrap");
-          if (w) w.scrollTop = s.scroll;
-        });
-      });
-    }
-    return s.am || false;
-  } catch(e) { return false; }
-}
-
-// ── GO BACK — respeta el contexto anterior ────────────────────────
-function goBack() {
-  try {
     const s = JSON.parse(sessionStorage.getItem('mgal_ls')||'{}');
-    const am = s.approvalsMode || false;
-    renderList(am);
-  } catch(e) {
-    renderList(false);
-  }
-}
-
-
-
-
-
-
-// CRUCE AUTOMATICO (admin/approver only)
-async function autoCruce(){
-  var cfg=getCfg();
-  if(!cfg.ghRepo||!cfg.ghToken){toast("Sin config","error");return;}
-  toast("Buscando historico...","info",4000);
-  try{
-    var lr=await fetch("https://api.github.com/repos/"+cfg.ghRepo+"/contents/historico",{headers:githubHeaders(cfg.ghToken)});
-    if(!lr.ok)throw new Error("Carpeta historico/ no encontrada. Subi con subir_historico.html");
-    var files=await lr.json();
-    var hf=null;
-    for(var fi=0;fi<files.length;fi++){if(/\.(xlsx?m?|xlsb|csv)$/i.test(files[fi].name)){hf=files[fi];break;}}
-    if(!hf)throw new Error("Sin archivo Excel en historico/");
-    toast("Descargando "+hf.name+"...","info",5000);
-    var fr=await fetch(hf.url,{headers:{Authorization:"token "+cfg.ghToken,Accept:"application/vnd.github.raw"}});
-    if(!fr.ok)throw new Error("Descarga fallida HTTP "+fr.status);
-    var histAB=await fr.arrayBuffer();
-    if(!window.XLSX){toast("Recarga la pagina (XLSX no cargado)","error");return;}
-    var wb=window.XLSX.read(new Uint8Array(histAB),{type:"array",cellDates:true});
-    var sn=wb.SheetNames[0];
-    for(var si=0;si<wb.SheetNames.length;si++){if(/2021|recep|entrega/i.test(wb.SheetNames[si])){sn=wb.SheetNames[si];break;}}
-    var raw=window.XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,defval:"",raw:false});
-    var hr=0;
-    for(var ri=0;ri<Math.min(10,raw.length);ri++){if(raw[ri].filter(function(c){return String(c).trim()!=="";}).length>5){hr=ri;break;}}
-    var hdrs=raw[hr].map(function(h){return String(h||"").trim();});
-    var rows=raw.slice(hr+1).filter(function(r){return r.some(function(c){return String(c).trim()!=="";});});
-    function fc(hints){for(var h=0;h<hints.length;h++){var rx=new RegExp(hints[h],"i");for(var i=0;i<hdrs.length;i++){if(rx.test(hdrs[i]))return i;}}return -1;}
-    var colNP=fc(["\\bNP\\b","Nro NP"]);var colDate=fc(["Fecha"]);var colProv=fc(["Proveedor"]);var colDesc=fc(["Descripci"]);
-    if(colNP<0&&colDesc<0){toast("No se detectaron columnas NP ni Descripcion","error",8000);return;}
-    function pISO(v){if(!v)return"";if(v instanceof Date)return isNaN(v)?"":v.toISOString().slice(0,10);var s=String(v).trim();var m=s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);if(m){var y=m[3].length===2?"20"+m[3]:m[3];return y+"-"+m[2].padStart(2,"0")+"-"+m[1].padStart(2,"0");}if(/^\d{4}-\d{2}-\d{2}/.test(s))return s.slice(0,10);return"";}
-    function gv(row,col){return col>=0?String(row[col]||"").trim():"";}
-    var rcPool=allItems.filter(function(i){return i.OCNumber&&i.OCNumber.trim()!=="";});
-    var toUpd=[],matched=0;
-    for(var ri2=0;ri2<rows.length;ri2++){
-      var row=rows[ri2];var np=gv(row,colNP).replace(/\s+/g,"").toUpperCase();var dateISO=pISO(gv(row,colDate));var prov=gv(row,colProv);var desc=gv(row,colDesc);
-      if(!np&&!desc&&!prov)continue;if(!dateISO)continue;
-      var rc=null;
-      if(np)rc=rcPool.find(function(i){var oc=(i.OCNumber||"").replace(/\s+/g,"").toUpperCase();return oc===np||oc==="NP"+np||"NP"+oc===np;});
-      if(!rc&&prov&&desc){
-        var ps=prov.toLowerCase().split(" ").slice(0,2).join(" ").substring(0,8);
-        if(ps.length>3)rc=rcPool.find(function(i){
-          var rp=(i.SelectedVendor||i.Vendor||"").toLowerCase();
-          if(rp.indexOf(ps.substring(0,5))<0&&ps.indexOf((rp.split(" ")[0]||"x").substring(0,5))<0)return false;
-          try{var lines=JSON.parse(i.LinesJSON||"[]");var dn=desc.toLowerCase().substring(0,15);return lines.some(function(l){var ld=(l.desc||"").toLowerCase();return ld.indexOf(dn.substring(0,10))>=0||dn.indexOf(ld.substring(0,10))>=0;});}catch(e){return false;}
-        });
-      }
-      if(!rc)continue;matched++;
-      if(!rc.ReceivedAt||!rc.DeliveryDate)toUpd.push({rc:rc,dateISO:dateISO});
+    const set=(id,v)=>{const el=document.getElementById(id);if(el&&v!==undefined&&v!=='')el.value=v;};
+    set('flt-q',     s.q);
+    set('flt-dept',  s.dept);
+    set('flt-status',s.status);
+    set('flt-urg',   s.urg);
+    if(s.col) renderList._sortCol=s.col;
+    if(s.dir) renderList._sortDir=s.dir;
+    // Restore scroll after render
+    if(s.scroll){
+      setTimeout(()=>{
+        const wrap=document.getElementById('list-table-wrap');
+        if(wrap) wrap.scrollTop=s.scroll;
+      },80);
     }
-    if(!toUpd.length){toast("Cruce completo: "+matched+" RCs encontradas, todas tienen fechas","success",6000);return;}
-    toast("Actualizando "+toUpd.length+" RCs...","info",3000);
-    var db=await readDB(true);var cnt=0;
-    for(var ui=0;ui<toUpd.length;ui++){
-      var m2=toUpd[ui];
-      var idx=db.findIndex(function(i){return(i.id||i._id)===(m2.rc._id||m2.rc.id);});
-      if(idx<0)continue;
-      if(!db[idx].ReceivedAt)db[idx].ReceivedAt=m2.dateISO+"T00:00:00.000Z";
-      if(!db[idx].DeliveryDate)db[idx].DeliveryDate=m2.dateISO;
-      db[idx].ReceivedNote="Cruce automatico";db[idx].UpdatedAt=isoNow();cnt++;
-    }
-    await writeDB(db);allItems=await readDB(true);
-    toast(cnt+" RCs actualizadas con fechas","success",8000);renderList(false);
-  }catch(e){toast("Error: "+e.message,"error",8000);}
+  } catch(e){}
 }
-
 function renderList(approvalsMode=false) {
   showView('list');
   const container = document.getElementById('view-list');
@@ -1715,9 +1676,8 @@ function renderList(approvalsMode=false) {
         <div class="section-sub" id="list-count"></div>
       </div>
       <div class="ml-auto d-flex">
-        ${(userRole==='admin'||userRole==='approver')?'<button class="btn btn-secondary btn-sm" id="btn-auto-cruce" title="Cruza el histórico Excel de la nube con las RCs">📋 Cruzar Entregas</button>':''}
         <button class="btn btn-secondary btn-sm" id="btn-refresh-list">↻ Actualizar</button>
-        ${(userRole==="admin"||userRole==="approver")?'':''}
+        <button class="btn btn-secondary btn-sm" id="btn-cross-delivery" title="Cruzar archivo de entregas">📋 Cruzar entregas</button>
         <button class="btn btn-secondary btn-sm" id="btn-export-csv">⬇ CSV</button>
       </div>
     </div>
@@ -1785,15 +1745,7 @@ function renderList(approvalsMode=false) {
           summaryEl.innerHTML = '';
         }
       }
-    // Guardar contexto actual antes de renderizar
-    _navContext.approvalsMode = approvalsMode;
-    restoreListState(); // filtros ya existen en DOM
       renderTable(approvalsMode);
-  // Restore scroll position after render
-  try{
-    const _ls=JSON.parse(sessionStorage.getItem('mgal_ls')||'{}');
-    if(_ls.scroll){setTimeout(()=>{const w=document.getElementById('list-table-wrap');if(w)w.scrollTop=_ls.scroll;},100);}
-  }catch(e){}
       renderNotifPanel();
       checkStaleRC();
     } catch(e) {
@@ -1924,7 +1876,6 @@ function renderList(approvalsMode=false) {
       previewPanel.querySelectorAll('.search-preview-row').forEach(row => {
         row.addEventListener('click', () => {
           const found = allItems.find(x => x._id === row.dataset.id);
-          saveListState(typeof approvalsMode !== "undefined" ? approvalsMode : false);
           if (found) { renderDetail(found); showView('detail'); }
         });
       });
@@ -1934,8 +1885,6 @@ function renderList(approvalsMode=false) {
     }
     if (!items.length) {
       wrap.innerHTML = `<div class="empty-state"><div class="empty-state-icon">📭</div>Sin resultados</div>`;
-  // Restore state AFTER DOM is built (filter inputs now exist)
-  restoreListState();
       wrap.classList.remove('hidden');
       return;
     }
@@ -2001,7 +1950,6 @@ function renderList(approvalsMode=false) {
 
     wrap.querySelectorAll('.req-row').forEach(r=>{
       r.addEventListener('dblclick',()=>{
-        saveListState();
         const item = allItems.find(i=>i._id===r.dataset.id);
         if (item) { renderDetail(item); showView('detail'); }
       });
@@ -2044,10 +1992,7 @@ function renderList(approvalsMode=false) {
     },100);
   });
 
-  if(userRole==='admin'||userRole==='approver'){
-    document.getElementById('btn-auto-cruce')?.addEventListener('click',()=>autoCruce());
-  }
-  document.getElementById('btn-auto-cruce')?.addEventListener('click',function(){autoCruce();});
+  document.getElementById('btn-cross-delivery')?.addEventListener('click',()=>crossDeliveryFile());
   document.getElementById('btn-refresh-list').addEventListener('click', doLoad);
   document.getElementById('btn-export-csv').addEventListener('click',()=>{
     const items = getFiltered(approvalsMode);
@@ -2312,7 +2257,9 @@ function renderForm(item) {
     renderItems();
   });
 
-  document.getElementById('btn-cancel-form').addEventListener('click',()=>goBack());
+  document.getElementById('btn-cancel-form').addEventListener('click',()=>{
+    renderList(false);
+  });
 
   function validate() {
     const dept   = document.getElementById('f-dept').value;
@@ -2550,7 +2497,6 @@ function renderForm(item) {
 // ================================================================
 // VISTA: DETALLE / APROBACIÓN
 // ================================================================
-saveListState(typeof approvalsMode !== "undefined" ? approvalsMode : false);
 function renderDetail(item) {
   // Normalizar siempre al entrar, independientemente del origen del item
   item = { ...item, Status: _normalizeStatus(item.Status) };
@@ -2562,12 +2508,7 @@ function renderDetail(item) {
   const bc = getBadgeClass(item.Status);
   const ub = getUrgencyBadge(item.Urgency);
 
-  const canReactivate    = userRole==='admin' && item.Status === S.INACTIVE;
-  const canRequestCancel = item.RequesterMail===currentUser?.username &&
-    ![S.DRAFT,S.INACTIVE,S.ANNULLED,S.PENDCANCEL].includes(item.Status);
-  const canConfirmAnnul  = (userRole==='admin'||userRole==='approver') && item.Status===S.PENDCANCEL;
-  const canAnnulDirect   = (userRole==='admin'||userRole==='approver') &&
-    ![S.DRAFT,S.ANNULLED,S.INACTIVE].includes(item.Status);
+  const canReactivate = userRole==='admin' && item.Status === S.INACTIVE;
     const canEdit       = canEditDraft(item);
   const canApproveN1  = (userRole==='approver'||userRole==='admin') && item.Status===S.SENT;
   const canApproveN2  = userRole==='admin' && item.Status===S.APP1;
@@ -2615,10 +2556,6 @@ function renderDetail(item) {
   let actionBtns = `<button class="btn btn-secondary btn-sm" id="btn-print-req" title="Imprimir / Guardar PDF">🖨 PDF</button>`;
   actionBtns += `<button class="btn btn-secondary btn-sm" id="btn-dup-req" title="Duplicar como nuevo borrador">⧉ Duplicar</button>`;
   if (canReactivate) actionBtns += `<button class="btn btn-warning" id="btn-reactivate-req">↩ Reactivar requisición</button>`;
-  if (canRequestCancel) actionBtns += '<button class="btn" id="btn-request-cancel" style="background:#f0b030;color:#000">🚫 Solicitar cancelación</button>';
-  if (canConfirmAnnul)  actionBtns += '<button class="btn" id="btn-confirm-annul" style="background:#d94040;color:#fff">✖ Confirmar anulación</button>';
-  if (canConfirmAnnul)  actionBtns += '<button class="btn btn-secondary" id="btn-reject-cancel">↩ Rechazar cancelación</button>';
-  if (canAnnulDirect)   actionBtns += '<button class="btn" id="btn-annul-direct" style="background:#d94040;color:#fff;font-size:11px;padding:6px 12px">✖ Anular directamente</button>';
   // Congelar TC manualmente para reqs sin TC guardado que tienen USD/EUR
   const itemLines = parseLines(item.LinesJSON||'[]');
   const hasUSD = itemLines.some(l=>l.currency==='USD'||l.currency==='EUR');
@@ -2745,7 +2682,7 @@ function renderDetail(item) {
     </div>
   `;
 
-  document.getElementById('btn-back-detail').addEventListener('click',()=>goBack());
+  document.getElementById('btn-back-detail').addEventListener('click',()=>renderList(false));
   document.getElementById('btn-print-req').addEventListener('click',()=>imprimirRequisicion(item));
 
   // Duplicar requisición
@@ -2801,20 +2738,10 @@ function renderDetail(item) {
     if (!confirm(`¿Congelar TC ahora?\nUSD $${(tcU||0).toLocaleString('es-AR',{minimumFractionDigits:2})}${tcE?' | EUR $'+tcE.toLocaleString('es-AR',{minimumFractionDigits:2}):''}\nFecha: ${tcDate}`)) return;
     await doAction(item, { TCusd: tcU, TCeur: tcE, TCDate: tcDate, UpdatedAt: isoNow() });
     toast('TC congelado correctamente 🔒', 'success');
-    saveListState(typeof approvalsMode !== "undefined" ? approvalsMode : false);
     renderDetail({...item, TCusd: tcU, TCeur: tcE, TCDate: tcDate});
   });
 
   // Editar Cuenta GL (gerente y admin)
-  document.getElementById('btn-edit-vendor')?.addEventListener('click',function(){
-    showModal('<div class="form-group"><label>Proveedor</label><input type="text" id="edit-vendor-input" value="'+escH(item.SelectedVendor||item.Vendor||'')+'"></div>','Editar proveedor',[{label:'Guardar',cls:'btn-primary',action:async function(){${(!item.OCNumber&&(userRole==='admin'||userRole==='approver'))?'<button id="btn-edit-vendor" style="margin-left:6px;padding:1px 8px;font-size:11px;background:#2a3140;color:#e0e8f0;border:1px solid #3a4150;border-radius:4px;cursor:pointer">✏</button>':''} 
-      var nv=document.getElementById('edit-vendor-input').value.trim();
-      if(!nv){toast('Ingresá el proveedor','error');return;}
-      await doAction(item,{SelectedVendor:nv,UpdatedAt:isoNow()});
-      toast('Proveedor actualizado','success');
-      renderDetail(mapItem(Object.assign({},item,{SelectedVendor:nv})));
-    }},{label:'Cancelar',cls:'btn-secondary',action:function(){}}]);
-  });
   document.getElementById('btn-edit-gl')?.addEventListener('click', ()=>{
     const cur = item.GLAccount||'';
     showModal(
@@ -2824,7 +2751,6 @@ function renderDetail(item) {
         const newGL = document.getElementById('gl-edit-input').value.trim();
         await doAction(item, {GLAccount: newGL, GLCorregido: true, UpdatedAt: isoNow()});
         toast('Cuenta GL actualizada','success');
-        saveListState(typeof approvalsMode !== "undefined" ? approvalsMode : false);
         renderDetail({...item, GLAccount: newGL, GLCorregido: true});
       }},
       {label:'Cancelar', cls:'btn-secondary'}]
@@ -2862,7 +2788,6 @@ function renderDetail(item) {
         await doAction(item, {AttachmentsJSON: JSON.stringify(newAttach), ...extraFields, UpdatedAt: isoNow()});
         if (revertOC) toast('OC eliminada — requisición vuelve a estado "Lista para OC"','success');
         else toast('Adjunto eliminado','success');
-        saveListState(typeof approvalsMode !== "undefined" ? approvalsMode : false);
         renderDetail({...item, ...extraFields, AttachmentsJSON: JSON.stringify(newAttach)});
       });
     });
@@ -2957,7 +2882,6 @@ function renderDetail(item) {
 
           if (diffs.length > 0) {
             const msg = '📄 ' + files[k].name + '\n\n⚠ Posibles diferencias vs RC:\n\n' + diffs.join('\n') + '\n\n¿Querés revisar la RC?';
-            saveListState(typeof approvalsMode !== "undefined" ? approvalsMode : false);
             if (confirm(msg)) { renderDetail(item); }
           } else {
             toast('✅ ' + files[k].name + ' coincide con la RC', 'success');
@@ -3030,12 +2954,11 @@ function renderDetail(item) {
                 const newLines2 = curLines.map(function(ln,i){
                   const u=updates2.find(function(x){return x.idx===i&&x.type==='update';});
                   if(!u) return ln;
-                  return Object.assign({},ln,u.qD?{qty:parseFloat(u.oc.qty)||ln.qty}:{},u.pD?{price:parseFloat(u.oc.price)||ln.price}:{});
+                  return Object.assign({},ln,u.qD?{qty:u.oc.qty}:{},u.pD?{price:u.oc.price}:{});
                 });
                 await doAction(item,{LinesJSON:JSON.stringify(newLines2),UpdatedAt:isoNow()});
                 item.LinesJSON=JSON.stringify(newLines2);
                 toast('✅ RC actualizada con los datos del PDF','success');
-                saveListState(typeof approvalsMode !== "undefined" ? approvalsMode : false);
                 renderDetail({...item,AttachmentsJSON:JSON.stringify(allAttach)});
               }},
               {label:'No, dejar como está',cls:'btn-secondary'}
@@ -3046,7 +2969,6 @@ function renderDetail(item) {
       }
 
       // Refresh detail view
-      saveListState(typeof approvalsMode !== "undefined" ? approvalsMode : false);
       renderDetail({...item, AttachmentsJSON: JSON.stringify(allAttach)});
     } catch(err) {
       statusEl.textContent = '❌ Error: ' + err.message;
@@ -3062,7 +2984,6 @@ function renderDetail(item) {
     await notificar({...item, Status: S.SENT}, '♻ Requisición reactivada', `Reactivada por ${currentUser.username}`, [item.RequesterMail, ROLES_APPROVER[0]]);
     toast('Requisición reactivada y enviada para revisión', 'success');
     const newItem = {...item, Status: S.SENT};
-    saveListState(typeof approvalsMode !== "undefined" ? approvalsMode : false);
     renderDetail(newItem);
   });
   if (canEdit) document.getElementById('btn-edit-req')?.addEventListener('click',()=>renderForm(item));
@@ -3297,10 +3218,6 @@ function renderDetail(item) {
         <div class="form-group mb-3"><label>Fecha OC</label><input type="date" id="oc-date" value="${now}"/></div>
         <div class="form-group mb-3"><label>📅 Fecha estimada de entrega (opcional)</label><input type="date" id="oc-delivery" value="${item.NeedBy||''}"/></div>
         <div class="form-group mb-3"><label>Comprador *</label><input type="text" id="oc-buyer" value="${currentUser.name||currentUser.username}"/></div>
-<div class="form-group" style="margin-top:8px">
-<label>Proveedor</label>
-<input type="text" id="oc-vendor" placeholder="Se auto-completa desde la NP" style="width:100%;padding:7px;background:#0f2340;border:1px solid #2a3140;border-radius:5px;color:#e0e8f0;font-size:12px">
-</div>
         <div class="form-group mb-3"><label>Cuenta Contable (GL) *</label><input type="text" id="oc-gl" value="${escH(item.GLAccount||'')}" placeholder="Ej: 6.1.01.001"/></div>
         <div class="form-group mb-3"><label>Observaciones OC (opcional)</label><textarea id="oc-obs" rows="2" placeholder="Notas adicionales sobre la OC…"></textarea></div>
         <div class="form-group">
@@ -3367,7 +3284,7 @@ function renderDetail(item) {
               });
               pdfText+=lineStr2+'\n';
             }
-            const npM = pdfText.match(/(?:NOTA\s+DE\s+PEDIDO|N\.?\s*P\.?|NP)\s*[Nn]o?\.?\s*0*(\d+)/i);
+            const npM = pdfText.match(/NOTA DE PEDIDO\s*No\.?\s*0*(\d+)/i);
             const npNum2 = npM ? 'NP '+npM[1] : '';
             // Extract vendor name: appears after "Señores PROVEEDOR XXXX / NAME" 
             let pdfVendor = '';
@@ -3402,7 +3319,7 @@ function renderDetail(item) {
             const ocPdfItems = []; let im2;
             while((im2=itemRx2.exec(pdfText))!==null){
               let desc2=im2[2].trim().replace(/\s+(PIEZA|UN|KG|LT|MT|M2|SET|JGO|PAR|LTS|CJ|PC|BOX)\s*(?:\(NO\s*FRACCION\.?\))?\s*$/i,'').trim();
-              ocPdfItems.push({num:parseInt(im2[1]),desc:desc2,qty:parseFloat(im2[3]),price:parseFloat(im2[4])});
+              ocPdfItems.push({num:parseInt(im[1]),desc:desc2,qty:parseFloat(im2[3]),price:parseFloat(im2[4])});
             }
             const rcItemsOC = parseLines(item.LinesJSON||'[]');
             if (!ocPdfItems.length) {
@@ -3410,24 +3327,17 @@ function renderDetail(item) {
             } else if (ocPdfItems.length && rcItemsOC.length) {
               const updates3 = [];
               let hasDiffs = false;
-              ocPdfItems.forEach(function(op) {
-  var nd = function(s){return String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/\s+/g," ").trim();};
-  var opDesc = nd(op.desc);
-  var rcLine = rcItemsOC.find(function(r){
-    var rd = nd(r.desc||"");
-    return rd.length>3&&(rd.indexOf(opDesc.substring(0,12))>=0||opDesc.indexOf(rd.substring(0,12))>=0);
-  });
-  if (!rcLine && rcItemsOC.length===1) rcLine=rcItemsOC[0];
-  if (!rcLine) return;
-  var opQty=parseFloat(op.qty)||0;
-  var opPrice=parseFloat(op.price)||0;
-  var rcQty=parseFloat(rcLine.qty)||0;
-  var rcPrice=parseFloat(rcLine.price)||0;
-  var qD=Math.abs(opQty-rcQty)>0.01;
-  var pD=rcPrice>0?Math.abs(opPrice-rcPrice)/rcPrice>0.005:(opPrice>0);
-  if(qD||pD) hasDiffs=true;
-  updates3.push({idx:rcItemsOC.indexOf(rcLine),rc:rcLine,oc:op,qD:qD,pD:pD});
-});;
+              ocPdfItems.forEach(op => {
+                const rc = rcItemsOC.find(r => {
+                  const nd = s => String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+                  return nd(r.desc).includes(nd(op.desc).substring(0,10)) || nd(op.desc).includes(nd(r.desc).substring(0,10));
+                });
+                if (!rc) return;
+                const qD = Math.abs((rc.qty||0) - (op.qty||0)) > 0.001;
+                const pD = Math.abs((rc.price||0) - (op.price||0)) > 0.5;
+                if (qD || pD) hasDiffs = true;
+                updates3.push({idx: rcItemsOC.indexOf(rc), rc, oc: op, qD, pD});
+              });
 
               // ALWAYS show comparison modal - even when everything matches
               const rows3 = updates3.map(u => {
@@ -3473,10 +3383,10 @@ function renderDetail(item) {
                         const newLines2 = curL.map(function(ln,i) {
                           const u = updates3.find(function(x){return x.idx===i;});
                           if (!u) return ln;
-                          return Object.assign({},ln,u.qD?{qty:parseFloat(u.oc.qty)||ln.qty}:{},u.pD?{price:parseFloat(u.oc.price)||ln.price}:{});
+                          return Object.assign({},ln,u.qD?{qty:u.oc.qty}:{},u.pD?{price:u.oc.price}:{});
                         });
                         const deliveryUpdate = pdfDelivery ? {DeliveryDate: pdfDelivery} : {};
-                        await doAction(item, {LinesJSON:JSON.stringify(newLines2),...(window._ocPdfVendor?{SelectedVendor:window._ocPdfVendor}:{}),...deliveryUpdate,UpdatedAt:isoNow()});
+                        await doAction(item, {LinesJSON:JSON.stringify(newLines2),...deliveryUpdate,UpdatedAt:isoNow()});
                         item.LinesJSON = JSON.stringify(newLines2);
                         if (pdfDelivery) item.DeliveryDate = pdfDelivery;
                         toast('✅ RC actualizada con datos de la OC', 'success');
@@ -4046,21 +3956,18 @@ function renderFinanzasView() {
     dc.querySelectorAll('.fin-detail-btn').forEach(btn=>{
       btn.addEventListener('click',()=>{
         const found = allData.find(i=>i._id===btn.dataset.id);
-        saveListState(typeof approvalsMode !== "undefined" ? approvalsMode : false);
         if (found) { renderDetail(found); showView('detail'); }
       });
     });
     dc.querySelectorAll('tr[data-fin-id]').forEach(row=>{
       row.addEventListener('dblclick',()=>{
         const found=allData.find(i=>i._id===row.dataset.finId);
-        saveListState(typeof approvalsMode !== "undefined" ? approvalsMode : false);
         if(found){renderDetail(found);showView('detail');}
       });
     });
     dc.querySelectorAll('tr[data-fin-id]').forEach(row=>{
       row.addEventListener('dblclick',()=>{
         const found = allData.find(i=>i._id===row.dataset.finId);
-        saveListState(typeof approvalsMode !== "undefined" ? approvalsMode : false);
         if(found){renderDetail(found);showView('detail');}
       });
     });
@@ -4249,7 +4156,6 @@ function renderGerenteView() {
       ['click','dblclick'].forEach(evt=>el.addEventListener(evt,()=>{
         const id = el.dataset.id;
         const found = all.find(i=>i._id===id);
-        saveListState(typeof approvalsMode !== "undefined" ? approvalsMode : false);
         if(found){renderDetail(found);showView('detail');}
       }));
     });
@@ -4524,7 +4430,6 @@ function renderDashboard() {
       <div style="overflow-x:auto">
       <table>
         <thead><tr><th>N° Req.</th><th>Dept.</th><th>Solicitante</th><th>Estado</th><th>Urgencia</th><th>Creada</th><th></th></tr></thead>
-        saveListState(typeof approvalsMode !== "undefined" ? approvalsMode : false);
         <tbody>${rows.map(r=>`<tr style="cursor:pointer" title="Clic para ver detalle" onclick="document.getElementById('_drillmodal').remove();renderDetail(allItems.find(x=>x.Title==='${escH(r.Title)}')||${JSON.stringify({})});showView('detail');">
           <td class="num" style="color:var(--accent)">${escH(r.Title)}</td>
           <td>${escH(r.Dept)}</td>
@@ -5142,7 +5047,6 @@ async function initApp(account) {
     const _allItems = await readDB().then(r=>r.map(mapItem)).catch(()=>[]);
     const _target = _allItems.find(x => x.Title === decodeURIComponent(_reqParam));
     if (_target) {
-      saveListState(typeof approvalsMode !== "undefined" ? approvalsMode : false);
       renderDetail(_target);
       showView('detail');
       return;
@@ -5251,7 +5155,6 @@ function renderReport() {
         ${equiv>0&&tcU?`<span style="font-size:15px;font-weight:800;color:#E8311A;font-family:var(--mono)">≈ $${n0(equiv)}</span>`:''}
       </div>`:''}
     `;
-    saveListState(typeof approvalsMode !== "undefined" ? approvalsMode : false);
     showModal(body, '📋 '+item.Title, [{label:'Ver detalle completo →', cls:'btn-primary', action:()=>{renderDetail(item); showView('detail');}}, {label:'Cerrar', cls:'btn-secondary'}]);
   }
 
@@ -5585,7 +5488,6 @@ function renderReport() {
           e.stopPropagation(); // don't trigger row click
           const title = btn.dataset.title;
           const found = window.rptItems && window.rptItems.find(x=>x.Title===title);
-          saveListState(typeof approvalsMode !== "undefined" ? approvalsMode : false);
           if (found) { renderDetail(found); showView('detail'); }
         });
       });
