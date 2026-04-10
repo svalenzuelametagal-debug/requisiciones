@@ -3412,10 +3412,10 @@ function renderDetail(item) {
                         }
                         toast('✅ Verificación OK — sin cambios necesarios', 'success');
                       }
-                      proceed = true;
+                      proceed = true; resolve();
                     }
                   },
-                  {label:'Asignar OC sin cambios', cls:'btn-secondary', cb:()=>{ proceed=true; }}
+                  {label:'Asignar OC sin cambios', cls:'btn-secondary', cb:()=>{ proceed=true; resolve(); }}
                 ]);
               });
               if (!proceed) return;
