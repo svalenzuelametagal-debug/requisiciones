@@ -3317,7 +3317,6 @@ function renderDetail(item) {
             const dateMatches = pdfText.match(/\b(\d{2}[\/\-]\d{2}[\/\-]\d{4})\b/g);
             const pdfDelivery = dateMatches ? (()=>{
               const isoDate = d => { const p=d.split(/[\/\-]/); return p.length===3?p[2]+'-'+p[1]+'-'+p[0]:''; };
-              window._ocPdfDelivery=pdfDelivery;
               const allDates = [...new Set(dateMatches.map(isoDate).filter(Boolean))].sort();
               const ocIso = isoDate(date); // OC emission date
               // Return the latest date that is not the emission date
@@ -3401,6 +3400,7 @@ function renderDetail(item) {
                         const deliveryUpdate = pdfDelivery ? {DeliveryDate: pdfDelivery} : {};
                         await doAction(item, {LinesJSON:JSON.stringify(newLines2),...deliveryUpdate,UpdatedAt:isoNow()});
                         item.LinesJSON = JSON.stringify(newLines2);
+                        window._ocPdfDelivery=pdfDelivery;
                         if (pdfDelivery) item.DeliveryDate = pdfDelivery;
                         toast('✅ RC actualizada con datos de la OC', 'success');
                       } else {
