@@ -2973,7 +2973,7 @@ function renderDetail(item) {
             ]);
             continue;
           }
-        } catch(pdfErr) { console.error('PDF analysis:',pdfErr); toast('Error analizando PDF: '+pdfErr.message,'error'); }
+        } catch(pdfErr) { console.error('PDF analysis:',pdfErr); toast('Error analizando PDF: '+(pdfErr.message||pdfErr),'error',8000); }
       }
 
       // Refresh detail view
@@ -3279,7 +3279,7 @@ function renderDetail(item) {
         if (ocFileInput?.files?.length && typeof pdfjsLib !== 'undefined') {
           try {
             toast('🔍 Analizando PDF contra la RC…', 'info');
-            const pdfFile = ocFileInput.files[0];
+            if(!ocFileInput||!ocFileInput.files||!ocFileInput.files[0]){toast('Selecciona un PDF primero','error');return;} const pdfFile = ocFileInput.files[0];
             const arrayBuf2 = await pdfFile.arrayBuffer();
             const pdf2 = await pdfjsLib.getDocument({data: new Uint8Array(arrayBuf2)}).promise;
             let pdfText = '';
@@ -3316,7 +3316,7 @@ function renderDetail(item) {
             // then each item has its own delivery date. Take the LAST distinct date.
             const dateMatches = pdfText.match(/\b(\d{2}[\/\-]\d{2}[\/\-]\d{4})\b/g);
             const pdfDelivery = dateMatches ? (()=>{
-              const isoDate = d => { const p=d.split(/[\/\-]/); return p.length===3?p[2]+'-'+p[1]+'-'+p[0]:''; };
+              const isoDate = d => { if(!d)return''; const p=d.split(/[\/\-]/); return p.length===3?p[2]+'-'+p[1]+'-'+p[0]:''; };
               const allDates = [...new Set(dateMatches.map(isoDate).filter(Boolean))].sort();
               const ocIso = isoDate(date); // OC emission date
               // Return the latest date that is not the emission date
