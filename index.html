@@ -3337,11 +3337,12 @@ function renderDetail(item) {
             } else if (ocPdfItems.length && rcItemsOC.length) {
               const updates3 = [];
               let hasDiffs = false;
+              if(!rcItemsOC||!rcItemsOC.length){hasDiffs=true;}
               ocPdfItems.forEach(function(op){
   function nd(s){return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim();}
   var opDesc=nd(op.desc);
   var rcLine=rcItemsOC.find(function(r){var rd=nd(r.desc||'');return rd.length>3&&(rd.indexOf(opDesc.substring(0,12))>=0||opDesc.indexOf(rd.substring(0,12))>=0);});
-  if(!rcLine&&rcItemsOC.length===1)rcLine=rcItemsOC[0];
+  if(!rcLine&&rcItemsOC.length>=1)rcLine=rcItemsOC[0];
   if(!rcLine)return;
   var opQty=parseFloat(op.qty)||0,opPrice=parseFloat(op.price)||0;
   var rcQty=parseFloat(rcLine.qty)||0,rcPrice=parseFloat(rcLine.price)||0;
