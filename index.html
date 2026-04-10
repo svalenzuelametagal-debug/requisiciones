@@ -1993,6 +1993,37 @@ function renderList(approvalsMode=false) {
   });
 
   document.getElementById('btn-cross-delivery')?.addEventListener('click',()=>crossDeliveryFile());
+// Notification bell dropdown
+  var bellBtn=document.getElementById('btn-notif-bell')||document.querySelector('.bell-btn');
+  if(bellBtn){
+    bellBtn.onclick=function(e){
+      e.stopPropagation();
+      var existing=document.getElementById('notif-dropdown');
+      if(existing){existing.remove();return;}
+      var vencidas=allItems.filter(function(i){
+        return i.Status==='OC Asignada'&&i.DeliveryDate&&new Date(i.DeliveryDate)<new Date();
+      });
+      var sinOC=allItems.filter(function(i){
+        return i.NeedBy&&!i.OCNumber&&new Date(i.NeedBy)<new Date()&&i.Status!=='Borrador'&&i.Status!=='Anulada';
+      });
+      var all=[].concat(
+        vencidas.map(function(i){return{i:i,type:'Entrega vencida'};}),
+        sinOC.map(function(i){return{i:i,type:'Fecha necesaria vencida sin OC'};})
+      );
+      var d=document.createElement('div');
+      d.id='notif-dropdown';
+      d.style.cssText='position:absolute;top:40px;right:0;width:320px;background:#1a1f2e;border:1px solid #2a3140;border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,.5);z-index:9999;overflow:hidden';
+      var hdr='<div style="padding:12px 16px;border-bottom:1px solid #2a3140;font-size:12px;font-weight:700;color:#f0b030">Notificaciones ('+(all.length+'')+')</div>';
+      var items=all.length?all.map(function(n){
+        return '<div onclick="renderDetail(mapItem(allItems.find(function(x){return x.id===\''+( n.i.id||n.i._id)+'\'||x._id===\''+( n.i.id||n.i._id)+'\';})));document.getElementById(\'notif-dropdown\')?.remove();" style="padding:10px 16px;border-bottom:1px solid #1e2537;cursor:pointer;transition:background .15s" onmouseover="this.style.background=\'#243050\'" onmouseout="this.style.background=\'\'">'+'<div style="font-size:12px;font-weight:600;color:#e0e8f0">'+n.i.Title+'</div>'+'<div style="font-size:11px;color:'+(n.type.indexOf('Entrega')>=0?'#d94040':'#f0b030')+'">' + n.type+'</div>'+'</div>';
+      }).join(''):'<div style="padding:16px;font-size:12px;color:#9aa5c0;text-align:center">Sin notificaciones pendientes</div>';
+      d.innerHTML=hdr+items;
+      // Position relative to bell
+      bellBtn.style.position='relative';
+      bellBtn.appendChild(d);
+      document.addEventListener('click',function close(){d.remove();document.removeEventListener('click',close);},{once:true});
+    };
+  }
   document.getElementById('btn-refresh-list').addEventListener('click', doLoad);
   document.getElementById('btn-export-csv').addEventListener('click',()=>{
     const items = getFiltered(approvalsMode);
@@ -3200,6 +3231,7 @@ function renderDetail(item) {
   }
   if (canAssignOC) {
     document.getElementById('btn-assign-oc').addEventListener('click', async ()=>{
+  window._ocPdfVendor=null;window._ocPdfDelivery=null;
       const now = new Date().toISOString().slice(0,10);
       const year = new Date().getFullYear();
       // Auto-suggest next OC number
