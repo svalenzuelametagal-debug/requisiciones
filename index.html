@@ -806,7 +806,6 @@ async function updateItem(id,fields) {
   const d = await readDB(true); // force fresh read to avoid stale SHA
   // Support both id and _id field names
   console.log('updateItem: looking for id='+id+' in '+d.length+' items, first id='+(d[0]?d[0].id||d[0]._id:'none'));
-  console.log('updateItem: looking for id='+id+' in '+d.length+' items, first id='+(d[0]?d[0].id||d[0]._id:'none'));
   const i = d.findIndex(x => (x.id||x._id) === id || (x.id||x._id) === String(id));
   if (i < 0) throw new Error('RC no encontrada (id: '+id+')');
   d[i] = {...d[i], ...fields, UpdatedAt: isoNow()};
@@ -3419,7 +3418,7 @@ function renderDetail(item) {
                   {label:'Asignar OC sin cambios', cls:'btn-secondary', cb:()=>{ proceed=true; }}
                 ]);
               });
-              if (!proceed) return false;
+              if (!proceed) return;
             } else if (!ocPdfItems.length) {
               toast('⚠ No se encontraron ítems en el PDF para comparar', 'error');
             }
@@ -3643,7 +3642,6 @@ async function uploadAdjunto(reqTitle, prefix, file) {
 }
 
 async function doAction(item, fields) {
-  console.log('doAction called: id='+(item._id||item.id)+' fields='+JSON.stringify(Object.keys(fields)));
   invalidateDBCache(); // forzar re-lectura después de escribir
   await updateItem(item._id||item.id, { ...fields, UpdatedAt: isoNow() });
 
