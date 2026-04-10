@@ -2919,7 +2919,7 @@ function renderDetail(item) {
           let im;
           while ((im = itemRx.exec(fullText)) !== null) {
             let desc = im[2].trim().replace(/\s+(PIEZA|UN|KG|LT|MT|M2|SET|JGO|PAR|LTS|CJ|PC|BOX)\s*(?:\(NO\s*FRACCION\.?\))?\s*$/i,'').trim();
-            ocItems.push({num:parseInt(im[1]), desc, qty:parseFloat(im[3]), price:parseFloat(im[4])});
+            ocItems.push({num:parseInt(im2[1]), desc, qty:parseFloat(im[3]), price:parseFloat(im[4])});
           }
 
           const rcItems2 = parseLines(item.LinesJSON||'[]');
@@ -2954,7 +2954,7 @@ function renderDetail(item) {
                 const newLines2 = curLines.map(function(ln,i){
                   const u=updates2.find(function(x){return x.idx===i&&x.type==='update';});
                   if(!u) return ln;
-                  return Object.assign({},ln,u.qD?{qty:u.oc.qty}:{},u.pD?{price:u.oc.price}:{});
+                  return Object.assign({},ln,u.qD?{qty:parseFloat(u.oc.qty)||ln.qty}:{},u.pD?{price:parseFloat(u.oc.price)||ln.price}:{});
                 });
                 await doAction(item,{LinesJSON:JSON.stringify(newLines2),UpdatedAt:isoNow()});
                 item.LinesJSON=JSON.stringify(newLines2);
@@ -3217,7 +3217,7 @@ function renderDetail(item) {
         <div class="form-group mb-3"><label>N° Orden de Compra *</label><input type="text" id="oc-num" value="${suggestedOC}" placeholder="OC-2025-0001"/></div>
         <div class="form-group mb-3"><label>Fecha OC</label><input type="date" id="oc-date" value="${now}"/></div>
         <div class="form-group mb-3"><label>📅 Fecha estimada de entrega (opcional)</label><input type="date" id="oc-delivery" value="${item.NeedBy||''}"/></div>
-        <div class="form-group mb-3"><label>Comprador *</label><input type="text" id="oc-buyer" value="${currentUser.name||currentUser.username}"/></div>
+        <div class="form-group mb-3"><label>Comprador *</label><input type="text" id="oc-buyer" value="${currentUser.name||currentUser.username}"/></div><div class="form-group" style="margin-top:8px"><label>Proveedor</label><input type="text" id="oc-vendor" placeholder="Auto desde NP" style="width:100%;padding:7px;background:#0f2340;border:1px solid #2a3140;border-radius:5px;color:#e0e8f0;font-size:12px"></div>
         <div class="form-group mb-3"><label>Cuenta Contable (GL) *</label><input type="text" id="oc-gl" value="${escH(item.GLAccount||'')}" placeholder="Ej: 6.1.01.001"/></div>
         <div class="form-group mb-3"><label>Observaciones OC (opcional)</label><textarea id="oc-obs" rows="2" placeholder="Notas adicionales sobre la OC…"></textarea></div>
         <div class="form-group">
@@ -3292,6 +3292,7 @@ function renderDetail(item) {
               || pdfText.match(/(?:PROVEEDOR\s*\d+[^\n]*\n)([^\n]+)/i);
             if (vendorM) {
               pdfVendor = vendorM[1].trim().replace(/^(CERRADA|BLOQUEADA|ACTIVO|\d+)\s*/i,'').trim();
+              window._ocPdfVendor=pdfVendor;
             }
             // Auto-fill vendor field in modal
             if (pdfVendor) {
@@ -3327,17 +3328,19 @@ function renderDetail(item) {
             } else if (ocPdfItems.length && rcItemsOC.length) {
               const updates3 = [];
               let hasDiffs = false;
-              ocPdfItems.forEach(op => {
-                const rc = rcItemsOC.find(r => {
-                  const nd = s => String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
-                  return nd(r.desc).includes(nd(op.desc).substring(0,10)) || nd(op.desc).includes(nd(r.desc).substring(0,10));
-                });
-                if (!rc) return;
-                const qD = Math.abs((rc.qty||0) - (op.qty||0)) > 0.001;
-                const pD = Math.abs((rc.price||0) - (op.price||0)) > 0.5;
-                if (qD || pD) hasDiffs = true;
-                updates3.push({idx: rcItemsOC.indexOf(rc), rc, oc: op, qD, pD});
-              });
+              ocPdfItems.forEach(function(op){
+  function nd(s){return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim();}
+  var opDesc=nd(op.desc);
+  var rcLine=rcItemsOC.find(function(r){var rd=nd(r.desc||'');return rd.length>3&&(rd.indexOf(opDesc.substring(0,12))>=0||opDesc.indexOf(rd.substring(0,12))>=0);});
+  if(!rcLine&&rcItemsOC.length===1)rcLine=rcItemsOC[0];
+  if(!rcLine)return;
+  var opQty=parseFloat(op.qty)||0,opPrice=parseFloat(op.price)||0;
+  var rcQty=parseFloat(rcLine.qty)||0,rcPrice=parseFloat(rcLine.price)||0;
+  var qD=Math.abs(opQty-rcQty)>0.01;
+  var pD=rcPrice>0?Math.abs(opPrice-rcPrice)/rcPrice>0.005:(opPrice>0);
+  if(qD||pD)hasDiffs=true;
+  updates3.push({idx:rcItemsOC.indexOf(rcLine),rc:rcLine,oc:op,qD:qD,pD:pD});
+});;
 
               // ALWAYS show comparison modal - even when everything matches
               const rows3 = updates3.map(u => {
