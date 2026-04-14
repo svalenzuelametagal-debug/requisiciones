@@ -5056,22 +5056,18 @@ function applyDarkDOM(dark){
       'table{background:#111827!important;}'
       +'th{background:#0d1520!important;color:#94a3b8!important;}'
       +'td{color:#e2e8f0!important;border-color:#1f2937!important;}'
-      +'tr:nth-child(even) td{background:#1a2435!important;}'
       +'input,select,textarea{background:#1f2937!important;color:#e2e8f0!important;border-color:#374151!important;}'
       +'label{color:#94a3b8!important;}'
       +'h1,h2,h3,h4{color:#f1f5f9!important;}'
       +'.card,.req-card,.list-card,.detail-card,.form-card{background:#111827!important;border-color:#1f2937!important;}';
-    // Force text color on ALL elements that have inline color styles
-    // Skip badge-like elements to preserve status colors
-    var SKIP=['BUTTON','A'];
+    var SKIP_TAGS=['BUTTON','A','svg','path','i'];
     var SKIP_CLS=['badge','status','chip','tag','btn','icon'];
     function isBadge(el){
-      if(SKIP.indexOf(el.tagName)>=0)return true;
-      var cls=el.className||'';
+      if(SKIP_TAGS.indexOf(el.tagName)>=0)return true;
+      var cls=(el.className&&typeof el.className==='string')?el.className:'';
       for(var i=0;i<SKIP_CLS.length;i++)if(cls.indexOf(SKIP_CLS[i])>=0)return true;
       return false;
     }
-    // Target specific containers
     var containers=['#pipeline-summary','#alerts-bar','#view-list','#view-detail','#view-form'];
     containers.forEach(function(sel){
       var el=document.querySelector(sel);
@@ -5082,9 +5078,10 @@ function applyDarkDOM(dark){
       for(var i=0;i<all.length;i++){
         var ch=all[i];
         if(isBadge(ch))continue;
+        ch.setAttribute('data-dark-forced','1');
         ch.style.setProperty('color','#e2e8f0','important');
-        var bg=ch.style.background||ch.style.backgroundColor||'';
-        if(bg&&bg!=='transparent'&&bg!=='rgba(0, 0, 0, 0)'){
+        var bg=ch.style.backgroundColor||ch.style.background||'';
+        if(bg&&bg!=='transparent'&&bg.indexOf('rgba(0')!==0){
           ch.style.setProperty('background','#111827','important');
         }
       }
@@ -5093,11 +5090,22 @@ function applyDarkDOM(dark){
     document.body.style.removeProperty('background');
     document.body.style.removeProperty('color');
     if(sheet)sheet.remove();
-    // Restore: remove forced styles
-    var all2=document.querySelectorAll('[data-dk]');
-    all2.forEach(function(el){el.removeAttribute('data-dk');});
-    // Re-render to restore original colors
-    if(typeof renderList==='function')renderList(false);
+    // Remove ALL forced dark styles from elements
+    var forced=document.querySelectorAll('[data-dark-forced]');
+    for(var i=0;i<forced.length;i++){
+      forced[i].style.removeProperty('color');
+      forced[i].style.removeProperty('background');
+      forced[i].style.removeProperty('background-color');
+      forced[i].removeAttribute('data-dark-forced');
+    }
+    // Also clean containers
+    var containers2=['#pipeline-summary','#alerts-bar','#view-list','#view-detail','#view-form'];
+    containers2.forEach(function(sel){
+      var el=document.querySelector(sel);
+      if(!el)return;
+      el.style.removeProperty('background');
+      el.style.removeProperty('color');
+    });
   }
 }
 function applyStoredTheme(){
