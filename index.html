@@ -5029,6 +5029,7 @@ function toggleTheme(){
     var s=document.getElementById('dark-style');if(s)s.remove();
     if(b){b.textContent='\uD83C\uDF19';b.title='Modo oscuro';}
     try{localStorage.setItem('mgal_theme','light');}catch(e){}
+    applyDarkDOM(false);
   } else {
     document.body.setAttribute('data-theme','dark');
     if(!document.getElementById('dark-style')){
@@ -5038,7 +5039,47 @@ function toggleTheme(){
     }
     if(b){b.textContent='\u2600\uFE0F';b.title='Modo claro';}
     try{localStorage.setItem('mgal_theme','dark');}catch(e){}
+    applyDarkDOM(true);
   }
+}
+function applyDarkDOM(dark){
+  var bg=dark?'#1e293b':'';
+  var bg0=dark?'#0a0f1a':'';
+  var col=dark?'#e2e8f0':'';
+  var bord=dark?'#334155':'';
+  var selectors=['#pipeline-summary','#alerts-bar','#view-list','#view-detail',
+    '#view-form','#main-wrap','#main-content','.kpi-card','.stat-card',
+    '.summary-card','.info-card','.pipeline-card'];
+  selectors.forEach(function(sel){
+    var el=document.querySelector(sel);
+    if(!el)return;
+    el.style.setProperty('background',dark?bg0:'','important');
+    el.style.setProperty('color',col,'important');
+    el.style.setProperty('border-color',bord,'important');
+    // Force all direct children
+    Array.from(el.children).forEach(function(ch){
+      ch.style.setProperty('background',bg,'important');
+      ch.style.setProperty('color',col,'important');
+      ch.style.setProperty('border-color',bord,'important');
+      Array.from(ch.querySelectorAll('*')).forEach(function(el2){
+        var bg2=window.getComputedStyle(el2).backgroundColor;
+        // Only override light backgrounds
+        if(dark){
+          el2.style.setProperty('color',col,'important');
+          var tag=el2.tagName.toLowerCase();
+          if(['div','span','p','section','article','aside','main','header','footer'].indexOf(tag)>=0){
+            el2.style.setProperty('background','transparent','important');
+          }
+        } else {
+          el2.style.removeProperty('color');
+          el2.style.removeProperty('background');
+        }
+      });
+    });
+  });
+  // Also force body background
+  document.body.style.setProperty('background',dark?'#0a0f1a':'','important');
+  document.body.style.setProperty('color',dark?'#e2e8f0':'','important');
 }
 function applyStoredTheme(){
   try{
@@ -5051,9 +5092,11 @@ function applyStoredTheme(){
       }
       var b=document.getElementById('btn-theme');
       if(b){b.textContent='\u2600\uFE0F';b.title='Modo claro';}
+      setTimeout(function(){applyDarkDOM(true);},100);
     }
   }catch(e){}
 }
+
 
 async function initApp(account) {
   window._ocPdfVendor=null;window._ocPdfDelivery=null;
