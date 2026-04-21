@@ -1,6 +1,6 @@
 <!DOCTYPE html><!-- v1772667860 -->
 <html lang="es">
-<head>
+<head><script>(function(){try{if(localStorage.getItem('mgal_theme')==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})()</script>
 <meta charset="UTF-8"/>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -142,7 +142,7 @@ const msal = {
 };
 </script>
 
-<style>html[data-theme=dark]{background:#0a0f1a;color:#e2e8f0;}html[data-theme=dark] body{background:#0a0f1a!important;color:#e2e8f0!important;}html[data-theme=dark] #nav{background:#0f172a!important;border-bottom-color:#2563eb!important;}html[data-theme=dark] #nav *{color:#e2e8f0!important;}html[data-theme=dark] #view-list,html[data-theme=dark] #view-detail,html[data-theme=dark] #view-form,html[data-theme=dark] #main-content,html[data-theme=dark] #main-wrap{background:#0a0f1a!important;}html[data-theme=dark] #pipeline-summary,html[data-theme=dark] #alerts-bar{background:#111827!important;color:#e2e8f0!important;}html[data-theme=dark] #pipeline-summary *{color:#e2e8f0!important;}html[data-theme=dark] table{background:#111827!important;}html[data-theme=dark] th{background:#0d1520!important;color:#94a3b8!important;}html[data-theme=dark] td{color:#e2e8f0!important;border-color:#1f2937!important;}html[data-theme=dark] input,html[data-theme=dark] select,html[data-theme=dark] textarea{background:#1f2937!important;color:#e2e8f0!important;border-color:#374151!important;}html[data-theme=dark] label{color:#94a3b8!important;}html[data-theme=dark] h1,html[data-theme=dark] h2,html[data-theme=dark] h3{color:#f1f5f9!important;}html[data-theme=dark] .modal{background:#1e293b!important;color:#e2e8f0!important;border-color:#334155!important;}html[data-theme=dark] .modal h2{color:#f1f5f9!important;}html[data-theme=dark] .modal label{color:#94a3b8!important;}html[data-theme=dark] .modal input,html[data-theme=dark] .modal select{background:#0f172a!important;color:#e2e8f0!important;}html[data-theme=dark] .btn-secondary{background:#1e293b!important;color:#e2e8f0!important;}@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');*{font-family:'Inter',system-ui,sans-serif!important;}
+<style>html[data-theme=dark]{background:#0a0f1a;color:#e2e8f0;}html[data-theme=dark] body{background:#0a0f1a!important;color:#e2e8f0!important;}html[data-theme=dark] #nav{background:#0f172a!important;border-bottom-color:#2563eb!important;}html[data-theme=dark] #nav *{color:#e2e8f0!important;}html[data-theme=dark] #view-list,html[data-theme=dark] #view-detail,html[data-theme=dark] #view-form,html[data-theme=dark] #main-content,html[data-theme=dark] #main-wrap{background:#0a0f1a!important;}html[data-theme=dark] #pipeline-summary,html[data-theme=dark] #alerts-bar{background:#111827!important;color:#e2e8f0!important;}html[data-theme=dark] #pipeline-summary *{color:#e2e8f0!important;}html[data-theme=dark] table{background:#111827!important;}html[data-theme=dark] th{background:#0d1520!important;color:#94a3b8!important;}html[data-theme=dark] td{color:#e2e8f0!important;border-color:#1f2937!important;}html[data-theme=dark] tr:hover td{background:#1a2435!important;}html[data-theme=dark] input,html[data-theme=dark] select,html[data-theme=dark] textarea{background:#1f2937!important;color:#e2e8f0!important;border-color:#374151!important;}html[data-theme=dark] label{color:#94a3b8!important;}html[data-theme=dark] h1,html[data-theme=dark] h2,html[data-theme=dark] h3{color:#f1f5f9!important;}html[data-theme=dark] .modal{background:#1e293b!important;color:#e2e8f0!important;border-color:#334155!important;}html[data-theme=dark] .modal h2{color:#f1f5f9!important;}html[data-theme=dark] .modal label{color:#94a3b8!important;}html[data-theme=dark] .modal input,html[data-theme=dark] .modal select{background:#0f172a!important;color:#e2e8f0!important;}html[data-theme=dark] .btn-secondary{background:#1e293b!important;color:#e2e8f0!important;}@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');*{font-family:'Inter',system-ui,sans-serif!important;}
 :root{--bg:#f0f2f5;--bg2:#ffffff;--bg3:#e8eaed;--text:#1a2332;--text2:#5a6a7a;--border:#d0d7de;--accent:#0070f2;--accent2:#0854a0;--green:#1a7f37;--orange:#d97706;--red:#cf222e;--yellow:#f0b030;}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{font-size:14px;background:var(--bg0);color:var(--text0);font-family:var(--sans)}
@@ -5038,15 +5038,11 @@ function applyStoredTheme(){
   try{
     var isDark=localStorage.getItem('mgal_theme')==='dark';
     var b=document.getElementById('btn-theme');
-    if(isDark){
-      document.documentElement.setAttribute('data-theme','dark');
-      if(b)b.textContent='\u2600\uFE0F';
-    } else {
-      document.documentElement.removeAttribute('data-theme');
-      if(b)b.textContent='\uD83C\uDF19';
-    }
+    if(isDark){document.documentElement.setAttribute('data-theme','dark');if(b)b.textContent='\u2600\uFE0F';}
+    else{document.documentElement.removeAttribute('data-theme');if(b)b.textContent='\uD83C\uDF19';}
   }catch(e){}
 }
+
 
 
 
