@@ -1235,6 +1235,7 @@ function renderNotifPanel() {
     el.addEventListener('click', () => {
       const item = allItems.find(i => i._id === el.dataset.reqid);
       if (item) { renderDetail(item); showView('detail'); }
+  setTimeout(applyDarkFix,100);
       document.getElementById('notif-panel').classList.remove('open');
       // Mark as read
       const ids = JSON.parse(localStorage.getItem('mgal_notif_read')||'[]');
@@ -1553,8 +1554,34 @@ function showView(name) {
   document.getElementById('view-'+name).classList.remove('hidden');
 }
 
+function applyDarkFix(){
+  if(document.documentElement.getAttribute('data-theme')!=='dark')return;
+  var BG='#111827',BG2='#1a1d27',TEXT='#e2e8f0',BORDER='#2a2d3a';
+  document.body.style.background='#0f1117';
+  document.body.style.color=TEXT;
+  var all=document.querySelectorAll('*');
+  for(var i=0;i<all.length;i++){
+    var el=all[i];
+    var tag=el.tagName.toLowerCase();
+    var cls=(el.className&&typeof el.className==='string')?el.className:'';
+    if(['button','a','svg','path','img','input','select','textarea'].indexOf(tag)>=0)continue;
+    if(cls.indexOf('badge')>=0||cls.indexOf('btn')>=0||cls.indexOf('chip')>=0)continue;
+    var bg=el.style.backgroundColor||el.style.background||'';
+    var col=el.style.color||'';
+    if(bg&&bg!=='transparent'&&bg!=='rgba(0, 0, 0, 0)'){
+      if(bg.indexOf('#f')===0||bg.indexOf('rgb(2')===0||bg.indexOf('rgb(24')===0||bg.indexOf('white')>=0){
+        el.style.setProperty('background',BG2,'important');
+        el.style.setProperty('background-color',BG2,'important');
+      }
+    }
+    if(col&&(col.indexOf('#0')===0||col.indexOf('#1')===0||col.indexOf('#2')===0||col.indexOf('#3')===0||col.indexOf('#4')===0||col.indexOf('rgb(0')===0||col.indexOf('rgb(1')===0||col.indexOf('rgb(2')===0)){
+      el.style.setProperty('color',TEXT,'important');
+    }
+  }
+}
 function buildNav() {
   const nav = document.getElementById('nav');
+  setTimeout(applyDarkFix,50);
   if(typeof applyStoredTheme=='function')applyStoredTheme();
   const email = (currentUser?.username||'').toLowerCase();
   const canCreate = !ROLES_NO_CREATE.map(r=>r.toLowerCase()).includes(email);
@@ -1582,6 +1609,7 @@ function buildNav() {
     btn.addEventListener('click',()=>{
       if (btn.dataset.extra==='approvals') {
         renderList(true);
+  setTimeout(applyDarkFix,100);
         showView('list');
       } else if (btn.dataset.view==='form') {
         renderForm(null); showView('form');
@@ -1597,6 +1625,7 @@ function buildNav() {
         renderGerenteView(); showView('gerente');
       } else {
         renderList(false); showView('list');
+  setTimeout(applyDarkFix,100);
       }
       document.querySelectorAll('.nav-btn').forEach(x=>x.classList.remove('active'));
       btn.classList.add('active');
@@ -1858,6 +1887,7 @@ function renderList(approvalsMode=false) {
         row.addEventListener('click', () => {
           const found = allItems.find(x => x._id === row.dataset.id);
           if (found) { renderDetail(found); showView('detail'); }
+  setTimeout(applyDarkFix,100);
         });
       });
     } else {
@@ -1933,6 +1963,7 @@ function renderList(approvalsMode=false) {
       r.addEventListener('dblclick',()=>{
         const item = allItems.find(i=>i._id===r.dataset.id);
         if (item) { renderDetail(item); showView('detail'); }
+  setTimeout(applyDarkFix,100);
       });
       r.addEventListener('click',e=>{
         if (e.target.closest('button')) return;
@@ -1992,6 +2023,7 @@ function renderList(approvalsMode=false) {
       var items=all.length?all.map(function(n){
         var id=n.i.id||n.i._id||'';
         return '<div onclick="(function(){var it=allItems.find(function(x){return x.id===\''+id+'\' || x._id===\''+id+'\';});if(it)renderDetail(mapItem(it));var d=document.getElementById(\'notif-drop\');if(d)d.remove();})();" '
+  setTimeout(applyDarkFix,100);
           +'style="padding:10px 16px;border-bottom:1px solid #f0f2f5;cursor:pointer;" '
           +'onmouseover="this.style.background=\'#f0f2f5\'" onmouseout="this.style.background=\'\'">'
           +'<div style="font-size:12px;font-weight:600;color:#1a2332">'+n.i.Title+'</div>'
@@ -2271,6 +2303,7 @@ function renderForm(item) {
 
   document.getElementById('btn-cancel-form').addEventListener('click',()=>{
     renderList(false);
+  setTimeout(applyDarkFix,100);
   });
 
   function validate() {
@@ -2433,6 +2466,7 @@ function renderForm(item) {
         toast('Requisición '+reqNum+' '+editMsg+' correctamente.','success');
       }
       renderList(false);
+  setTimeout(applyDarkFix,100);
     } catch(e) {
       toast('Error al guardar: '+e.message,'error');
     } finally {
@@ -2447,6 +2481,7 @@ function renderForm(item) {
   document.getElementById('btn-send-req').addEventListener('click',()=>saveReq(true));
   // Botones del pie — misma lógica
   document.getElementById('btn-cancel-form-b')?.addEventListener('click',()=>{ if (!confirm('¿Cancelar? Se perderán los cambios no guardados.')) return; renderList(false); });
+  setTimeout(applyDarkFix,100);
   document.getElementById('btn-save-draft-b')?.addEventListener('click',()=>saveReq(false));
   document.getElementById('btn-send-req-b')?.addEventListener('click',()=>saveReq(true));
 
@@ -2512,6 +2547,7 @@ function renderForm(item) {
 function renderDetail(item) {
   // Normalizar siempre al entrar, independientemente del origen del item
   item = { ...item, Status: _normalizeStatus(item.Status) };
+  setTimeout(applyDarkFix,100);
 
   showView('detail');
   const container = document.getElementById('view-detail');
@@ -2695,6 +2731,7 @@ function renderDetail(item) {
   `;
 
   document.getElementById('btn-back-detail').addEventListener('click',()=>renderList(false));
+  setTimeout(applyDarkFix,100);
   document.getElementById('btn-print-req').addEventListener('click',()=>imprimirRequisicion(item));
 
   // Duplicar requisición
@@ -2751,6 +2788,7 @@ function renderDetail(item) {
     await doAction(item, { TCusd: tcU, TCeur: tcE, TCDate: tcDate, UpdatedAt: isoNow() });
     toast('TC congelado correctamente 🔒', 'success');
     renderDetail({...item, TCusd: tcU, TCeur: tcE, TCDate: tcDate});
+  setTimeout(applyDarkFix,100);
   });
 
   // Editar Cuenta GL (gerente y admin)
@@ -2764,6 +2802,7 @@ function renderDetail(item) {
         await doAction(item, {GLAccount: newGL, GLCorregido: true, UpdatedAt: isoNow()});
         toast('Cuenta GL actualizada','success');
         renderDetail({...item, GLAccount: newGL, GLCorregido: true});
+  setTimeout(applyDarkFix,100);
       }},
       {label:'Cancelar', cls:'btn-secondary'}]
     );
@@ -2776,6 +2815,7 @@ function renderDetail(item) {
       await notificar({...item,...fields},'📦 Material recibido por el solicitante',note,[ROLES_ADMIN[0],ROLES_APPROVER[0]]);
       toast('✅ Recepción confirmada','success');
       renderList(false);
+  setTimeout(applyDarkFix,100);
     });
   });
 
@@ -2801,6 +2841,7 @@ function renderDetail(item) {
         if (revertOC) toast('OC eliminada — requisición vuelve a estado "Lista para OC"','success');
         else toast('Adjunto eliminado','success');
         renderDetail({...item, ...extraFields, AttachmentsJSON: JSON.stringify(newAttach)});
+  setTimeout(applyDarkFix,100);
       });
     });
   }
@@ -2895,6 +2936,7 @@ function renderDetail(item) {
           if (diffs.length > 0) {
             const msg = '📄 ' + files[k].name + '\n\n⚠ Posibles diferencias vs RC:\n\n' + diffs.join('\n') + '\n\n¿Querés revisar la RC?';
             if (confirm(msg)) { renderDetail(item); }
+  setTimeout(applyDarkFix,100);
           } else {
             toast('✅ ' + files[k].name + ' coincide con la RC', 'success');
           }
@@ -2972,6 +3014,7 @@ function renderDetail(item) {
                 item.LinesJSON=JSON.stringify(newLines2);
                 toast('✅ RC actualizada con los datos del PDF','success');
                 renderDetail({...item,AttachmentsJSON:JSON.stringify(allAttach)});
+  setTimeout(applyDarkFix,100);
               }},
               {label:'No, dejar como está',cls:'btn-secondary'}
             ]);
@@ -2982,6 +3025,7 @@ function renderDetail(item) {
 
       // Refresh detail view
       renderDetail({...item, AttachmentsJSON: JSON.stringify(allAttach)});
+  setTimeout(applyDarkFix,100);
     } catch(err) {
       statusEl.textContent = '❌ Error: ' + err.message;
       btn.disabled = false;
@@ -2997,6 +3041,7 @@ function renderDetail(item) {
     toast('Requisición reactivada y enviada para revisión', 'success');
     const newItem = {...item, Status: S.SENT};
     renderDetail(newItem);
+  setTimeout(applyDarkFix,100);
   });
   if (canEdit) document.getElementById('btn-edit-req')?.addEventListener('click',()=>renderForm(item));
   document.getElementById('btn-send-oc-supplier')?.addEventListener('click', () => {
@@ -3129,6 +3174,7 @@ function renderDetail(item) {
         await notificar(updated,'✅ Revisada por Compras — Pendiente autorización',note,[ROLES_ADMIN[0], item.RequesterMail]);
         toast('Elevada a autorización — notificación enviada','success');
         renderList(false);
+  setTimeout(applyDarkFix,100);
       });
     });
     document.getElementById('btn-rejn1').addEventListener('click',()=>{
@@ -3138,6 +3184,7 @@ function renderDetail(item) {
         await notificar(updated,'↩ Devuelta al solicitante por Compras',note,[item.RequesterMail]);
         toast('Devuelta al solicitante — notificación enviada','error');
         renderList(false);
+  setTimeout(applyDarkFix,100);
       });
     });
   }
@@ -3198,6 +3245,7 @@ function renderDetail(item) {
             toast('Autorizada — lista para asignación de OC','success');
           }
           renderList(false);
+  setTimeout(applyDarkFix,100);
         }},{label:'Cancelar',cls:'btn-secondary'}]);
     });
     document.getElementById('btn-rejn2').addEventListener('click',()=>{
@@ -3207,6 +3255,7 @@ function renderDetail(item) {
         await notificar({...item,...fields},'↩ No autorizada — revisá los comentarios',note,[item.RequesterMail]);
         toast('No autorizada — notificación enviada al solicitante','error');
         renderList(false);
+  setTimeout(applyDarkFix,100);
       });
     });
   }
@@ -3451,6 +3500,7 @@ function renderDetail(item) {
         await notificar(updated,`🛒 OC Asignada: ${num}`,`Comprador: ${buyer}${obs?' — '+obs:''}. Fecha: ${fmt(date)}`,[item.RequesterMail, ...(item.RequesterMail!==ROLES_APPROVER[0]?[ROLES_APPROVER[0]]:[])]);
         toast('OC asignada — notificación enviada','success');
         renderList(false);
+  setTimeout(applyDarkFix,100);
       }},{label:'Cancelar',cls:'btn-secondary'}]);
     });
   }
@@ -3518,6 +3568,7 @@ function renderDetail(item) {
           await notificar(updated, '✅ Aprobada por Gerencia General — Pendiente Finanzas', note, todos);
           toast(`Aprobado por Gerencia — mail enviado a ${todos.length} destinatario(s)`, 'success');
           renderList(false);
+  setTimeout(applyDarkFix,100);
         }},
         {label:'Cancelar', cls:'btn-secondary'},
       ]);
@@ -3529,6 +3580,7 @@ function renderDetail(item) {
         await notificar({...item,...fields},'Rechazada por Gerencia',note,[item.RequesterMail, ROLES_ADMIN[0]]);
         toast('No aprobada por Gerencia — notificación enviada','error');
         renderList(false);
+  setTimeout(applyDarkFix,100);
       });
     });
   }
@@ -3589,6 +3641,7 @@ function renderDetail(item) {
         await notificar({...item,...fields},'✅ OK Financiero otorgado — Lista para OC',note,dest);
         toast('OK Financiero otorgado — lista para OC','success');
         renderList(false);
+  setTimeout(applyDarkFix,100);
       }},{label:'Cancelar',cls:'btn-secondary'}]);
     });
     document.getElementById('btn-rejfin').addEventListener('click',()=>{
@@ -3598,6 +3651,7 @@ function renderDetail(item) {
         await notificar({...item,...fields},'Rechazada por Finanzas',note,[item.RequesterMail, ROLES_ADMIN[0]]);
         toast('Observación registrada — notificación enviada','error');
         renderList(false);
+  setTimeout(applyDarkFix,100);
       });
     });
   }
@@ -3607,6 +3661,7 @@ function renderDetail(item) {
       await doAction(item, {Status:S.DRAFT});
       toast('Requisición reabierta como borrador','info');
       renderList(false);
+  setTimeout(applyDarkFix,100);
     });
   }
 
@@ -3979,18 +4034,21 @@ function renderFinanzasView() {
       btn.addEventListener('click',()=>{
         const found = allData.find(i=>i._id===btn.dataset.id);
         if (found) { renderDetail(found); showView('detail'); }
+  setTimeout(applyDarkFix,100);
       });
     });
     dc.querySelectorAll('tr[data-fin-id]').forEach(row=>{
       row.addEventListener('dblclick',()=>{
         const found=allData.find(i=>i._id===row.dataset.finId);
         if(found){renderDetail(found);showView('detail');}
+  setTimeout(applyDarkFix,100);
       });
     });
     dc.querySelectorAll('tr[data-fin-id]').forEach(row=>{
       row.addEventListener('dblclick',()=>{
         const found = allData.find(i=>i._id===row.dataset.finId);
         if(found){renderDetail(found);showView('detail');}
+  setTimeout(applyDarkFix,100);
       });
     });
   }
@@ -4179,6 +4237,7 @@ function renderGerenteView() {
         const id = el.dataset.id;
         const found = all.find(i=>i._id===id);
         if(found){renderDetail(found);showView('detail');}
+  setTimeout(applyDarkFix,100);
       }));
     });
   }
@@ -4453,6 +4512,7 @@ function renderDashboard() {
       <table>
         <thead><tr><th>N° Req.</th><th>Dept.</th><th>Solicitante</th><th>Estado</th><th>Urgencia</th><th>Creada</th><th></th></tr></thead>
         <tbody>${rows.map(r=>`<tr style="cursor:pointer" title="Clic para ver detalle" onclick="document.getElementById('_drillmodal').remove();renderDetail(allItems.find(x=>x.Title==='${escH(r.Title)}')||${JSON.stringify({})});showView('detail');">
+  setTimeout(applyDarkFix,100);
           <td class="num" style="color:var(--accent)">${escH(r.Title)}</td>
           <td>${escH(r.Dept)}</td>
           <td>${escH(r.RequesterName)}</td>
@@ -5078,6 +5138,7 @@ async function initApp(account) {
   document.getElementById('tc-badge').addEventListener('click', showTCEditor);
 
   buildNav();
+  setTimeout(applyDarkFix,50);
   if(typeof applyStoredTheme=='function')applyStoredTheme();
   fetchTC();
   initNotifBell();
@@ -5097,6 +5158,7 @@ async function initApp(account) {
     const _target = _allItems.find(x => x.Title === decodeURIComponent(_reqParam));
     if (_target) {
       renderDetail(_target);
+  setTimeout(applyDarkFix,100);
       showView('detail');
       return;
     }
@@ -5109,6 +5171,7 @@ async function initApp(account) {
     renderFinanzasView(); showView('finanzas');
   } else {
     renderList(false);
+  setTimeout(applyDarkFix,100);
   }
 }
 
@@ -5205,6 +5268,7 @@ function renderReport() {
       </div>`:''}
     `;
     showModal(body, '📋 '+item.Title, [{label:'Ver detalle completo →', cls:'btn-primary', action:()=>{renderDetail(item); showView('detail');}}, {label:'Cerrar', cls:'btn-secondary'}]);
+  setTimeout(applyDarkFix,100);
   }
 
   function showRptDrill(type, value) {
@@ -5538,6 +5602,7 @@ function renderReport() {
           const title = btn.dataset.title;
           const found = window.rptItems && window.rptItems.find(x=>x.Title===title);
           if (found) { renderDetail(found); showView('detail'); }
+  setTimeout(applyDarkFix,100);
         });
       });
 
