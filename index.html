@@ -1438,78 +1438,119 @@ function exportDashboardExcel(items) {
 
 
 // ── CRUCE ARCHIVO DE ENTREGAS ────────────────────────────────────
-function crossDeliveryFile() {
-  showModal(`
-    <div style="font-size:13px;color:var(--text2);margin-bottom:12px">
-      Subí un archivo CSV o Excel con las entregas del proveedor.<br>
-      <strong>Columnas esperadas:</strong> NP (o N° OC), Descripción, Fecha entrega real
-    </div>
-    <div class="form-group">
-      <label>Archivo de entregas (CSV o Excel)</label>
-      <input type="file" id="delivery-file" accept=".csv,.xlsx,.xls" style="padding:6px"/>
-    </div>
-    <div id="delivery-preview" style="margin-top:12px;font-size:12px"></div>
-  `, '📋 Cruzar archivo de entregas', [
-    {label:'Procesar y cruzar', cls:'btn-primary', action: async()=>{
-      const file = document.getElementById('delivery-file')?.files?.[0];
-      if (!file) { toast('Seleccioná un archivo','error'); return false; }
-      const preview = document.getElementById('delivery-preview');
-      preview.innerHTML = '⌛ Procesando...';
-      try {
-        let rows = [];
-        if (file.name.toLowerCase().endsWith('.csv')) {
-          const text = await file.text();
-          const lines = text.split(/[\r\n]+/).filter(Boolean);
-          const header = lines[0].split(/[;,\t]/).map(h=>h.trim().toLowerCase().replace(/['"]/g,''));
-          rows = lines.slice(1).map(line=>{
-            const cols = line.split(/[;,\t]/).map(c=>c.trim().replace(/['"]/g,''));
-            const obj = {};
-            header.forEach((h,i)=>obj[h]=cols[i]||'');
-            return obj;
-          });
-        } else {
-          preview.innerHTML = '<span style="color:var(--orange)">Excel: instalá SheetJS o convertí a CSV primero.</span>';
-          return false;
-        }
-        // Find NP/OC column
-        const npKey = Object.keys(rows[0]||{}).find(k=>k.includes('np')||k.includes('oc')||k.includes('orden')||k.includes('pedido')) || 'np';
-        const dateKey = Object.keys(rows[0]||{}).find(k=>k.includes('fecha')||k.includes('date')||k.includes('entrega')) || 'fecha';
-        const descKey = Object.keys(rows[0]||{}).find(k=>k.includes('desc')||k.includes('detalle')||k.includes('artículo')||k.includes('articulo')) || 'descripcion';
-        let matched=0, updated=0, results=[];
-        for (const row of rows) {
-          const np = (row[npKey]||'').replace(/\s+/g,'').toUpperCase();
-          const dateRaw = row[dateKey]||'';
-          if (!np) continue;
-          // Find matching RC by OCNumber
-          const rc = allItems.find(i=>(i.OCNumber||'').replace(/\s+/g,'').toUpperCase()===np);
-          if (!rc) { results.push({np,status:'sin RC',color:'var(--text2)'}); continue; }
-          matched++;
-          // Parse date dd/mm/yyyy or yyyy-mm-dd
-          let delivISO = '';
-          if (dateRaw) {
-            const p = dateRaw.split(/[\/\-\.]/);
-            if (p.length===3) delivISO = p[0].length===4 ? dateRaw : p[2]+'-'+p[1].padStart(2,'0')+'-'+p[0].padStart(2,'0');
-          }
-          const alreadyReceived = rc.ReceivedAt;
-          if (!alreadyReceived && delivISO) {
-            // Auto-mark as received
-            await doAction(rc, {ReceivedAt: delivISO+'T00:00:00.000Z', ReceivedNote:'Registrado desde cruce de archivo', UpdatedAt:isoNow()});
+async function crossDeliveryFile(){
+  const cfg=getCfg();
+  let cloudFiles=[];
+  try{
+    const r=await fetch('https://api.github.com/repos/'+cfg.ghRepo+'/contents/historico',{headers:{Authorization:'token '+cfg.ghToken,Accept:'application/vnd.github.v3+json'}});
+    if(r.ok)cloudFiles=await r.json();
+  }catch(e){}
+  const cloudOpts=cloudFiles.filter(function(f){return /\.(xlsx?m?|csv)$/i.test(f.name);});
+  const cloudSel=cloudOpts.length?'<div class="form-group"><label>Archivo en la nube (historico/)</label><select id="cloud-file" style="width:100%;padding:8px;border:1.5px solid #e2e8f0;border-radius:7px;font-size:13px"><option value="">-- Seleccionar --</option>'+cloudOpts.map(function(f){return '<option value="'+f.download_url+'">'+f.name+'</option>';}).join('')+'</select></div>':'';
+  showModal('<div class="form-group"><p style="font-size:13px;margin-bottom:12px">Carga un archivo de entregas (CSV, Excel con o sin macros) o seleccioná uno guardado en la nube.</p>'+cloudSel+'<label>Subir archivo local (CSV / XLSX / XLSM)</label><input type="file" id="delivery-file" accept=".csv,.xls,.xlsx,.xlsm" style="width:100%;padding:8px;border:1.5px solid #e2e8f0;border-radius:7px;font-size:13px"><p style="font-size:11px;color:#64748b;margin-top:6px">Columnas: NP o N&deg; OC, Descripci&oacute;n, Fecha entrega real</p><div id="delivery-preview" style="margin-top:10px;font-size:12px"></div></div>','Cruzar entregas',[{label:'Procesar y cruzar',cls:'btn-primary',cb:async function(){
+    const cloudUrl=document.getElementById('cloud-file')?.value||'';
+    const localFile=document.getElementById('delivery-file')?.files?.[0];
+    if(!cloudUrl&&!localFile){toast('Seleccioná un archivo','error');return false;}
+    const preview=document.getElementById('delivery-preview');
+    if(preview)preview.innerHTML='Procesando...';
+    try{
+      if(!window.XLSX){
+        await new Promise(function(res,rej){
+          var s=document.createElement('script');
+          s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+          s.onload=res;s.onerror=rej;
+          document.head.appendChild(s);
+        });
+      }
+      let buf;
+      if(cloudUrl){
+        const r=await fetch(cloudUrl);
+        buf=await r.arrayBuffer();
+      } else {
+        buf=await localFile.arrayBuffer();
+      }
+      const name=cloudUrl?cloudUrl.split('/').pop():(localFile?localFile.name:'');
+      let rows=[];
+      if(name.toLowerCase().endsWith('.csv')){
+        const text=new TextDecoder('utf-8').decode(buf);
+        const lines=text.split(/[\r\n]+/).filter(Boolean);
+        const sep=lines[0].indexOf(';')>=0?';':(lines[0].indexOf('\t')>=0?'\t':',');
+        const hdr=lines[0].split(sep).map(function(h){return h.trim().toLowerCase().replace(/[\"']/g,'');});
+        rows=lines.slice(1).map(function(line){
+          const cols=line.split(sep).map(function(c){return c.trim().replace(/[\"']/g,'');});
+          const obj={};
+          hdr.forEach(function(h,i){obj[h]=cols[i]||'';});
+          return obj;
+        });
+      } else {
+        const wb=window.XLSX.read(new Uint8Array(buf),{type:'array',cellDates:true});
+        const ws=wb.Sheets[wb.SheetNames[0]];
+        const raw=window.XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:false});
+        let hdrRow=0;
+        for(let ri=0;ri<Math.min(10,raw.length);ri++){if(raw[ri].filter(function(c){return String(c).trim();}).length>3){hdrRow=ri;break;}}
+        const hdr2=raw[hdrRow].map(function(h){return String(h||'').trim().toLowerCase();});
+        rows=raw.slice(hdrRow+1).filter(function(r){return r.some(function(c){return String(c).trim();});}).map(function(r){
+          const obj={};
+          hdr2.forEach(function(h,i){obj[h]=String(r[i]||'').trim();});
+          return obj;
+        });
+      }
+      function findCol(row,hints){
+        const keys=Object.keys(row);
+        for(let h=0;h<hints.length;h++){const rx=new RegExp(hints[h],'i');for(let k=0;k<keys.length;k++){if(rx.test(keys[k]))return keys[k];}}
+        return null;
+      }
+      if(!rows.length){toast('No se encontraron filas','error');return;}
+      const sample=rows[0];
+      const colNP=findCol(sample,['\\bnp\\b','n.?o.? oc','orden','oc\\d','n.?pedido']);
+      const colDate=findCol(sample,['fecha','entrega','delivery','date']);
+      const colDesc=findCol(sample,['desc','producto','articulo','item','material']);
+      if(preview)preview.innerHTML='Columnas: NP=<b>'+(colNP||'?')+'</b> Fecha=<b>'+(colDate||'?')+'</b> Desc=<b>'+(colDesc||'?')+'</b> Filas: '+rows.length;
+      function parseDate(v){
+        if(!v)return '';
+        if(v instanceof Date)return isNaN(v)?'':v.toISOString().slice(0,10);
+        const s=String(v).trim();
+        const m=s.match(/(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})/);
+        if(m){const y=m[3].length===2?'20'+m[3]:m[3];return y+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');}
+        if(/^\d{4}-\d{2}-\d{2}/.test(s))return s.slice(0,10);
+        return '';
+      }
+      const rcPool=allItems.filter(function(i){return i.OCNumber&&i.OCNumber.trim();});
+      let matched=0,updated=0;
+      const db=await readDB(true);
+      rows.forEach(function(row){
+        const npVal=colNP?String(row[colNP]||'').replace(/\s+/g,'').toUpperCase():'';
+        const dateVal=parseDate(colDate?row[colDate]:'');
+        if(!npVal&&!dateVal)return;
+        const rc=rcPool.find(function(i){
+          const oc=String(i.OCNumber||'').replace(/\s+/g,'').toUpperCase();
+          const np2=npVal.replace(/^NP/,'');
+          return oc===npVal||oc==='NP'+npVal||'NP'+oc===npVal||oc.endsWith(np2);
+        });
+        if(!rc)return;
+        matched++;
+        if(dateVal&&!rc.ReceivedAt){
+          const idx=db.findIndex(function(x){return (x.id||x._id)===(rc.id||rc._id);});
+          if(idx>=0){
+            db[idx].ReceivedAt=dateVal+'T00:00:00.000Z';
+            db[idx].DeliveryDate=dateVal;
+            db[idx].UpdatedAt=isoNow();
             updated++;
-            results.push({np,status:'✅ Marcado recibido: '+delivISO,color:'var(--green)'});
-          } else if (alreadyReceived) {
-            results.push({np,status:'Ya registrado: '+fmtDT(alreadyReceived),color:'var(--text2)'});
-          } else {
-            results.push({np,status:'Sin fecha en archivo',color:'var(--orange)'});
           }
         }
-        preview.innerHTML = `<strong>${rows.length} filas · ${matched} RCs encontradas · ${updated} actualizadas</strong><br><br>`
-          + results.map(r=>`<div style="color:${r.color}">${r.np}: ${r.status}</div>`).join('');
-        if (updated>0) { toast(updated+' RC(s) marcadas como recibidas','success'); await doLoad(); }
-      } catch(e) { preview.innerHTML='<span style="color:var(--red)">Error: '+e.message+'</span>'; return false; }
-    }},
-    {label:'Cancelar', cls:'btn-secondary'}
-  ]);
+      });
+      if(updated>0){
+        await writeDB(db);
+        allItems=await readDB(true);
+        toast(updated+' RC(s) actualizadas con fechas de entrega','success',6000);
+        renderList(false);
+      } else {
+        toast('Cruce OK: '+matched+' RC(s) encontradas, sin cambios pendientes','info',6000);
+      }
+    }catch(err){toast('Error: '+err.message,'error',8000);console.error(err);}
+  }},{label:'Cancelar',cls:'btn-secondary',action:function(){}}]);
 }
+
 
 function exportCSV(rows, filename) {
   if (!rows.length) return;
