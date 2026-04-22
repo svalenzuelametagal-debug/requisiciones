@@ -413,146 +413,215 @@ tr:hover td{background:var(--bg2)}
 .delivery-match-ok{color:var(--green);font-weight:700}
 .delivery-match-warn{color:var(--orange);font-weight:700}
 .delivery-match-err{color:var(--red)}
-#alerts-bar{background:#fffbeb!important;border:1px solid #fcd34d!important;border-left:4px solid #f59e0b!important;border-radius:8px!important;color:#78350f!important;padding:10px 16px!important;}#alerts-bar,#alerts-bar *{color:#78350f!important;}#pipeline-summary{background:#f8fafc!important;border:1px solid #e2e8f0!important;border-radius:10px!important;}#pipeline-summary,#pipeline-summary *{color:#0f172a!important;}#view-detail{color:#0f172a!important;}#view-detail td,#view-detail th,#view-detail div,#view-detail span,#view-detail p{color:#0f172a!important;}html[data-theme=dark] #alerts-bar,html[data-theme=dark] #alerts-bar *{background:#1f1500!important;color:#fbbf24!important;border-color:#92400e!important;}html[data-theme=dark] #pipeline-summary,html[data-theme=dark] #pipeline-summary *{background:#1a1d27!important;color:#e2e8f0!important;}html[data-theme=dark] #view-detail{color:#e2e8f0!important;}html[data-theme=dark] #view-detail td,html[data-theme=dark] #view-detail th,html[data-theme=dark] #view-detail div,html[data-theme=dark] #view-detail span{color:#e2e8f0!important;}:root{--text1:#0f172a;--text2:#475569;--bg1:#ffffff;--bg2:#f8fafc;}#alerts-bar{background:#fff8e1!important;border-left:4px solid #f59e0b!important;color:#78350f!important;padding:10px 16px!important;border-radius:8px!important;margin-bottom:12px!important;font-size:13px!important;}#alerts-bar *{color:#78350f!important;}html[data-theme=dark] #alerts-bar{background:#1f1500!important;border-left-color:#f59e0b!important;color:#fbbf24!important;}html[data-theme=dark] #alerts-bar *{color:#fbbf24!important;}#pipeline-summary{color:#0f172a!important;}#pipeline-summary *{color:#0f172a!important;}html[data-theme=dark] #pipeline-summary *{color:#e2e8f0!important;}#btn-notif-bell{background:none;border:none;cursor:pointer;font-size:20px;padding:4px 8px;border-radius:8px;position:relative;line-height:1;}#btn-notif-bell:hover{background:rgba(0,0,0,.06);}html[data-theme=dark] #btn-notif-bell:hover{background:rgba(255,255,255,.08);}html[data-theme=dark]{--bg2:#1a1d27!important;--bg3:#111827!important;--text:#e2e8f0!important;--text2:#94a3b8!important;--border:#2a2d3a!important;--bg1:#0f1117!important;--bg0:#0f1117!important;}html[data-theme=dark] body{background:#0f1117!important;color:#e2e8f0!important;}html[data-theme=dark] #nav{background:#1a1d27!important;border-bottom:1px solid #2a2d3a!important;}html[data-theme=dark] .modal,html[data-theme=dark] [class*=modal-box]{background:#1a1d27!important;color:#e2e8f0!important;border-color:#2a2d3a!important;}html[data-theme=dark] .modal *:not(button):not([class*=badge]){color:#e2e8f0!important;}html[data-theme=dark] td,html[data-theme=dark] th{background:inherit!important;}html[data-theme=dark] table{background:#111827!important;}html[data-theme=dark] thead tr{background:#0d1520!important;}html[data-theme=dark] thead th{background:#0d1520!important;color:#475569!important;}html[data-theme=dark] tbody tr{background:#111827!important;}html[data-theme=dark] tbody tr:nth-child(even){background:#141c2a!important;}html[data-theme=dark] tbody tr:hover{background:#1a2435!important;}html[data-theme=dark] td{color:#cbd5e1!important;border-color:#1e2130!important;}html[data-theme=dark] input,html[data-theme=dark] select,html[data-theme=dark] textarea{background:#1a1d27!important;color:#e2e8f0!important;border-color:#2a2d3a!important;}html[data-theme=dark] [style*='background:#f'],html[data-theme=dark] [style*='background: #f'],html[data-theme=dark] [style*='background:white'],html[data-theme=dark] [style*='background:#fff']{background:#111827!important;}html[data-theme=dark] [style*='color:#0'],html[data-theme=dark] [style*='color: #0'],html[data-theme=dark] [style*='color:#1'],html[data-theme=dark] [style*='color:#2'],html[data-theme=dark] [style*='color:#3'],html[data-theme=dark] [style*='color:#4']{color:#e2e8f0!important;}/* === BEGIN_METAGAL_V2 === (identificador único para rollback) */
+#alerts-bar{background:#fffbeb!important;border:1px solid #fcd34d!important;border-left:4px solid #f59e0b!important;border-radius:8px!important;color:#78350f!important;padding:10px 16px!important;}#alerts-bar,#alerts-bar *{color:#78350f!important;}#pipeline-summary{background:#f8fafc!important;border:1px solid #e2e8f0!important;border-radius:10px!important;}#pipeline-summary,#pipeline-summary *{color:#0f172a!important;}#view-detail{color:#0f172a!important;}#view-detail td,#view-detail th,#view-detail div,#view-detail span,#view-detail p{color:#0f172a!important;}html[data-theme=dark] #alerts-bar,html[data-theme=dark] #alerts-bar *{background:#1f1500!important;color:#fbbf24!important;border-color:#92400e!important;}html[data-theme=dark] #pipeline-summary,html[data-theme=dark] #pipeline-summary *{background:#1a1d27!important;color:#e2e8f0!important;}html[data-theme=dark] #view-detail{color:#e2e8f0!important;}html[data-theme=dark] #view-detail td,html[data-theme=dark] #view-detail th,html[data-theme=dark] #view-detail div,html[data-theme=dark] #view-detail span{color:#e2e8f0!important;}:root{--text1:#0f172a;--text2:#475569;--bg1:#ffffff;--bg2:#f8fafc;}#alerts-bar{background:#fff8e1!important;border-left:4px solid #f59e0b!important;color:#78350f!important;padding:10px 16px!important;border-radius:8px!important;margin-bottom:12px!important;font-size:13px!important;}#alerts-bar *{color:#78350f!important;}html[data-theme=dark] #alerts-bar{background:#1f1500!important;border-left-color:#f59e0b!important;color:#fbbf24!important;}html[data-theme=dark] #alerts-bar *{color:#fbbf24!important;}#pipeline-summary{color:#0f172a!important;}#pipeline-summary *{color:#0f172a!important;}html[data-theme=dark] #pipeline-summary *{color:#e2e8f0!important;}#btn-notif-bell{background:none;border:none;cursor:pointer;font-size:20px;padding:4px 8px;border-radius:8px;position:relative;line-height:1;}#btn-notif-bell:hover{background:rgba(0,0,0,.06);}html[data-theme=dark] #btn-notif-bell:hover{background:rgba(255,255,255,.08);}html[data-theme=dark]{--bg2:#1a1d27!important;--bg3:#111827!important;--text:#e2e8f0!important;--text2:#94a3b8!important;--border:#2a2d3a!important;--bg1:#0f1117!important;--bg0:#0f1117!important;}html[data-theme=dark] body{background:#0f1117!important;color:#e2e8f0!important;}html[data-theme=dark] #nav{background:#1a1d27!important;border-bottom:1px solid #2a2d3a!important;}html[data-theme=dark] .modal,html[data-theme=dark] [class*=modal-box]{background:#1a1d27!important;color:#e2e8f0!important;border-color:#2a2d3a!important;}html[data-theme=dark] .modal *:not(button):not([class*=badge]){color:#e2e8f0!important;}html[data-theme=dark] td,html[data-theme=dark] th{background:inherit!important;}html[data-theme=dark] table{background:#111827!important;}html[data-theme=dark] thead tr{background:#0d1520!important;}html[data-theme=dark] thead th{background:#0d1520!important;color:#475569!important;}html[data-theme=dark] tbody tr{background:#111827!important;}html[data-theme=dark] tbody tr:nth-child(even){background:#141c2a!important;}html[data-theme=dark] tbody tr:hover{background:#1a2435!important;}html[data-theme=dark] td{color:#cbd5e1!important;border-color:#1e2130!important;}html[data-theme=dark] input,html[data-theme=dark] select,html[data-theme=dark] textarea{background:#1a1d27!important;color:#e2e8f0!important;border-color:#2a2d3a!important;}html[data-theme=dark] [style*='background:#f'],html[data-theme=dark] [style*='background: #f'],html[data-theme=dark] [style*='background:white'],html[data-theme=dark] [style*='background:#fff']{background:#111827!important;}html[data-theme=dark] [style*='color:#0'],html[data-theme=dark] [style*='color: #0'],html[data-theme=dark] [style*='color:#1'],html[data-theme=dark] [style*='color:#2'],html[data-theme=dark] [style*='color:#3'],html[data-theme=dark] [style*='color:#4']{color:#e2e8f0!important;}//* === BEGIN_METAGAL_V3 === (Metagal corporate theme v3) */
 
-/* Rojo corporativo Metagal */
+/* Variables corporativas Metagal */
 :root {
   --mg-red: #E63027;
   --mg-red-dark: #B8241C;
+  --mg-red-soft: #FDEBEA;
 }
 
-/* Header: barra superior con acento rojo Metagal */
-#header {
-  border-top: 3px solid var(--mg-red) !important;
-  border-bottom: 1px solid var(--border) !important;
+/* ============ LOGO: solo padding alrededor, sin fondo extra visible ============ */
+/* Target: el wrapper directo del <img> del logo, tanto en header como en login */
+/* El fondo blanco es obligatorio (sino applyDarkFix lo pisa en dark y se rompe) */
+/* Pero NO queremos sombra ni radius marcado — solo un poco más de aire */
+#logo-wrap > div,
+#login-logo-wrap > div {
+  background: #FFFFFF !important;
+  padding: 6px 12px !important;
+  border-radius: 4px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  box-shadow: none !important;
+}
+/* Dark mode: el fondo del logo sigue siendo blanco (no negociable) */
+html[data-theme=dark] #logo-wrap > div,
+html[data-theme=dark] #login-logo-wrap > div {
+  background: #FFFFFF !important;
+  box-shadow: none !important;
+}
+/* La imagen del logo: sin filtros raros, tamaño correcto */
+#logo-wrap > div > img,
+#login-logo-wrap > div > img {
+  filter: none !important;
+  opacity: 1 !important;
 }
 
-/* Tablas: más aire, separadores sutiles, sin grilla dura */
-#main table {
+/* ============ HEADER: barra roja Metagal arriba (alta especificidad) ============ */
+html body #app #header {
+  border-top: 3px solid #E63027 !important;
+}
+
+/* ============ TABLA: cambios visibles en tema claro ============ */
+/* Usamos selectores más específicos para ganarle a los inline y a los del <style> viejo */
+html body #main table {
   border-collapse: separate !important;
   border-spacing: 0 !important;
+  background: #FFFFFF !important;
+  border-radius: 8px !important;
+  overflow: hidden !important;
+  box-shadow: 0 1px 3px rgba(16,24,40,.06), 0 1px 2px rgba(16,24,40,.04) !important;
 }
-#main table thead th {
-  padding: 11px 14px !important;
+html body #main table thead th {
+  padding: 12px 14px !important;
   font-size: 11px !important;
   letter-spacing: 0.07em !important;
-  background: var(--bg3) !important;
-  border-bottom: 2px solid var(--border) !important;
+  text-transform: uppercase !important;
+  font-weight: 600 !important;
+  background: #F3F4F6 !important;
+  color: #6B7280 !important;
+  border-bottom: 2px solid #E5E7EB !important;
 }
-#main table tbody td {
+html body #main table tbody td {
   padding: 12px 14px !important;
-  border-bottom: 1px solid var(--border) !important;
+  border-bottom: 1px solid #F1F1EE !important;
   vertical-align: middle !important;
 }
-#main table tbody tr:hover td {
-  background: var(--bg3) !important;
-  cursor: default;
+html body #main table tbody tr:hover td {
+  background: #FAFAFA !important;
+}
+html body #main table tbody tr:last-child td {
+  border-bottom: none !important;
 }
 
-/* Código de RC y montos: tipografía mono más legible */
-.num {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace !important;
+/* Dark mode: invertir colores pero mantener estructura */
+html[data-theme=dark] body #main table {
+  background: #111827 !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,.3) !important;
+}
+html[data-theme=dark] body #main table thead th {
+  background: #0D1520 !important;
+  color: #9CA3AF !important;
+  border-bottom-color: #1F2937 !important;
+}
+html[data-theme=dark] body #main table tbody td {
+  border-bottom-color: #1F2937 !important;
+  color: #E5E7EB !important;
+}
+html[data-theme=dark] body #main table tbody tr:hover td {
+  background: #1A2435 !important;
+}
+
+/* ============ .num y .money: tipografía monoespaciada ============ */
+html body .num,
+html body #main table .num {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace !important;
   font-weight: 600 !important;
+  font-size: 12px !important;
   letter-spacing: 0.02em !important;
+  color: #0854A0 !important;
 }
-.money {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace !important;
-  white-space: nowrap;
+html[data-theme=dark] body .num {
+  color: #60A5FA !important;
+}
+html body .money {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace !important;
+  white-space: nowrap !important;
+  font-size: 12px !important;
 }
 
-/* Refuerzo de .badge: más aire, borde sutil */
-.badge {
-  padding: 3px 10px !important;
-  font-size: 11px !important;
-  font-weight: 500 !important;
-  letter-spacing: 0.01em !important;
-  border: 1px solid transparent;
+/* ============ .badge: píldoras con punto de color ============ */
+html body .badge {
   display: inline-flex !important;
   align-items: center !important;
   gap: 6px !important;
+  padding: 4px 10px !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.02em !important;
+  border-radius: 20px !important;
+  line-height: 1.3 !important;
 }
-/* Punto decorativo antes del texto del badge (usando el color del badge propio) */
-.badge::before {
-  content: '';
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentColor;
-  display: inline-block;
-  flex-shrink: 0;
-  opacity: 0.85;
+html body .badge::before {
+  content: '' !important;
+  width: 6px !important;
+  height: 6px !important;
+  border-radius: 50% !important;
+  background: currentColor !important;
+  display: inline-block !important;
+  flex-shrink: 0 !important;
+  opacity: 0.85 !important;
+}
+/* La .badge-oc tiene fondo verde oscuro + texto blanco; el ::before queda en blanco */
+html body .badge.badge-oc::before {
+  background: #FFFFFF !important;
+  opacity: 1 !important;
 }
 
-/* Borde izquierdo de la primera celda de cada fila, por estado del badge */
-#main table tbody tr:has(.badge-draft)  td:first-child { box-shadow: inset 3px 0 0 #6e7e92; }
-#main table tbody tr:has(.badge-sent)   td:first-child { box-shadow: inset 3px 0 0 var(--accent2); }
-#main table tbody tr:has(.badge-rej1)   td:first-child,
-#main table tbody tr:has(.badge-rej2)   td:first-child { box-shadow: inset 3px 0 0 var(--red); }
-#main table tbody tr:has(.badge-app1)   td:first-child { box-shadow: inset 3px 0 0 var(--yellow); }
-#main table tbody tr:has(.badge-app2)   td:first-child { box-shadow: inset 3px 0 0 var(--green); }
-#main table tbody tr:has(.badge-oc)     td:first-child { box-shadow: inset 3px 0 0 var(--mg-red); }
+/* ============ Borde izquierdo de fila según estado ============ */
+/* En lugar de :has() usamos atributo data-status que vamos a setear via JS */
+html body #main table tbody tr[data-mg-state="draft"] td:first-child { box-shadow: inset 3px 0 0 #6E7E92 !important; }
+html body #main table tbody tr[data-mg-state="sent"]  td:first-child { box-shadow: inset 3px 0 0 #3A8FD4 !important; }
+html body #main table tbody tr[data-mg-state="rej"]   td:first-child { box-shadow: inset 3px 0 0 #E63027 !important; }
+html body #main table tbody tr[data-mg-state="app1"]  td:first-child { box-shadow: inset 3px 0 0 #D97706 !important; }
+html body #main table tbody tr[data-mg-state="app2"]  td:first-child { box-shadow: inset 3px 0 0 #1A7F37 !important; }
+html body #main table tbody tr[data-mg-state="oc"]    td:first-child { box-shadow: inset 3px 0 0 #E63027 !important; }
 
-/* Botones de acción en filas: un poco más aireados */
-.btn-edit-row, .btn-del-row {
+/* ============ Botones de acción en filas ============ */
+html body .btn-edit-row,
+html body .btn-del-row {
   border-radius: 6px !important;
-  transition: all .15s !important;
+  transition: all .15s ease !important;
+  padding: 4px 10px !important;
 }
-.btn-edit-row:hover { background: var(--accent2) !important; color: #fff !important; border-color: var(--accent2) !important; }
-.btn-del-row:hover  { background: var(--red) !important; color: #fff !important; border-color: var(--red) !important; }
+html body .btn-edit-row:hover {
+  background: #0070F2 !important;
+  color: #FFFFFF !important;
+  border-color: #0070F2 !important;
+}
+html body .btn-del-row:hover {
+  background: #E63027 !important;
+  color: #FFFFFF !important;
+  border-color: #E63027 !important;
+}
 
-/* Botón primario: usar rojo Metagal en vez de amarillo (más corporativo) */
-/* NOTA: conservamos btn-primary global — solo cambiamos el foco/hover */
-.btn-primary:hover { background: var(--mg-red-dark) !important; border-color: var(--mg-red-dark) !important; }
+/* ============ Botón primario: hover rojo Metagal ============ */
+html body .btn-primary:hover {
+  background: #B8241C !important;
+  border-color: #B8241C !important;
+  color: #FFFFFF !important;
+}
 
-/* KPIs: bordes más limpios */
-.kpi {
+/* ============ KPIs ============ */
+html body .kpi {
   border-radius: 10px !important;
-  transition: border-color .15s;
+  transition: border-color .15s ease, transform .1s ease !important;
 }
-.kpi:hover { border-color: var(--accent) !important; }
-.kpi-value {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace !important;
+html body .kpi:hover {
+  border-color: #E63027 !important;
+  transform: translateY(-1px);
+}
+html body .kpi-value {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace !important;
   letter-spacing: -0.02em !important;
 }
 
-/* Section titles: un pelín más serios */
-.section-title {
-  letter-spacing: -0.01em !important;
-}
-
-/* Cards y form-sections: esquinas un poco más redondeadas */
-.card, .form-section {
+/* ============ Cards y form-sections ============ */
+html body .card,
+html body .form-section {
   border-radius: 10px !important;
 }
 
-/* Search preview panel (el de Outlook-style): refinado */
-#search-preview-panel .search-preview-row {
-  transition: background .12s !important;
-}
-
-/* Filtros: más limpios */
-.filter-bar input, .filter-bar select {
+/* ============ Filtros ============ */
+html body .filter-bar input,
+html body .filter-bar select {
   border-radius: 7px !important;
+  transition: border-color .15s ease !important;
+}
+html body .filter-bar input:focus,
+html body .filter-bar select:focus {
+  border-color: #E63027 !important;
 }
 
-/* Modal: header más serio */
-.modal-title {
+/* ============ Section title y modal ============ */
+html body .section-title,
+html body .modal-title {
   letter-spacing: -0.01em !important;
-  font-weight: 700 !important;
 }
 
-/* Dark mode: los rojos y acentos corporativos siguen funcionando con las variables existentes */
-html[data-theme=dark] #header {
-  border-top-color: var(--mg-red) !important;
-}
-html[data-theme=dark] #main table thead th {
-  background: #0d1520 !important;
-}
-html[data-theme=dark] #main table tbody tr:hover td {
-  background: #1a2435 !important;
-}
-
-/* === END_METAGAL_V2 === */</style>
+/* === END_METAGAL_V3 === */
+</style>
 </head>
 <body>
 
@@ -6237,5 +6306,80 @@ document.addEventListener('click', function(e) {
   openAttachment(url, name);
 });
 </script><script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+/* === BEGIN_METAGAL_V3_JS === */
+(function(){
+  function classifyFromBadge(badgeText){
+    var t = String(badgeText||'').toLowerCase();
+    if (t.indexOf('aprob')>=0 && t.indexOf('pend')<0) return 'app2';
+    if (t.indexOf('ok financ')>=0) return 'app2';
+    if (t.indexOf('oc asignada')>=0 || t.indexOf('oc emitida')>=0) return 'oc';
+    if (t.indexOf('rechaz')>=0 || t.indexOf('no autoriz')>=0 || t.indexOf('devuelta')>=0 || t.indexOf('observ')>=0) return 'rej';
+    if (t.indexOf('pendiente')>=0 || t.indexOf('revisada')>=0 || t.indexOf('autorizada')>=0) {
+      if (t.indexOf('revisada')>=0 || t.indexOf('gestion')>=0 || t.indexOf('gestión')>=0) return 'app1';
+      if (t.indexOf('gerenc')>=0 || t.indexOf('lista')>=0 || t.indexOf('autorizada')>=0) return 'app1';
+      return 'sent';
+    }
+    if (t.indexOf('borrador')>=0 || t.indexOf('inactiv')>=0) return 'draft';
+    return 'draft';
+  }
+
+  function tagRows(){
+    var rows = document.querySelectorAll('#main table tbody tr');
+    rows.forEach(function(tr){
+      var badge = tr.querySelector('.badge');
+      if (!badge) return;
+      var state = classifyFromBadge(badge.textContent);
+      if (tr.getAttribute('data-mg-state') !== state) {
+        tr.setAttribute('data-mg-state', state);
+      }
+    });
+  }
+
+  function run(){
+    try { tagRows(); } catch(e) {}
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', run);
+  } else {
+    run();
+  }
+
+  // Observer liviano: solo mira addedNodes en #main, sin recursion agresiva
+  var mainObs;
+  function startObserver(){
+    var main = document.getElementById('main');
+    if (!main || mainObs) return;
+    mainObs = new MutationObserver(function(muts){
+      var shouldRun = false;
+      for (var i=0; i<muts.length; i++){
+        if (muts[i].addedNodes && muts[i].addedNodes.length){
+          for (var j=0; j<muts[i].addedNodes.length; j++){
+            var n = muts[i].addedNodes[j];
+            if (n.nodeType === 1 && (n.tagName === 'TR' || (n.querySelector && n.querySelector('tr')))){
+              shouldRun = true;
+              break;
+            }
+          }
+        }
+        if (shouldRun) break;
+      }
+      if (shouldRun) run();
+    });
+    try {
+      mainObs.observe(main, { childList: true, subtree: true });
+    } catch(e) {}
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', startObserver);
+  } else {
+    startObserver();
+  }
+})();
+/* === END_METAGAL_V3_JS === */
+</script>
+
 </body>
 </html>
